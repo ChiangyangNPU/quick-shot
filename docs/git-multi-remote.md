@@ -35,7 +35,10 @@ git remote -v
 | 命令 | 作用 |
 |------|------|
 | `git push gitee master` | 只推 Gitee（`master`） |
-| `git push github` | 只推 GitHub（`master` 已跟踪 `github/main`） |
+| `git push github master:main` | 只推 GitHub（本地 `master` → 远程 `main`） |
+
+> 注意：Git 默认 `push.default=simple`，要求本地/远程分支同名才允许裸 `git push github`。
+> 因 GitHub 侧分支名为 `main`（与本地 `master` 不同），单推 GitHub 必须带 `master:main` 映射。
 | `git pushall` | **一键同时推两个仓库** |
 
 ### pushall 别名
