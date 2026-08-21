@@ -1080,9 +1080,9 @@ void SettingsWindow::setupAboutTab() {
     topLayout->addWidget(qtLinkLabel);
     
     // 仓库链接
-    githubLabel = new QLabel("<a href='https://github.com/chiangyangNPU/quick-shot'>GitHub: github.com/chiangyangNPU/quick-shot</a>", aboutTab);
+    githubLabel = new QLabel("<a href='https://github.com/ChiangyangNPU/quick-shot'>GitHub: github.com/ChiangyangNPU/quick-shot</a>", aboutTab);
     githubLabel->setOpenExternalLinks(true);
-    giteeLabel = new QLabel("<a href='https://gitee.com/chiangyangNPU/quick-shot'>Gitee: gitee.com/chiangyangNPU/quick-shot</a>", aboutTab);
+    giteeLabel = new QLabel("<a href='https://gitee.com/ChiangyangNPU/quick-shot'>Gitee: gitee.com/ChiangyangNPU/quick-shot</a>", aboutTab);
     giteeLabel->setOpenExternalLinks(true);
     emailLabel = new QLabel("Email: <a href='mailto:chiangyangnpu@163.com'>chiangyangnpu@163.com</a>", aboutTab);
     emailLabel->setOpenExternalLinks(true);
