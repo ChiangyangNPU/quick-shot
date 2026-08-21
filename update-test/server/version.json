@@ -1,0 +1,7 @@
+{
+    "version":  "1.1.0",
+    "releaseNotes":  "本地模拟更新测试包\n1. 验证「检查更新」功能\n2. 验证下载与 SHA256 校验\n3. 验证安装替换与自动重启",
+    "downloadUrl":  "http://127.0.0.1:8000/QuickShot-Release-1.1.0-Windows-x64.zip",
+    "checksum":  "sha256:fb94d53fffc446166306c9cda016037d37a7c4a4d47d89deac5181051469d5ca",
+    "fileSize":  96033347
+}

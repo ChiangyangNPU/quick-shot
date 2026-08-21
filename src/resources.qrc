@@ -1,0 +1,40 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/icons">
+    <file alias="app.png">../icons/app.png</file>
+    <file alias="app.svg">../icons/app.svg</file>
+
+    <file alias="QS.png">../icons/QS.png</file>
+    <file alias="QS.svg">../icons/QS.svg</file>
+    
+    <file alias="rect.svg">../icons/rect.svg</file>
+    <file alias="ellipse.svg">../icons/ellipse.svg</file>
+    <file alias="triangle.svg">../icons/triangle.svg</file>
+    <file alias="capture.svg">../icons/capture.svg</file>
+    <file alias="arrow.svg">../icons/arrow.svg</file>
+    <file alias="pen.svg">../icons/pen.svg</file>
+    <file alias="line.svg">../icons/line.svg</file>
+    <file alias="text.svg">../icons/text.svg</file>
+    <file alias="mosaic.svg">../icons/mosaic.svg</file>
+    <file alias="erase.svg">../icons/erase.svg</file>
+    <file alias="undo.svg">../icons/undo.svg</file>
+    <file alias="redo.svg">../icons/redo.svg</file>
+    <file alias="clear.svg">../icons/clear.svg</file>
+    <file alias="ocr.svg">../icons/ocr.svg</file>
+    <file alias="translate.svg">../icons/translate.svg</file>
+    <file alias="record.svg">../icons/record.svg</file>
+    <file alias="pin.svg">../icons/pin.svg</file>
+    <file alias="copy.svg">../icons/copy.svg</file>
+    <file alias="save.svg">../icons/save.svg</file>
+    <file alias="close.svg">../icons/close.svg</file>
+    <file alias="start.svg">../icons/start.svg</file>
+    <file alias="pause.svg">../icons/pause.svg</file>
+    <file alias="resume.svg">../icons/resume.svg</file>
+    <file alias="stop.svg">../icons/stop.svg</file>
+    <file alias="browse.svg">../icons/browse.svg</file>
+    <file alias="spinner-up.svg">../icons/spinner-up.svg</file>
+    <file alias="spinner-down.svg">../icons/spinner-down.svg</file>
+</qresource>
+<qresource prefix="/stylesheets">
+    <file alias="app.qss">resources/stylesheets/app.qss</file>
+</qresource>
+</RCC>

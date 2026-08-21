@@ -1,0 +1,200 @@
+/* QuickShot 全局样式表
+ *
+ * 设计原则：
+ *   - 字体用 pt：随屏幕 DPI 自动缩放（HIGHDPI_SCALING=0 下仍有效）
+ *   - 控件尺寸用 em：相对字体大小，字体变大控件自动变大，两者天然协调
+ *   - 圆角用 px：视觉影响小，固定即可
+ *   - 颜色不在此定义：UI 窗口颜色由 StyleManager 运行时填值（用户可配置）
+ *   - 截图/录屏界面不受影响：它们用 setStyleSheet 局部覆盖，优先级高于全局
+ *
+ * 仅作用于 UI 窗口（SettingsWindow、HistoryWindow、OcrResultDialog、
+ * TranslateOverlayWindow、PinWindow、MessageBox）。
+ */
+
+/* 全局字体：10.5pt 在 96DPI 下约 14px */
+QWidget {
+    font-size: 10.5pt;
+}
+
+/* 文字颜色显式指定为黑色：避免深色模式/高对比度等系统主题下
+   系统原生文字色变浅，导致白底浅色文字看不见（跨电脑不一致） */
+QLabel {
+    color: #000;
+}
+
+/* 普通按钮：高度跟字体走 */
+QPushButton {
+    height: 1.0em;
+    border-radius: 5px;
+    padding: 0 0.5em;
+    border: none;
+}
+
+/* 主操作按钮：恢复默认/清空历史等需要强调的功能按钮
+   高度比普通按钮更大，带上下 padding，视觉上更突出
+   颜色仍由 StyleManager 运行时填值（用户可配置） */
+QPushButton#primaryButton {
+    height: 1.2em;
+    padding: 0.2em 0.8em;
+    border-radius: 5px;
+    border: none;
+}
+
+/* 选项卡 */
+QTabWidget::pane {
+    border: none;
+    border-radius: 4px;
+}
+QTabBar::tab {
+    padding: 0.4em 1em;
+    border: none;
+    border-radius: 5px 5px 0 0;
+    margin-right: 0.15em;
+}
+
+/* 分组框 */
+QGroupBox {
+    border: 1px solid #E0E0E0;
+    border-radius: 6px;
+    margin-top: 0.9em;
+    padding-top: 0.9em;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    padding: 0.25em 0.5em;
+    color: #000;
+}
+
+/* 消息框按钮 */
+QMessageBox QPushButton {
+    padding: 0.3em 1em;
+    min-width: 4em;
+    border-radius: 5px;
+    border: none;
+}
+
+/* 输入框、下拉框 */
+QLineEdit, QComboBox {
+    height: 1.2em;
+    border: 1px solid #848484;
+    border-radius: 4px;
+    padding: 0 0.4em;
+}
+
+/* 下拉框选中/悬停时边框加深，增强反馈 */
+QComboBox:focus, QComboBox:hover {
+    border: 1px solid #2a2a2a;
+}
+
+/* 下拉框下拉项 */
+QComboBox QAbstractItemView {
+    border-radius: 4px;
+    padding: 0.2em;
+}
+
+/* 复选框指示器跟随字体 */
+QCheckBox::indicator {
+    width: 1.1em;
+    height: 1.1em;
+}
+
+/* 滚动条
+   注：截图/录屏界面不含 QScrollBar，可安全使用完整样式。
+   之所以放在全局 QSS 而非 setStyleSheet，是因为 QScrollArea 调用
+   setStyleSheet 会禁用子控件（如 QCheckBox）的原生主题绘制。 */
+QScrollBar:vertical {
+    background-color: #F0F0F0;
+    width: 0.7em;
+    border: none;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background-color: #C0C0C0;
+    min-height: 1.43em;
+    border-radius: 0.3em;
+    margin: 0.15em;
+}
+QScrollBar::handle:vertical:hover {
+    background-color: #A0A0A0;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+    background: none;
+}
+QScrollBar:horizontal {
+    height: 0.7em;
+}
+
+/*///////////////////////////////////////////////////////////////
+  截图/录屏工具栏控件
+  这些控件是浮在选区外的 UI 层，不画进截图结果，
+  因此可以随字体（DPI）缩放，不会影响截图选区精度。
+  颜色仍由 StyleManager 运行时填值（用户可配置）。
+  工具栏按钮的 padding/border-radius 等尺寸写在各自的
+  getToolButtonStyle()/getActionButtonStyle() 颜色函数里（用 em），
+  这里只补充配色按钮、滑块等无颜色函数的控件。
+///////////////////////////////////////////////////////////////*/
+
+/* 截图工具栏配色按钮：正方形，尺寸跟字体 */
+QPushButton#toolbarColorButton {
+    width: 0.95em;
+    height: 0.95em;
+    padding: 0;
+    border-radius: 0.15em;
+}
+
+/* 截图和录屏工具栏分隔线：宽度跟字体
+   注意：QHBoxLayout 会把 widget 垂直拉伸到整个布局高度，
+   所以必须用 max-height 锁定上限，min-height 才有意义 */
+QWidget#toolbarSeparator {
+    min-width: 0.1em;
+    max-width: 0.1em;
+    min-height: 0.6em;
+    max-height: 0.6em;
+}
+
+/* 设置界面颜色选择按钮：正方形色块，尺寸跟字体
+   颜色由 setStyleSheet 运行时填值（仅设 background-color，不覆盖此处的尺寸/边框/圆角） */
+QPushButton#settingColorButton {
+    width: 1.43em;
+    height: 1.43em;
+    padding: 0;
+    border: 1px solid #ccc;
+    border-radius: 0.3em;
+}
+
+/* 滑块：显式定义 groove 和 handle，避免不同系统原生渲染差异导致
+   滑槽线偏上/滑块偏上的问题。宽度跟字体缩放，高度由 groove + handle 决定 */
+QSlider {
+    min-width: 4.76em;
+}
+
+QSlider::groove:horizontal {
+    height: 0.3em;
+    background: #b0b0b0;
+    border-radius: 0.15em;
+}
+
+QSlider::handle:horizontal {
+    width: 0.45em;
+    height: 0.85em;
+    margin: -0.18em 0;
+    background: #555;
+    border-radius: 0.33em;
+}
+
+
+
+/* 进度条：尺寸跟字体，颜色由 StyleManager 运行时填值 */
+QProgressBar {
+    height: 0.8em;
+    border-radius: 3px;
+    text-align: center;
+}
+
+QProgressBar::chunk {
+    border-radius: 3px;
+}

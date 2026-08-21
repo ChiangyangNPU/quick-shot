@@ -1,0 +1,72 @@
+# Build directories
+cmake-build-*/
+build/
+
+Release/
+QuickShot-Release-*/
+QuickShot-Debug-*/
+bin/
+lib/
+!third_party/onnxruntime/lib/
+
+# IDE settings
+.idea/
+.vscode/
+.vs/
+*.user
+
+# Compiled binaries and libraries
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.obj
+*.o
+
+# ONNX Runtime third-party binaries (must be tracked)
+!third_party/onnxruntime/lib/*.dll
+!third_party/onnxruntime/lib/*.lib
+!third_party/onnxruntime/lib/*.h
+
+# CMake artifacts
+CMakeCache.txt
+CMakeFiles/
+*.cmake
+Makefile
+
+# Qt auto-generated files
+*_autogen/
+*.qm
+ui_*.h
+moc_*.cpp
+qrc_*.cpp
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Trae/AI temporary files
+.trae/
+
+# User requested exclusions
+build_Debug/
+build_Release/
+build_release/
+build_test/
+deploy/build_Debug/
+deploy/build_Release/
+deploy/mac/build_release
+deploy/mac/QuickShot.app
+deploy/mac/QuickShot-v1.0.0.dmg
+deploy/win/build_Debug/
+deploy/win/build_Release/
+deploy/win/QuickShot-Debug-v1.0.0/
+deploy/win/QuickShot-Release-v1.0.0/
+deploy/win/QuickShot-Release-v1.0.0.7z
+
+update-test/app-v1.0.0/*
+update-test/server/*.zip
+
+tests/
