@@ -7,7 +7,7 @@ QuickShot 代码同时托管在 **Gitee** 和 **GitHub** 两个远程仓库，�
 | 远程名 | 地址 | 协议 | 推送目标分支 |
 |--------|------|------|--------------|
 | `gitee` | `https://gitee.com/chiangyangNPU/quick-shot.git` | HTTPS | `master` |
-| `github` | `git@github.com:ChiangyangNPU/QuickShot.git` | SSH | `main` |
+| `github` | `git@github.com:ChiangyangNPU/quick-shot.git` | SSH | `main` |
 
 > 本地分支统一为 `master`，不需要改名。推送时通过 refspec 完成映射：
 > Gitee 推 `master`，GitHub 推 `master:main`（本地 `master` → 远程 `main`）。
@@ -17,7 +17,7 @@ QuickShot 代码同时托管在 **Gitee** 和 **GitHub** 两个远程仓库，�
 ```bash
 # 添加远程（已配置，重装/克隆后可参照）
 git remote add gitee  https://gitee.com/chiangyangNPU/quick-shot.git
-git remote add github git@github.com:ChiangyangNPU/QuickShot.git
+git remote add github git@github.com:ChiangyangNPU/quick-shot.git
 
 # 查看当前配置
 git remote -v
@@ -77,7 +77,7 @@ git push -u github master:main
 解决：改用 **SSH** 认证（本机 `id_ed25519` 已注册 GitHub）：
 
 ```bash
-git remote set-url github git@github.com:ChiangyangNPU/QuickShot.git
+git remote set-url github git@github.com:ChiangyangNPU/quick-shot.git
 ssh -T git@github.com   # 输出 "Hi ChiangyangNPU!" 即认证成功
 ```
 
