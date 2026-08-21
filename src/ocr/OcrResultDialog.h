@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QTextEdit>
+#include <QEvent>
 #include <QPushButton>
 #include <QComboBox>
 #include <QVBoxLayout>
@@ -67,6 +68,13 @@ protected:
      * @author chiangyang
      */
     bool eventFilter(QObject *obj, QEvent *event) override;
+
+    /**
+     * @brief 显示事件，macOS 下将窗口级别提升到截图窗口之上
+     * @param event 显示事件
+     * @author chiangyang
+     */
+    void showEvent(QShowEvent *event) override;
 
 private:
     /**

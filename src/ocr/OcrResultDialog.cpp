@@ -17,6 +17,30 @@
 #include <QSettings>
 #include <QTimer>
 
+#ifdef Q_OS_MACOS
+#include <objc/objc.h>
+#include <objc/message.h>
+
+/**
+ * @brief 将窗口级别设到截图窗口之上，避免弹窗被截图遮罩盖住
+ *
+ * macOS 的 Qt::WindowStaysOnTopHint 对应 NSFloatingWindowLevel(3)，
+ * 低于截图窗口使用的 NSPopUpMenuWindowLevel(101)，会导致 OCR 结果弹窗
+ * 出现在截图遮罩下层。这里将弹窗提升到相同的 NSPopUpMenuWindowLevel。
+ * @param wid QWidget::winId() 返回的 NSView 指针
+ * @author chiangyang
+ */
+static void raiseWindowAboveMenuBar(WId wid) {
+    if (!wid) return;
+    id nsView = reinterpret_cast<id>(wid);
+    // [nsView window]
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) return;
+    // [nsWindow setLevel:NSPopUpMenuWindowLevel]
+    ((void (*)(id, SEL, long))objc_msgSend)(nsWindow, sel_registerName("setLevel:"), 101);
+}
+#endif
+
 /**
  * @brief 构造函数
  * @param result OCR 识别结果
@@ -229,6 +253,20 @@ Qt::CursorShape OcrResultDialog::cursorForEdge(ResizeEdge edge) const {
     default:
         return Qt::ArrowCursor;
     }
+}
+
+/**
+ * @brief 显示事件，macOS 下将窗口级别提升到截图窗口之上
+ * @param event 显示事件
+ * @author chiangyang
+ */
+void OcrResultDialog::showEvent(QShowEvent *event) {
+    QWidget::showEvent(event);
+#ifdef Q_OS_MACOS
+    // 截图遮罩使用 NSPopUpMenuWindowLevel(101)，普通置顶弹窗会被盖住，
+    // 这里把弹窗提升到同一级别，确保显示在最上层
+    raiseWindowAboveMenuBar(winId());
+#endif
 }
 
 /**
