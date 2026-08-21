@@ -1649,18 +1649,31 @@ void SnipScreen::onSwitchMode() {
     // 录屏正在录制：禁止切换，避免出现"截图工具栏已显示但录制仍在后台进行"的状态混乱
     if (m_isRecordingMode && m_screenRecorder && m_screenRecorder->isRecording()) {
         TranslationManager *tm = TranslationManager::instance();
-        QLabel *hint = new QLabel(tm->get("snip.switchMode.stopRecordingHint",
-                                          "Please stop recording before switching"), this);
-        hint->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-        hint->setAlignment(Qt::AlignCenter);
-        // 居中在选区（提示标签是 SnipScreen 子控件，用父相对坐标）
-        QRect localSel = m_selector->selected().translated(-m_virtualGeometry.topLeft());
-        hint->adjustSize();
-        int x = localSel.x() + (localSel.width() - hint->width()) / 2;
-        int y = localSel.y() + (localSel.height() - hint->height()) / 2;
+        QString text = tm->get("snip.switchMode.stopRecordingHint",
+                               "Please stop recording before switching");
+
+        // 使用独立顶层无边框窗口显示提示：
+        // - 复用 OCR 加载标签样式，外观与其他提示保持一致
+        // - 作为独立顶层窗口（非 SnipScreen 子控件），从根本上避免被工具栏/控制栏遮挡
+        QWidget *hint = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        hint->setAttribute(Qt::WA_TranslucentBackground, true);
+        hint->setAttribute(Qt::WA_DeleteOnClose, true);
+
+        QLabel *label = new QLabel(text, hint);
+        label->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
+        label->setAlignment(Qt::AlignCenter);
+        label->adjustSize();
+
+        // 定位：与 OCR/翻译等"选区中央居中"逻辑一致（使用全局屏幕坐标）
+        QRect sel = m_selector->selected();
+        hint->resize(label->size());
+        int x = sel.x() + (sel.width() - hint->width()) / 2;
+        int y = sel.y() + (sel.height() - hint->height()) / 2;
         hint->move(x, y);
+        label->move(0, 0);
+
         hint->show();
-        QTimer::singleShot(2000, hint, &QLabel::deleteLater);
+        QTimer::singleShot(2000, hint, &QWidget::close);
         LOG_INFO("[SnipScreen] Mode switch blocked: recording in progress");
         return;
     }
