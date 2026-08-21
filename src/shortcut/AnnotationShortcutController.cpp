@@ -119,6 +119,14 @@ void AnnotationShortcutController::registerAll() {
                      /*isBareKey=*/false,
                      /*checkCanAnnotate=*/false);
 
+    // `·` 键（反引号，数字 1 左侧）：切换截图/录屏模式
+    // 仅 SnipScreen 实现有意义，PinWindow 调用空实现；不做 canAnnotate 检查，
+    // 确保选区前后均可切换；作为裸键纳入冲突管理，文本编辑时禁用让给文本框输入
+    registerShortcut(QKeySequence(Qt::Key_QuoteLeft),
+                     [this]() { m_handler->onSwitchMode(); },
+                     /*isBareKey=*/true,
+                     /*checkCanAnnotate=*/false);
+
     // 2. 工具切换快捷键（数字键 1-8，裸键，需纳入冲突管理）
     // 工具 ID 与 AnnotationType 枚举值一一对应（0-7）：
     // 1=矩形 2=椭圆 3=箭头 4=画笔 5=直线 6=文本 7=马赛克 8=橡皮擦

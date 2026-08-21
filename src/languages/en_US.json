@@ -186,6 +186,8 @@
   "shortcut.fixed.text": "Text",
   "shortcut.fixed.mosaic": "Mosaic",
   "shortcut.fixed.eraser": "Eraser",
+  "shortcut.fixed.switchMode": "Screenshot/Recording Switch",
+  "snip.switchMode.stopRecordingHint": "Please stop recording before switching",
   "shortcut.fixed.penWidthDec": "Pen Width -",
   "shortcut.fixed.penWidthInc": "Pen Width +",
   "shortcut.fixed.cycleColor": "Cycle Color",

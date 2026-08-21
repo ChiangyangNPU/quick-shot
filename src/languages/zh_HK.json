@@ -186,6 +186,8 @@
   "shortcut.fixed.text": "文字",
   "shortcut.fixed.mosaic": "馬賽克",
   "shortcut.fixed.eraser": "橡皮擦",
+  "shortcut.fixed.switchMode": "截圖/錄影模式切換",
+  "snip.switchMode.stopRecordingHint": "請先停止錄影再切換模式",
   "shortcut.fixed.penWidthDec": "畫筆闊度 -",
   "shortcut.fixed.penWidthInc": "畫筆闊度 +",
   "shortcut.fixed.cycleColor": "循環切換顏色",

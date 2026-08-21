@@ -1,4 +1,4 @@
-﻿#include "SnipScreen.h"
+#include "SnipScreen.h"
 #include "PinWindow.h"
 #include "AnnotationInteractionHandler.h"
 #include "Logger.h"
@@ -1636,6 +1636,40 @@ void SnipScreen::onToolSwitch(int toolId) {
         ? static_cast<BaseToolBar*>(m_recordingToolbar)
         : static_cast<BaseToolBar*>(m_toolbar);
     if (tb) tb->selectAnnotationTool(toolId);
+}
+
+/**
+ * @brief 切换截图/录屏模式（`·` 键触发）
+ *
+ * 截图模式→录屏模式；录屏模式且未录制→截图模式；
+ * 录屏正在录制时禁止切换，在选区中央显示提示并 2s 后自动销毁。
+ * @author chiangyang
+ */
+void SnipScreen::onSwitchMode() {
+    // 录屏正在录制：禁止切换，避免出现"截图工具栏已显示但录制仍在后台进行"的状态混乱
+    if (m_isRecordingMode && m_screenRecorder && m_screenRecorder->isRecording()) {
+        TranslationManager *tm = TranslationManager::instance();
+        QLabel *hint = new QLabel(tm->get("snip.switchMode.stopRecordingHint",
+                                          "Please stop recording before switching"), this);
+        hint->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
+        hint->setAlignment(Qt::AlignCenter);
+        // 居中在选区（提示标签是 SnipScreen 子控件，用父相对坐标）
+        QRect localSel = m_selector->selected().translated(-m_virtualGeometry.topLeft());
+        hint->adjustSize();
+        int x = localSel.x() + (localSel.width() - hint->width()) / 2;
+        int y = localSel.y() + (localSel.height() - hint->height()) / 2;
+        hint->move(x, y);
+        hint->show();
+        QTimer::singleShot(2000, hint, &QLabel::deleteLater);
+        LOG_INFO("[SnipScreen] Mode switch blocked: recording in progress");
+        return;
+    }
+
+    if (m_isRecordingMode) {
+        switchToScreenshotMode();
+    } else {
+        switchToRecordingMode();
+    }
 }
 
 /**

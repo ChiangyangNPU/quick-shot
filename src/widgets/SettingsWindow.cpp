@@ -546,14 +546,15 @@ void SettingsWindow::setupShortcutsTab() {
     QGridLayout *toolsLayout = new QGridLayout(m_shortcutGroupTools);
     toolsLayout->setContentsMargins(10, 10, 10, 10);
     toolsLayout->setSpacing(8);
-    addFixedShortcutRow(toolsLayout, 0, "shortcut.fixed.rect",            "Rectangle",              "1");
-    addFixedShortcutRow(toolsLayout, 1, "shortcut.fixed.ellipse",         "Ellipse",                "2");
-    addFixedShortcutRow(toolsLayout, 2, "shortcut.fixed.arrow",           "Arrow",                  "3");
-    addFixedShortcutRow(toolsLayout, 3, "shortcut.fixed.pen",             "Pen",                    "4");
-    addFixedShortcutRow(toolsLayout, 4, "shortcut.fixed.line",            "Line",                   "5");
-    addFixedShortcutRow(toolsLayout, 5, "shortcut.fixed.text",            "Text",                   "6");
-    addFixedShortcutRow(toolsLayout, 6, "shortcut.fixed.mosaic",          "Mosaic",                 "7");
-    addFixedShortcutRow(toolsLayout, 7, "shortcut.fixed.eraser",          "Eraser",                 "8");
+    addFixedShortcutRow(toolsLayout, 0, "shortcut.fixed.switchMode",      "Screenshot/Recording Switch", "`");
+    addFixedShortcutRow(toolsLayout, 1, "shortcut.fixed.rect",            "Rectangle",              "1");
+    addFixedShortcutRow(toolsLayout, 2, "shortcut.fixed.ellipse",         "Ellipse",                "2");
+    addFixedShortcutRow(toolsLayout, 3, "shortcut.fixed.arrow",           "Arrow",                  "3");
+    addFixedShortcutRow(toolsLayout, 4, "shortcut.fixed.pen",             "Pen",                    "4");
+    addFixedShortcutRow(toolsLayout, 5, "shortcut.fixed.line",            "Line",                   "5");
+    addFixedShortcutRow(toolsLayout, 6, "shortcut.fixed.text",            "Text",                   "6");
+    addFixedShortcutRow(toolsLayout, 7, "shortcut.fixed.mosaic",          "Mosaic",                 "7");
+    addFixedShortcutRow(toolsLayout, 8, "shortcut.fixed.eraser",          "Eraser",                 "8");
 
     // ===== 分类三：标注操作（复制/撤销/保存/约束等，固定）=====
     m_shortcutGroupAnnotation = new QGroupBox(

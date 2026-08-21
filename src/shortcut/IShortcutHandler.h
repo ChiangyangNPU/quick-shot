@@ -130,6 +130,15 @@ public:
      * @author chiangyang
      */
     virtual void onRefresh() {}
+
+    /**
+     * @brief 切换截图/录屏模式（`·` 键触发，仅 SnipScreen 实现）
+     *
+     * SnipScreen 在截图模式与录屏模式间互相切换；录屏正在录制时禁止切换。
+     * PinWindow 不涉及录屏，使用此处默认空实现，无需 override。
+     * @author chiangyang
+     */
+    virtual void onSwitchMode() {}
 };
 
 #endif // ISHORTCUTHANDLER_H

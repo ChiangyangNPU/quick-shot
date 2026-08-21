@@ -186,6 +186,8 @@
   "shortcut.fixed.text": "テキスト",
   "shortcut.fixed.mosaic": "モザイク",
   "shortcut.fixed.eraser": "消しゴム",
+  "shortcut.fixed.switchMode": "スクリーンショット/録画モード切替",
+  "snip.switchMode.stopRecordingHint": "切り替え前に録画を停止してください",
   "shortcut.fixed.penWidthDec": "ペン幅 -",
   "shortcut.fixed.penWidthInc": "ペン幅 +",
   "shortcut.fixed.cycleColor": "色を切り替え",

@@ -312,6 +312,15 @@ private:
     void onToolSwitch(int toolId) override;
 
     /**
+     * @brief 切换截图/录屏模式（`·` 键触发）
+     *
+     * 截图模式→录屏模式；录屏模式且未录制→截图模式；
+     * 录屏正在录制时禁止切换并提示先停止录制。
+     * @author chiangyang
+     */
+    void onSwitchMode() override;
+
+    /**
      * @brief 复制到剪贴板（Ctrl+C 触发，复制后退出截图模式）
      * @author chiangyang
      */

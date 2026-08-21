@@ -186,6 +186,8 @@
   "shortcut.fixed.text": "文本",
   "shortcut.fixed.mosaic": "马赛克",
   "shortcut.fixed.eraser": "橡皮擦",
+  "shortcut.fixed.switchMode": "截图/录屏模式切换",
+  "snip.switchMode.stopRecordingHint": "请先停止录制再切换模式",
   "shortcut.fixed.penWidthDec": "画笔宽度 -",
   "shortcut.fixed.penWidthInc": "画笔宽度 +",
   "shortcut.fixed.cycleColor": "循环切换颜色",

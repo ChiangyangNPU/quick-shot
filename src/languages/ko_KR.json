@@ -186,6 +186,8 @@
   "shortcut.fixed.text": "텍스트",
   "shortcut.fixed.mosaic": "모자이크",
   "shortcut.fixed.eraser": "지우개",
+  "shortcut.fixed.switchMode": "스크린샷/녹화 모드 전환",
+  "snip.switchMode.stopRecordingHint": "전환하려면 먼저 녹화를 중지하세요",
   "shortcut.fixed.penWidthDec": "펜 굵기 -",
   "shortcut.fixed.penWidthInc": "펜 굵기 +",
   "shortcut.fixed.cycleColor": "색상 전환",
