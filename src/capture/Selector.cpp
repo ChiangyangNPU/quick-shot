@@ -383,8 +383,10 @@ void Selector::closeEvent(QCloseEvent *event) {
     m_isDragging = false;
     m_isAnnotationMode = false;
 
-    repaint();
-
+    // 不在此处调用 repaint()：widget 即将关闭，重绘无意义；
+    // 且 macOS 下关闭流程中 repaint() 会同步触发 paintEvent，第一次 painter
+    // 析构 flush 时处理排队的异步重绘（第二次 paintEvent），此时 backing store
+    // 已失效，第二次 painter 析构 flush 导致闪退（仅 Mac，Windows 正常）。
     if (m_detector) {
         m_detector->clear();
     }
