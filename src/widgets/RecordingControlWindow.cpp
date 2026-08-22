@@ -1,5 +1,7 @@
 #include "RecordingControlWindow.h"
 #include <QApplication>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QSpacerItem>
 #include "../core/ConfigManager.h"
 #include "../core/StyleManager.h"
@@ -15,12 +17,38 @@ RecordingControlWindow::RecordingControlWindow(QWidget *parent) : QWidget(parent
     LOG_INFO("RecordingControlWindow instance created");
     // 设置窗口标志，与主工具栏一致
     setWindowFlags(Qt::Widget | Qt::FramelessWindowHint);
-    setAttribute(Qt::WA_TranslucentBackground, false);
+    // 圆角矩形需要透明背景，否则圆角外区域会被系统默认色填充成直角
+    setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_StyledBackground, true);
     setCursor(Qt::ArrowCursor);
     setupUi();
     retranslateUi();
     updateButtonStyles();
+}
+
+// ============================================================
+// 绘制事件
+// ============================================================
+
+/**
+ * @brief 绘制圆角矩形背景
+ *
+ * 当窗口设置了 WA_TranslucentBackground 后，QSS 的 background-color 不会自动绘制，
+ * 导致圆角矩形没有底色。这里用 QPainter 主动绘制圆角矩形背景，
+ * 既保证圆角外区域透明（不露出直角底层），又保证圆角内有底色。
+ *
+ * 半径与 QSS 中的 border-radius: 0.24em 一致，按当前字体 em 高度换算。
+ * @param event 绘制事件
+ * @author chiangyang
+ */
+void RecordingControlWindow::paintEvent(QPaintEvent *event) {
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(StyleManager::getRecordControlBgColor());
+    int radius = qRound(fontMetrics().height() * 0.24);
+    painter.drawRoundedRect(rect(), radius, radius);
 }
 
 /**

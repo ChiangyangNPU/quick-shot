@@ -29,6 +29,8 @@ void ScreenshotToolBar::setupUi() {
 
     // 设置窗口属性
     setWindowFlags(Qt::Widget | Qt::FramelessWindowHint);
+    // 圆角矩形需要透明背景，否则圆角外区域会被系统默认色填充成直角
+    setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_StyledBackground, true);
     setStyleSheet(StyleManager::getToolbarBackgroundStyle());
     setCursor(Qt::ArrowCursor);

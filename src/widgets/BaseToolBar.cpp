@@ -50,6 +50,31 @@ BaseToolBar::BaseToolBar(QWidget *parent) : QWidget(parent) {
 }
 
 // ============================================================
+// 绘制事件
+// ============================================================
+
+/**
+ * @brief 绘制圆角矩形背景
+ *
+ * 当窗口设置了 WA_TranslucentBackground 后，QSS 的 background-color 不会自动绘制，
+ * 导致圆角矩形没有底色。这里用 QPainter 主动绘制圆角矩形背景，
+ * 既保证圆角外区域透明（不露出直角底层），又保证圆角内有底色。
+ *
+ * 半径与 QSS 中的 border-radius: 0.3em 一致，按当前字体 em 高度换算。
+ * @param event 绘制事件
+ * @author chiangyang
+ */
+void BaseToolBar::paintEvent(QPaintEvent *event) {
+    Q_UNUSED(event);
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(StyleManager::getToolbarBgColor());
+    int radius = qRound(fontMetrics().height() * 0.3);
+    painter.drawRoundedRect(rect(), radius, radius);
+}
+
+// ============================================================
 // UI 翻译（默认空实现，子类实现具体逻辑）
 // ============================================================
 

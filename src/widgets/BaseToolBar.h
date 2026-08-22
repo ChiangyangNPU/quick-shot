@@ -298,6 +298,16 @@ protected:
      */
     virtual void setupUi() = 0;
 
+    /**
+     * @brief 绘制事件：主动绘制圆角矩形背景
+     *
+     * 当设置 WA_TranslucentBackground 后，QSS 的 background-color 不会自动绘制，
+     * 因此用 QPainter 主动绘制圆角矩形背景，保证圆角外区域透明且圆角内有底色。
+     * @param event 绘制事件
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *event) override;
+
     // --- 子工具栏相关 ---
     /**
      * @brief 显示子工具栏

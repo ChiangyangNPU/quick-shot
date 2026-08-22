@@ -42,7 +42,7 @@ public:
      * @author chiangyang
      */
     void updateButtonStyles();
-    
+
     /**
      * @brief 更新背景样式
      * @author chiangyang
@@ -62,6 +62,17 @@ public:
      * @author chiangyang
      */
     void setPaused(bool paused);
+
+protected:
+    /**
+     * @brief 绘制事件：主动绘制圆角矩形背景
+     *
+     * 当设置 WA_TranslucentBackground 后，QSS 的 background-color 不会自动绘制，
+     * 因此用 QPainter 主动绘制圆角矩形背景，保证圆角外区域透明且圆角内有底色。
+     * @param event 绘制事件
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *event) override;
 
 signals:
     /**
