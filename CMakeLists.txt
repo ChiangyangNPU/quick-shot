@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(QuickShot VERSION 1.0.0)
+project(QuickShot VERSION 1.1.0)
 
 # 将项目版本号作为字符串宏注入代码，避免在源码中硬编码版本号
 # 使用方式: qApp->applicationVersion() 或 QUICKSHOT_VERSION 宏
