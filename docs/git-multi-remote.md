@@ -14,8 +14,37 @@ QuickShot 代码同时托管在 **Gitee** 和 **GitHub** 两个远程仓库，�
 
 ## 2. 远程配置
 
+### 2.1 全新克隆后的初始化（重装/换机必看）
+
+`git clone` 后默认只有 `origin` 一个远程，需要对齐为 `gitee` / `github` 两个：
+
 ```bash
-# 添加远程（已配置，重装/克隆后可参照）
+# 1. 先看克隆自哪个平台（决定 origin 的去留）
+git remote -v
+#    克隆自 Gitee：origin 指向 gitee 地址 → 直接改名
+#    克隆自 GitHub：origin 指向 github 地址 → 保留 origin 当 github，另加 gitee
+
+# 2. 处理 origin
+#    若克隆自 Gitee：
+git remote rename origin gitee
+#    若克隆自 GitHub（origin 已是 github 地址，按需改名）：
+# git remote rename origin github
+
+# 3. 添加另一个远程（克隆自 Gitee 时只需这步）
+git remote add github git@github.com:ChiangyangNPU/quick-shot.git
+# git remote add gitee  https://gitee.com/chiangyangNPU/quick-shot.git   # 克隆自 GitHub 时
+
+# 4. 核对最终结果，应有两行
+git remote -v
+```
+
+> 若误配重复远程，用 `git remote remove <名字>` 删除后重来。
+> 重新克隆后 git 别名（alias）不会带过来，需重新配置 `pushall`（见 §3）。
+
+### 2.2 参考：从零添加（无需改动时的配置基准）
+
+```bash
+# 添加远程（已配置，仅作参考）
 git remote add gitee  https://gitee.com/chiangyangNPU/quick-shot.git
 git remote add github git@github.com:ChiangyangNPU/quick-shot.git
 
@@ -36,10 +65,27 @@ git remote -v
 |------|------|
 | `git push gitee master` | 只推 Gitee（`master`） |
 | `git push github master:main` | 只推 GitHub（本地 `master` → 远程 `main`） |
+| `git pushall` | **一键同时推两个仓库** |
 
 > 注意：Git 默认 `push.default=simple`，要求本地/远程分支同名才允许裸 `git push github`。
 > 因 GitHub 侧分支名为 `main`（与本地 `master` 不同），单推 GitHub 必须带 `master:main` 映射。
-| `git pushall` | **一键同时推两个仓库** |
+
+### 分支映射原理（refspec）
+
+`pushall` 别名 = 两条 push 串联：
+
+```bash
+git push gitee master && git push github master:main
+```
+
+| 写法 | refspec 含义 | 实际推送 |
+|------|-------------|---------|
+| `master` | `master:master` 的简写 | 本地 `master` → Gitee `master` |
+| `master:main` | 冒号前是本地分支，冒号后是远程分支 | 本地 `master` → GitHub `main` |
+
+> 记忆口诀：**冒号前是本地，冒号后是远程**。
+> 两边分支同名时可简写；不同名时（GitHub 侧叫 `main`）必须写全 `master:main`。
+> 本项目 Gitee 侧叫 `master`、GitHub 侧叫 `main`，所以只有 GitHub 那条带映射。
 
 ### pushall 别名
 

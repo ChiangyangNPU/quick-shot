@@ -4,6 +4,8 @@ build/
 
 Release/
 QuickShot-Release-*/
+QuickShot-Release-*.zip
+QuickShot-Release-*.7z
 QuickShot-Debug-*/
 bin/
 lib/
@@ -57,15 +59,13 @@ build_release/
 build_test/
 deploy/build_Debug/
 deploy/build_Release/
-deploy/mac/build_release
-deploy/mac/QuickShot.app
-deploy/mac/QuickShot-v1.0.0.dmg
+deploy/mac/build_*
+deploy/mac/QuickShot-*.app
+deploy/mac/QuickShot-*.dmg
 deploy/win/build_Debug/
 deploy/win/build_Release/
 deploy/win/QuickShot-Debug-v1.0.0/
 deploy/win/QuickShot-Release-v1.0.0/
-deploy/win/QuickShot-Release-v1.0.0.7z
-
 update-test/app-v1.0.0/*
 update-test/server/*.zip
 
