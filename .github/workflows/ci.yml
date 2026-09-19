@@ -99,11 +99,13 @@ jobs:
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
             Get-Content $log -Tail 80 | Add-Content $env:GITHUB_STEP_SUMMARY
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
-            # 注解每步上限 50 条、单条约 1KB：6 行一组压缩成一条 error 注解
+            # 注解每条约 1KB 上限：链接命令行过长会截断，改为只发错误相关行，3 行一条
+            $errs = Select-String -Path $log -Pattern "undefined reference|undefined symbol|cannot find|incompatible|ld returned|collect2|error:" |
+              Select-Object -Last 40
             $chunk = @()
-            foreach ($line in (Get-Content $log -Tail 80)) {
-              $chunk += $line
-              if ($chunk.Count -ge 6) { Write-Output ("::error::" + ($chunk -join "%0A")); $chunk = @() }
+            foreach ($m in $errs) {
+              $chunk += $m.Line.Trim()
+              if ($chunk.Count -ge 3) { Write-Output ("::error::" + ($chunk -join "%0A")); $chunk = @() }
             }
             if ($chunk.Count -gt 0) { Write-Output ("::error::" + ($chunk -join "%0A")) }
             exit $LASTEXITCODE
