@@ -439,11 +439,15 @@ if (WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     endif ()
 
     foreach (QT_LIB Core Gui Widgets Svg Multimedia Concurrent Qml Network Sql)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-                COMMAND ${CMAKE_COMMAND} -E copy
-                "${QT_INSTALL_PATH}/bin/Qt6${QT_LIB}${DEBUG_SUFFIX}.dll"
-                "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
-        )
+        # 精简 Qt 安装（如 CI）可能缺少个别 DLL（如未装 qtdeclarative 时的 Qt6Qml.dll），
+        # 跳过缺失文件，避免 POST_BUILD 整体失败
+        if (EXISTS "${QT_INSTALL_PATH}/bin/Qt6${QT_LIB}.dll")
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy
+                    "${QT_INSTALL_PATH}/bin/Qt6${QT_LIB}.dll"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+            )
+        endif ()
     endforeach (QT_LIB)
 
     # 复制 Qt 官方翻译文件到输出目录 translations/（QColorDialog 等标准控件的本地化）
