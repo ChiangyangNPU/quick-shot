@@ -92,11 +92,13 @@ cd deploy\win
 .\deploy.ps1 -r    # 仅 Release；-d 仅 Debug；默认两者都打
 ```
 
-脚本自动完成 windeployqt、依赖复制与 zip 打包，产物名 `QuickShot-Release-v{version}-Windows-x64.zip`（与自动更新的命名约定一致）。若 Qt / MinGW / CMake 安装路径与默认不同，修改 `deploy.ps1` 开头 Configuration 段的 `$QtRoot`、`$QtVersion`、`$QtKit`、`$MingwBinDir`、`$CMakeBinDir`、`$NinjaDir`。详见 [Windows 打包指南](../deploy/win/README_DEPLOY.md)。
+脚本自动完成 windeployqt、依赖复制与 zip 打包，产物名 `QuickShot-Release-v{version}-Windows-x64.zip`（与自动更新的命名约定一致）。若 Qt / MinGW / CMake 安装路径与默认不同，修改 `deploy.ps1` 开头 Configuration 段的 `$QtRoot`、`$QtVersion`、`$QtKit`、`$MingwBinDir`、`$CMakeBinDir`、`$NinjaDir`，或设同名环境变量 `QUICKSHOT_QT_PREFIX` / `QUICKSHOT_QT_BIN` / `QUICKSHOT_MINGW_BIN` / `QUICKSHOT_CMAKE_BIN` / `QUICKSHOT_NINJA_DIR`（环境变量优先，CI 即采用此方式）。详见 [Windows 打包指南](../deploy/win/README_DEPLOY.md)。
 
 ## 6. CI 自动构建
 
-`.github/workflows/ci.yml` 在 push（`main`/`master`）与 PR 时于 GitHub Actions 上构建 Windows（MinGW）与 macOS 两个目标并上传产物。CI 中的 Qt 路径由 `install-qt-action` 安装后经 `-DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"` 显式传入，不依赖本机任何路径。Gitee 侧不运行该 workflow。
+`.github/workflows/ci.yml` 在 push（`main`/`master`）与 PR 时于 GitHub Actions 上构建 Windows（MinGW）与 macOS 两个目标并上传产物，用于编译验证（产物为裸可执行文件，非发布包）。CI 中的 Qt 路径由 `install-qt-action` 安装后经 `-DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"` 显式传入，不依赖本机任何路径。Gitee 侧不运行该 workflow。
+
+发版走 `.github/workflows/release.yml`：push `v*` 标签时触发，两个平台分别**调用现有 deploy 脚本**（`deploy.ps1 -r` / `deploy_mac.sh -r`，路径经环境变量覆盖为 CI 安装位置），产出与本地打包完全同名的发布包——`QuickShot-Release-v{version}-Windows-x64.zip` 与 `QuickShot-Release-v{version}.dmg`——并自动挂载到 GitHub Release。workflow 会先校验标签版本与 `CMakeLists.txt` 的 `PROJECT_VERSION` 一致，不一致直接失败。
 
 ## 7. 常见问题
 

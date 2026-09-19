@@ -79,7 +79,9 @@ build_config() {
 
     # 配置CMake
     echo "Configuring CMake..."
-    local CMAKE_ARGS="-DCMAKE_BUILD_TYPE=${CONFIG} -DCMAKE_PREFIX_PATH=/opt/homebrew -DCMAKE_OSX_ARCHITECTURES=arm64"
+    # Qt 前缀可用环境变量 QUICKSHOT_QT_PREFIX 覆盖（CI 上 brew 的 qt 为 keg-only，不在 /opt/homebrew）
+    local QT_PREFIX="${QUICKSHOT_QT_PREFIX:-/opt/homebrew}"
+    local CMAKE_ARGS="-DCMAKE_BUILD_TYPE=${CONFIG} -DCMAKE_PREFIX_PATH=${QT_PREFIX} -DCMAKE_OSX_ARCHITECTURES=arm64"
     if [ "$NO_GPU_ACCELERATION" = true ]; then
         CMAKE_ARGS="$CMAKE_ARGS -DENABLE_OCR_GPU_ACCELERATION=OFF"
         echo "GPU acceleration disabled"
@@ -88,7 +90,7 @@ build_config() {
 
     # 构建项目
     echo "Building project..."
-    cmake --build .
+    cmake --build . --parallel
 
     # 回到项目根目录
     cd "$PROJECT_ROOT"
@@ -152,13 +154,20 @@ EOF
 
     # 运行macdeployqt
     echo "Running macdeployqt..."
-    if [ -f "/opt/homebrew/bin/macdeployqt" ]; then
+    if [ -x "${QT_PREFIX}/bin/macdeployqt" ]; then
+        "${QT_PREFIX}/bin/macdeployqt" "$APP_BUNDLE"
+    elif [ -f "/opt/homebrew/bin/macdeployqt" ]; then
         /opt/homebrew/bin/macdeployqt "$APP_BUNDLE"
     elif [ -f "/usr/local/bin/macdeployqt" ]; then
         /usr/local/bin/macdeployqt "$APP_BUNDLE"
     else
-        echo "Warning: macdeployqt not found. Trying to find in Qt installation..."
-        which macdeployqt && macdeployqt "$APP_BUNDLE"
+        MACDEPLOYQT="$(command -v macdeployqt || true)"
+        if [ -n "$MACDEPLOYQT" ]; then
+            "$MACDEPLOYQT" "$APP_BUNDLE"
+        else
+            echo "Error: macdeployqt not found" >&2
+            exit 1
+        fi
     fi
 
     # 拷贝 ONNX Runtime 动态库到 Frameworks 目录
@@ -173,6 +182,9 @@ EOF
         # 添加 @executable_path/../Frameworks 到 rpath
         install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP_BUNDLE/Contents/MacOS/QuickShot"
         echo "ONNX Runtime copied and rpath fixed."
+    elif [ -n "$ONNXRT_DYLIB" ] && [ -f "$APP_BUNDLE/Contents/Frameworks/$(basename "$ONNXRT_DYLIB")" ]; then
+        # macdeployqt 已拷入 Frameworks 并改写为 @rpath / @executable_path，无需手动处理
+        echo "ONNX Runtime already deployed by macdeployqt ($ONNXRT_DYLIB)."
     else
         echo "Warning: ONNX Runtime not found in binary dependencies."
     fi

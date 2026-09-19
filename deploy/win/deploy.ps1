@@ -34,28 +34,35 @@ if ($CmakeContent -match 'project\(\s*' + [regex]::Escape($ProjectName) + '\s+VE
 $PlatformSuffix = "Windows-x64"
 
 # Paths (Adjust based on your system if needed, but these match the discovered layout)
+# 全部路径支持同名环境变量覆盖（CI 使用，本地无需设置）：
+#   QUICKSHOT_QT_PREFIX   Qt 安装前缀（如 C:\Software\Qt\6.10.2\mingw_64）
+#   QUICKSHOT_QT_BIN      Qt bin 目录（windeployqt 所在，默认 <QtPrefix>\bin）
+#   QUICKSHOT_MINGW_BIN   MinGW 13.1.0 bin 目录（编译器，必需）
+#   QUICKSHOT_CMAKE_BIN   CMake bin 目录（可选，目录缺失时回退 PATH 中的 cmake）
+#   QUICKSHOT_NINJA_DIR   Ninja 目录（可选，缺失时回退 MinGW Makefiles 生成器）
 $QtRoot = "C:\Software\Qt"
 $QtVersion = "6.10.2"
 $QtKit = "mingw_64"
 
-# Tool Paths
-$QtBinDir = "$QtRoot\$QtVersion\$QtKit\bin"
+$QtPrefixPath = if ($env:QUICKSHOT_QT_PREFIX) { $env:QUICKSHOT_QT_PREFIX } else { "$QtRoot\$QtVersion\$QtKit" }
+$QtBinDir = if ($env:QUICKSHOT_QT_BIN) { $env:QUICKSHOT_QT_BIN } else { "$QtPrefixPath\bin" }
 # Note: Adjust mingw version directory if different on target machine
-$MingwBinDir = "$QtRoot\Tools\mingw1310_64\bin" 
-$CMakeBinDir = "$QtRoot\Tools\CMake_64\bin"
-$NinjaDir = "$QtRoot\Tools\Ninja"
+$MingwBinDir = if ($env:QUICKSHOT_MINGW_BIN) { $env:QUICKSHOT_MINGW_BIN } else { "$QtRoot\Tools\mingw1310_64\bin" }
+$CMakeBinDir = if ($env:QUICKSHOT_CMAKE_BIN) { $env:QUICKSHOT_CMAKE_BIN } else { "$QtRoot\Tools\CMake_64\bin" }
+$NinjaDir = if ($env:QUICKSHOT_NINJA_DIR) { $env:QUICKSHOT_NINJA_DIR } else { "$QtRoot\Tools\Ninja" }
 
-# Verify Paths
-$RequiredPaths = @($QtBinDir, $MingwBinDir, $CMakeBinDir)
-foreach ($Path in $RequiredPaths) {
+# Verify Paths：Qt / MinGW 必需；CMake / Ninja 目录缺失时回退 PATH 中已安装的命令（CI 环境预装 CMake）
+foreach ($Path in @($QtBinDir, $MingwBinDir)) {
     if (-not (Test-Path $Path)) {
         Write-Error "Required path not found: $Path"
         exit 1
     }
 }
 
-# Add to PATH (Temporary for this session)
-$env:Path = "$QtBinDir;$MingwBinDir;$CMakeBinDir;$NinjaDir;$env:Path"
+# Add to PATH (Temporary for this session，仅添加真实存在的目录)
+$PathDirs = @($QtBinDir, $MingwBinDir, $CMakeBinDir, $NinjaDir) |
+    Where-Object { $_ -and (Test-Path $_) }
+$env:Path = ($PathDirs -join ";") + ";" + $env:Path
 
 # Check tools
 Write-Host "Checking tools..."
@@ -123,7 +130,7 @@ function Build-Config {
     
     # Build
     Write-Host "Building..."
-    & cmake --build $BuildDir
+    & cmake --build $BuildDir --parallel
     if ($LASTEXITCODE -ne 0) { throw "Build failed" }
 
     # Deploy
@@ -237,6 +244,13 @@ function Build-Config {
         Write-Host "Cleaning up build directory: $BuildDir"
         Remove-Item -Recurse -Force $BuildDir
     }
+
+    # 打包 zip（UpdateManager 自动更新依赖此命名：QuickShot-{Config}-v{version}-Windows-x64.zip）
+    Write-Host "Creating zip archive..."
+    $ZipPath = "$OutputDir.zip"
+    if (Test-Path $ZipPath) { Remove-Item -Force $ZipPath }
+    Compress-Archive -Path $OutputDir -DestinationPath $ZipPath
+    Write-Host "Zip created at: $ZipPath"
 
     Write-Host "Package created at: $OutputDir" -ForegroundColor Green
 }
