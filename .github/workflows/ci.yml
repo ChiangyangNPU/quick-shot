@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main]
+
+# 同一分支的新推送自动取消尚未完成的旧运行
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows MinGW
+            os: windows-latest
+          - name: macOS arm64
+            os: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ---------- Windows（对齐 deploy/win/deploy.ps1：Qt 6.10.2 mingw + MinGW 13.1.0 + Ninja） ----------
+      - name: Install Qt (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.2'
+          arch: 'win64_mingw'
+          # tools_mingw1310 = Qt 自带 MinGW 13.1.0 工具链；tools_ninja = Ninja 构建器
+          tools: 'tools_mingw1310,tools_ninja'
+          cache: true
+
+      - name: Add toolchain to PATH (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $mingw = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter 'mingw*_64' |
+            Select-Object -First 1
+          if (-not $mingw) { throw "MinGW toolchain not found under $env:IQTA_TOOLS" }
+          $mingwBin = Join-Path $mingw.FullName 'bin'
+          Add-Content $env:GITHUB_PATH $mingwBin
+          Write-Host "MinGW added to PATH: $mingwBin"
+          $ninja = Get-ChildItem "$env:IQTA_TOOLS" -Directory -Filter 'Ninja*' |
+            Select-Object -First 1
+          if ($ninja) {
+            Add-Content $env:GITHUB_PATH $ninja.FullName
+            Write-Host "Ninja added to PATH: $($ninja.FullName)"
+          }
+
+      - name: Configure (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: cmake --build build --parallel
+
+      - name: Upload artifact (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickShot-Windows-x64
+          path: build/QuickShot.exe
+          if-no-files-found: error
+
+      # ---------- macOS（对齐 deploy/mac/deploy_mac.sh：Homebrew Qt + onnxruntime，/opt/homebrew） ----------
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          brew install qt onnxruntime
+          echo "QT_PREFIX=$(brew --prefix qt)" >> "$GITHUB_ENV"
+
+      - name: Configure (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_PREFIX_PATH="$QT_PREFIX"
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: cmake --build build --parallel
+
+      - name: Upload artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuickShot-macOS-arm64
+          path: build/QuickShot
+          if-no-files-found: error

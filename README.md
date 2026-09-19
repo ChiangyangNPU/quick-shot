@@ -153,6 +153,8 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
     cmake --build .
     ```
 
+> **Windows 环境搭建与路径配置**（Qt / MinGW / CMake / ONNX Runtime 的路径指定、CLion 工具链、常见问题）详见 [Windows 构建指南](docs/build-windows.md)。
+
 > **版本号管理**：版本号由 [CMakeLists.txt](file:///e:/develop/Code/github_new/quick-shot/CMakeLists.txt#L2) 的 `project(QuickShot VERSION x.y.z)` 统一管理，通过 `QUICKSHOT_VERSION` 宏注入源码。修改版本号后需在 CLion 中 **Reset Cache and Reload CMake Project**。
 
 ### 快速打包

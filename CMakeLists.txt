@@ -10,8 +10,17 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-if (WIN32)
-    set(CMAKE_PREFIX_PATH "C:/Software/Qt/6.10.2/mingw_64")
+# Qt 路径解析优先级：
+# 1. 命令行 -DCMAKE_PREFIX_PATH=...（或同名环境变量，CMake 首次配置时自动初始化缓存）
+# 2. 环境变量 QT_DIR 指向 Qt 安装前缀（如 C:/Software/Qt/6.10.2/mingw_64）
+# 3. Windows 兜底：仅当路径真实存在时使用维护者本机默认值
+# 不再无条件覆盖外部传入值，CI / 其他机器可通过上述任一入口指定 Qt 路径
+if (NOT DEFINED CMAKE_PREFIX_PATH)
+    if (DEFINED ENV{QT_DIR})
+        set(CMAKE_PREFIX_PATH "$ENV{QT_DIR}")
+    elseif (WIN32 AND EXISTS "C:/Software/Qt/6.10.2/mingw_64")
+        set(CMAKE_PREFIX_PATH "C:/Software/Qt/6.10.2/mingw_64")
+    endif()
 endif()
 
 # OCR 宏控开关
