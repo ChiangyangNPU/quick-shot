@@ -38,6 +38,13 @@ jobs:
           echo "Release version: $VER"
 
       # ---------- Windows（调用 deploy/win/deploy.ps1，产出 zip） ----------
+      # 同 ci.yml：钉 Python 3.13 绕开 runner 默认 3.14 与 py7zr 1.1.0 的运行时兼容问题
+      - name: Setup Python 3.13 (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install Qt (Windows)
         if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
@@ -46,6 +53,7 @@ jobs:
           arch: 'win64_mingw'
           tools: 'tools_mingw1310,tools_ninja'
           cache: true
+          setup-python: false
 
       - name: Build & package (Windows)
         if: runner.os == 'Windows'

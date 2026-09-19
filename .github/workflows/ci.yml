@@ -29,6 +29,14 @@ jobs:
         uses: actions/checkout@v4
 
       # ---------- Windows（对齐 deploy/win/deploy.ps1：Qt 6.10.2 mingw + MinGW 13.1.0 + Ninja） ----------
+      # runner 默认 Python 3.14 与 install-qt-action 钉住的 py7zr 1.1.0 存在运行时兼容问题
+      # （aqt 步骤 python 退出码 1），显式钉 3.13 并让其使用 PATH 上的 Python
+      - name: Setup Python 3.13 (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Install Qt (Windows)
         if: runner.os == 'Windows'
         uses: jurplel/install-qt-action@v4
@@ -38,6 +46,7 @@ jobs:
           # tools_mingw1310 = Qt 自带 MinGW 13.1.0 工具链；tools_ninja = Ninja 构建器
           tools: 'tools_mingw1310,tools_ninja'
           cache: true
+          setup-python: false
 
       - name: Add toolchain to PATH (Windows)
         if: runner.os == 'Windows'
