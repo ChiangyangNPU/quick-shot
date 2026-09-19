@@ -76,12 +76,30 @@ jobs:
       - name: Configure (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR"
+        run: |
+          $log = "$env:RUNNER_TEMP\configure.log"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) {
+            "### Configure failed (exit $LASTEXITCODE) — last 60 lines" | Add-Content $env:GITHUB_STEP_SUMMARY
+            '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content $log -Tail 60 | Add-Content $env:GITHUB_STEP_SUMMARY
+            '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit $LASTEXITCODE
+          }
 
       - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: cmake --build build --parallel
+        run: |
+          $log = "$env:RUNNER_TEMP\build.log"
+          cmake --build build --parallel 2>&1 | Tee-Object -FilePath $log
+          if ($LASTEXITCODE -ne 0) {
+            "### Build failed (exit $LASTEXITCODE) — last 80 lines" | Add-Content $env:GITHUB_STEP_SUMMARY
+            '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content $log -Tail 80 | Add-Content $env:GITHUB_STEP_SUMMARY
+            '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            exit $LASTEXITCODE
+          }
 
       - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
