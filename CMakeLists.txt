@@ -327,6 +327,12 @@ if (WIN32)
     target_link_libraries(QuickShot mfplat mfreadwrite mfuuid ole32 dbghelp dwmapi)
 endif()
 
+# Ninja + MinGW：强制链接/编译走响应文件（@rsp），避免对象文件全量内联进
+# cmd.exe /C 命令行时超出其 8191 字符上限导致链接瞬间失败（"The input line is too long"）
+if (WIN32 AND CMAKE_GENERATOR STREQUAL "Ninja")
+    set(CMAKE_NINJA_FORCE_RESPONSE_FILE ON)
+endif()
+
 # 构建后复制 ONNX Runtime DLL 到输出目录
 if (ONNXRUNTIME_FOUND AND WIN32)
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

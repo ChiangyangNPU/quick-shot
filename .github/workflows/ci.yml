@@ -93,7 +93,8 @@ jobs:
         shell: pwsh
         run: |
           $log = "$env:RUNNER_TEMP\build.log"
-          cmake --build build --parallel 2>&1 | Tee-Object -FilePath $log
+          cmake --build build --parallel *> $log
+          Get-Content $log
           if ($LASTEXITCODE -ne 0) {
             "### Build failed (exit $LASTEXITCODE) — last 120 lines" | Add-Content $env:GITHUB_STEP_SUMMARY
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
