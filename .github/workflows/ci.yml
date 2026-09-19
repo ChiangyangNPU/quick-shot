@@ -84,6 +84,7 @@ jobs:
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
             Get-Content $log -Tail 60 | Add-Content $env:GITHUB_STEP_SUMMARY
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            Get-Content $log -Tail 60 | ForEach-Object { Write-Output "::error::$_" }
             exit $LASTEXITCODE
           }
 
@@ -98,6 +99,13 @@ jobs:
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
             Get-Content $log -Tail 80 | Add-Content $env:GITHUB_STEP_SUMMARY
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
+            # 注解每步上限 50 条、单条约 1KB：6 行一组压缩成一条 error 注解
+            $chunk = @()
+            foreach ($line in (Get-Content $log -Tail 80)) {
+              $chunk += $line
+              if ($chunk.Count -ge 6) { Write-Output ("::error::" + ($chunk -join "%0A")); $chunk = @() }
+            }
+            if ($chunk.Count -gt 0) { Write-Output ("::error::" + ($chunk -join "%0A")) }
             exit $LASTEXITCODE
           }
 
