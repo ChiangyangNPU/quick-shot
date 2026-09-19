@@ -111,6 +111,30 @@ jobs:
             exit $LASTEXITCODE
           }
 
+      # 链接疑似因内存压力被系统杀死（日志止于链接启动、无任何链接器输出）：
+      # 在新进程（编译高峰内存已释放）单独重跑链接，对比内存水位定位根因
+      - name: Diagnose link retry (Windows)
+        if: runner.os == 'Windows' && failure()
+        shell: pwsh
+        run: |
+          $mem = Get-CimInstance Win32_OperatingSystem
+          Write-Output ("::error::MEM FreePhys={0}MB FreeVirt={1}MB CommitLimit={2}MB" -f [int]($mem.FreePhysicalMemory/1KB), [int]($mem.FreeVirtualMemory/1KB), [int]($mem.TotalVirtualMemorySize/1KB))
+          Set-Location build
+          ninja -v QuickShot.exe 2>&1 | Tee-Object -FilePath "$env:RUNNER_TEMP\relink.log"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Output "::error::RETRY LINK FAILED — 以下为链接器原始输出（每行截断200字符）"
+            $tail = Get-Content "$env:RUNNER_TEMP\relink.log" -Tail 40 | ForEach-Object { if ($_.Length -gt 200) { $_.Substring(0, 200) } else { $_ } }
+            $chunk = @()
+            foreach ($line in $tail) {
+              $chunk += $line
+              if ($chunk.Count -ge 5) { Write-Output ("::error::" + ($chunk -join "%0A")); $chunk = @() }
+            }
+            if ($chunk.Count -gt 0) { Write-Output ("::error::" + ($chunk -join "%0A")) }
+            exit $LASTEXITCODE
+          } else {
+            Write-Output "::error::RETRY LINK SUCCEEDED — 原失败为链接启动时的内存/资源压力问题"
+          }
+
       - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
