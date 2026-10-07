@@ -219,6 +219,93 @@ EOF
         echo "Warning: ONNX Runtime not found in binary dependencies."
     fi
 
+    # 补齐依赖闭包：macdeployqt 处理 brew 动态库时偶发漏拷传递依赖（如 libonnxruntime
+    # 的 libonnx/libonnx_proto/libprotobuf-lite/libre2），改写了依赖路径却没拷文件，
+    # 启动时 dyld 直接 abort。此处扫描主程序与 Frameworks 全部库的依赖，把缺失的
+    # 非系统依赖补拷进 Frameworks，绝对路径依赖统一改写为 @rpath（解析到主程序 rpath）。
+    echo "Verifying dylib dependency closure..."
+    local ROUND=0 COPIED=1
+    while [ "$COPIED" -eq 1 ] && [ "$ROUND" -lt 6 ]; do
+        ROUND=$((ROUND+1)); COPIED=0
+        local SCAN LIB DEP SRC TGT NEWDEP FWDIR SUFFIX NAME
+        SCAN="$APP_BUNDLE/Contents/MacOS/QuickShot"
+        SCAN+=$'\n'"$(ls "$APP_BUNDLE/Contents/Frameworks/"*.dylib 2>/dev/null)"
+        while IFS= read -r LIB; do
+            [ -f "$LIB" ] || continue
+            while IFS= read -r DEP; do
+                [ -z "$DEP" ] && continue
+                case "$DEP" in
+                    /opt/homebrew/*|/usr/local/*)
+                        # brew 绝对路径依赖：补拷（framework 连目录）并改写为
+                        # @executable_path/../Frameworks/<相同内部布局>
+                        if [[ "$DEP" == *".framework/"* ]]; then
+                            FWDIR="${DEP%%.framework/*}.framework"
+                            SUFFIX="${DEP#*.framework}"
+                            TGT="$APP_BUNDLE/Contents/Frameworks/$(basename "$FWDIR")$SUFFIX"
+                            if [ ! -f "$TGT" ]; then
+                                echo "  fixup: 补拷 framework $(basename "$FWDIR")"
+                                cp -R "$FWDIR" "$APP_BUNDLE/Contents/Frameworks/"
+                                COPIED=1
+                            fi
+                            NEWDEP="@executable_path/../Frameworks/$(basename "$FWDIR")$SUFFIX"
+                        else
+                            NAME="$(basename "$DEP")"
+                            TGT="$APP_BUNDLE/Contents/Frameworks/$NAME"
+                            if [ ! -f "$TGT" ]; then
+                                echo "  fixup: 补拷 $NAME ← $DEP"
+                                cp "$DEP" "$TGT"
+                                COPIED=1
+                            fi
+                            NEWDEP="@executable_path/../Frameworks/$NAME"
+                        fi
+                        if [ "$NEWDEP" != "$DEP" ]; then
+                            /usr/bin/install_name_tool -change "$DEP" "$NEWDEP" "$LIB"
+                        fi
+                        ;;
+                    @executable_path/*)
+                        # 主程序相对路径依赖：校验目标存在（framework 保持内部布局），
+                        # 缺失时按名从 brew 前缀找回
+                        TGT="$APP_BUNDLE/Contents/Frameworks/$(basename "$DEP")"
+                        case "$DEP" in
+                            *.framework/*) TGT="$APP_BUNDLE/Contents/Frameworks/${DEP#*../Frameworks/}" ;;
+                        esac
+                        [ -f "$TGT" ] && continue
+                        NAME="$(basename "$DEP")"
+                        if [[ "$DEP" == *".framework/"* ]]; then
+                            SRC="$(find /opt/homebrew/opt -maxdepth 4 -type d -name "$NAME.framework" 2>/dev/null | head -1)"
+                            if [ -n "$SRC" ]; then
+                                echo "  fixup: 补拷 framework $NAME.framework"
+                                cp -R "$SRC" "$APP_BUNDLE/Contents/Frameworks/"
+                                COPIED=1
+                            fi
+                        else
+                            SRC="/opt/homebrew/lib/$NAME"
+                            [ -f "$SRC" ] || SRC="$(find /opt/homebrew/lib -maxdepth 2 -name "$NAME" 2>/dev/null | head -1)"
+                            if [ -f "$SRC" ]; then
+                                echo "  fixup: 补拷 $NAME ← $SRC"
+                                cp "$SRC" "$APP_BUNDLE/Contents/Frameworks/"
+                                COPIED=1
+                            fi
+                        fi
+                        [ -f "$TGT" ] || echo "  Warning: 依赖缺失且无法找回: $DEP"
+                        ;;
+                esac
+            done <<< "$(/usr/bin/otool -L "$LIB" | tail -n +2 | awk '{print $1}')"
+            # 修正裸 dylib 自身的 install name（ID）为包内路径：ID 不参与加载解析，
+            # 但改写后包内不再残留绝对路径痕迹
+            case "$LIB" in
+                *.dylib)
+                    local CURID
+                    CURID=$(/usr/bin/otool -D "$LIB" 2>/dev/null | awk 'NR==2{print $1}')
+                    case "$CURID" in
+                        /opt/homebrew/*|/usr/local/*)
+                            /usr/bin/install_name_tool -id "@executable_path/../Frameworks/$(basename "$CURID")" "$LIB" ;;
+                    esac
+                    ;;
+            esac
+        done <<< "$SCAN"
+    done
+
     # 签名应用程序
     echo "Signing application..."
     codesign --force --deep --sign - "$APP_BUNDLE"
