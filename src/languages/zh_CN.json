@@ -340,5 +340,9 @@
   "update.releaseNotes.testHeader": "本地模拟更新测试包",
   "update.releaseNotes.test1": "1. 验证「检查更新」功能",
   "update.releaseNotes.test2": "2. 验证下载与 SHA256 校验",
-  "update.releaseNotes.test3": "3. 验证安装替换与自动重启"
+  "update.releaseNotes.test3": "3. 验证安装替换与自动重启",
+  "update.macInstallerReady": "安装包已下载",
+  "update.macInstallGuide": "安装包已保存到：\n%1\n\n点击「退出并打开安装包」将退出程序并挂载安装包，把 QuickShot 拖入「应用程序」即完成更新。",
+  "update.macExitAndOpen": "退出并打开安装包",
+  "update.later": "稍后"
 }

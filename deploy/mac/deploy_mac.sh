@@ -197,9 +197,16 @@ EOF
     echo "Verifying signature..."
     codesign --verify -v "$APP_BUNDLE"
 
-    # 创建DMG
+    # 创建DMG（staging 目录内放置 .app + 指向「应用程序」的符号链接，
+    # 挂载后拖拽安装与标准 mac 软件分发一致）
     echo "Creating DMG..."
-    hdiutil create -srcfolder "$APP_BUNDLE" -volname "QuickShot ${CONFIG} v${VERSION}" -format UDZO -ov "$DMG_FILE"
+    local DMG_STAGING="$SCRIPT_DIR/dmg-staging"
+    rm -rf "$DMG_STAGING"
+    mkdir -p "$DMG_STAGING"
+    cp -R "$APP_BUNDLE" "$DMG_STAGING/"
+    ln -s /Applications "$DMG_STAGING/Applications"
+    hdiutil create -srcfolder "$DMG_STAGING" -volname "QuickShot ${CONFIG} v${VERSION}" -format UDZO -ov "$DMG_FILE"
+    rm -rf "$DMG_STAGING"
 
     # 清理构建目录
     echo "Cleaning build directory..."

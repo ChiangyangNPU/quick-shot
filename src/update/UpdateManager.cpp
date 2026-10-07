@@ -265,10 +265,23 @@ void UpdateManager::tryNextDownloadChannel() {
         dir.mkpath(".");
     }
 
+    // 安装包文件名与下载地址按平台区分：Windows 取 zip，macOS 取 dmg
+#ifdef Q_OS_WIN
     QString fileName = QString("QuickShot-%1-Windows-x64.zip").arg(m_currentDownloadInfo.version);
+#else
+    QString fileName = QString("QuickShot-Release-v%1.dmg").arg(m_currentDownloadInfo.version);
+#endif
     m_tempFilePath = dir.filePath(fileName);
 
-    QString downloadUrl = getDownloadUrl(m_currentChannel, m_currentDownloadInfo.version);
+    // 优先使用 release 附件列表中匹配当前平台的附件（地址与大小最可靠），
+    // 没有匹配资产时回退到按版本号拼装的 URL 模板
+    QString downloadUrl;
+    if (const VersionInfo::Asset *asset = pickPlatformAsset(m_currentDownloadInfo)) {
+        downloadUrl = asset->url;
+        m_currentDownloadInfo.fileSize = asset->size;
+    } else {
+        downloadUrl = getDownloadUrl(m_currentChannel, m_currentDownloadInfo.version);
+    }
     if (m_currentChannel == Channel::Official && !m_currentDownloadInfo.downloadUrl.isEmpty()) {
         downloadUrl = m_currentDownloadInfo.downloadUrl;
     }
@@ -734,6 +747,20 @@ bool UpdateManager::parseReleaseApi(const QJsonObject &obj, VersionInfo &out) {
 
     // 下载链接和文件大小：从 assets 数组第一个 asset 读取
     const QJsonArray assets = obj.value("assets").toArray();
+
+    // 全部附件资产：下载时按平台扩展名挑选安装包（mac 取 .dmg，Windows 取 .zip）
+    out.assets.clear();
+    for (const QJsonValue &v : assets) {
+        const QJsonObject a = v.toObject();
+        VersionInfo::Asset asset;
+        asset.name = a.value("name").toString();
+        asset.url = a.value("browser_download_url").toString();
+        asset.size = a.value("size").toVariant().toLongLong();
+        if (!asset.name.isEmpty() && !asset.url.isEmpty()) {
+            out.assets.append(asset);
+        }
+    }
+
     if (!assets.isEmpty()) {
         const QJsonObject firstAsset = assets.first().toObject();
         out.downloadUrl = firstAsset.value("browser_download_url").toString();
@@ -793,13 +820,54 @@ QString UpdateManager::getDownloadUrl(Channel channel, const QString &version) c
 
     switch (channel) {
     case Channel::GitHub:
+#ifdef Q_OS_WIN
         return QStringLiteral("https://github.com/chiangyangNPU/quick-shot/releases/download/%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
+#else
+        return QStringLiteral("https://github.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1.dmg").arg(version);
+#endif
     case Channel::Gitee:
+#ifdef Q_OS_WIN
         return QStringLiteral("https://gitee.com/chiangyangNPU/quick-shot/releases/download/%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
+#else
+        return QStringLiteral("https://gitee.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1.dmg").arg(version);
+#endif
     case Channel::Official:
         return m_currentDownloadInfo.downloadUrl;
     }
     return QString();
+}
+
+/**
+ * @brief 按当前平台从附件列表中挑选安装包
+ *
+ * macOS 优先 .dmg；Windows 优先名称带 "Windows" 字样的 .zip，其次任意 .zip。
+ * 未命中返回 nullptr，调用方回退到 getDownloadUrl 的版本号模板 URL。
+ * @param info 版本信息
+ * @return 匹配的附件指针（生命周期随 info）；无匹配为 nullptr
+ * @author chiangyang
+ */
+const UpdateManager::VersionInfo::Asset *UpdateManager::pickPlatformAsset(const UpdateManager::VersionInfo &info) const {
+#ifdef Q_OS_WIN
+    // 优先名称带平台标识的 zip，其次任意 zip
+    for (const VersionInfo::Asset &a : info.assets) {
+        if (a.name.endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive)
+                && a.name.contains(QStringLiteral("Windows"), Qt::CaseInsensitive)) {
+            return &a;
+        }
+    }
+    for (const VersionInfo::Asset &a : info.assets) {
+        if (a.name.endsWith(QStringLiteral(".zip"), Qt::CaseInsensitive)) {
+            return &a;
+        }
+    }
+#else
+    for (const VersionInfo::Asset &a : info.assets) {
+        if (a.name.endsWith(QStringLiteral(".dmg"), Qt::CaseInsensitive)) {
+            return &a;
+        }
+    }
+#endif
+    return nullptr;
 }
 
 /**

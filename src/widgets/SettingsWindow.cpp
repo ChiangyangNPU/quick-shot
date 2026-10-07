@@ -31,6 +31,7 @@
 
 #include "../update/UpdateManager.h"
 #include <QProgressBar>
+#include <QProcess>
 
 #include "Logger.h"
 
@@ -2925,17 +2926,15 @@ void SettingsWindow::onCheckForUpdate() {
 
 /**
  * @brief 下载更新按钮点击
+ *
+ * 两平台均为应用内下载（带进度条），仅落盘目录不同：
+ * Windows 下到临时目录（随后走应用内静默安装）；macOS 下到用户「下载」目录
+ * （下载完成后弹窗引导打开 DMG，手动拖入「应用程序」完成更新）。
  * @author chiangyang
  */
 void SettingsWindow::onDownloadUpdate() {
     if (!m_updateManager) return;
 
-#ifndef Q_OS_WIN
-    // macOS：dmg 分发 + ad-hoc 签名，无法自动替换 .app
-    // 打开 release 下载页让用户手动下载 dmg，并退出当前程序避免覆盖正在运行的 .app
-    QDesktopServices::openUrl(QUrl("https://gitee.com/chiangyangNPU/quick-shot/releases"));
-    QCoreApplication::quit();
-#else
     btnDownloadUpdate->hide();
     btnCheckUpdate->hide();
     m_updateProgressBar->show();
@@ -2943,11 +2942,14 @@ void SettingsWindow::onDownloadUpdate() {
     btnCancelUpdate->show();
     setUpdateStatusText("update.downloading", "Downloading update...");
 
+#ifdef Q_OS_WIN
     QString downloadDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
         + "/QuickShot-update";
+#else
+    QString downloadDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
+#endif
     m_updateManager->downloadUpdate(m_updateManager->latestVersion(), downloadDir);
     fitWindowHeight();
-#endif
 }
 
 /**
@@ -3020,6 +3022,22 @@ void SettingsWindow::onUpdateDownloadProgress(qint64 received, qint64 total, int
     }
 }
 
+#ifndef Q_OS_WIN
+/**
+ * @brief 清除文件的 macOS quarantine 隔离标记（best effort）
+ *
+ * Qt Network 下载默认不打该标记，此处防御性清理：万一文件被加上标记，
+ * 用户从 DMG 拖出的 app 会被 Gatekeeper 判「已损坏，无法打开」。
+ * 文件本无标记时 xattr 返回非零，属正常情况，静默忽略。
+ * @param filePath 下载的 DMG 路径
+ * @author chiangyang
+ */
+static void clearQuarantineAttribute(const QString &filePath) {
+    QProcess::execute(QStringLiteral("xattr"),
+                      {QStringLiteral("-d"), QStringLiteral("com.apple.quarantine"), filePath});
+}
+#endif
+
 /**
  * @brief 更新下载完成
  * @author chiangyang
@@ -3028,13 +3046,41 @@ void SettingsWindow::onUpdateDownloadFinished(bool success,
                                                const QString &filePath,
                                                const UpdateManager::ErrorInfo &error) {
     Q_UNUSED(error);
-    
+
     if (success) {
+#ifdef Q_OS_WIN
         setUpdateStatusText("update.downloaded", "Download complete, click to install update");
         m_updateProgressBar->hide();
         btnCancelUpdate->hide();
         btnInstallUpdate->show();
         btnInstallUpdate->setProperty("filePath", filePath);
+#else
+        // macOS：DMG 无法原地替换 .app（ad-hoc 签名分发），参照 tmd 的引导式安装——
+        // 下载完成后清隔离标记，弹窗引导「退出并打开安装包」→ Finder 挂载 DMG
+        // → 用户手动拖入「应用程序」。先 openUrl 再退出，避免退出后无响应的空窗
+        m_updateProgressBar->hide();
+        btnCancelUpdate->hide();
+        clearQuarantineAttribute(filePath);
+        setUpdateStatusText("update.downloaded", "Download complete, click to install update");
+
+        auto *tm = TranslationManager::instance();
+        MessageBox box(this);
+        box.setContent(tm->get("update.macInstallerReady", "Installer downloaded"),
+                       tm->get("update.macInstallGuide",
+                               "The installer has been saved to:\n%1\n\nClick \"Quit and open installer\" to quit and mount it, then drag QuickShot into Applications to finish updating.")
+                           .arg(filePath));
+        QPushButton *openBtn = box.addCustomButton(
+            tm->get("update.macExitAndOpen", "Quit and open installer"), QMessageBox::AcceptRole);
+        box.addCustomButton(tm->get("update.later", "Later"), QMessageBox::RejectRole);
+        box.centerOn(geometry());
+        box.exec();
+        if (box.clickedButton() == openBtn) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
+            QCoreApplication::quit();
+        } else {
+            resetUpdateUI();
+        }
+#endif
     } else {
         setUpdateStatusText("update.downloadFailed", "Download failed: %1", {error.message});
         m_updateProgressBar->hide();

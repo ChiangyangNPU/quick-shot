@@ -340,5 +340,9 @@
   "update.releaseNotes.testHeader": "로컬 시뮬레이션 업데이트 테스트 패키지",
   "update.releaseNotes.test1": "1. '업데이트 확인' 기능 검증",
   "update.releaseNotes.test2": "2. 다운로드 및 SHA256 검증 검증",
-  "update.releaseNotes.test3": "3. 설치 교체 및 자동 재시작 검증"
+  "update.releaseNotes.test3": "3. 설치 교체 및 자동 재시작 검증",
+  "update.macInstallerReady": "설치 파일이 다운로드되었습니다",
+  "update.macInstallGuide": "설치 파일 저장 위치:\n%1\n\n\"종료 후 설치 파일 열기\"를 클릭하면 앱이 종료되고 마운트됩니다. QuickShot을 \"응용 프로그램\"으로 드래그하여 업데이트를 완료하세요.",
+  "update.macExitAndOpen": "종료 후 설치 파일 열기",
+  "update.later": "나중에"
 }

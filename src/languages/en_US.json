@@ -340,5 +340,9 @@
   "update.releaseNotes.testHeader": "Local simulated update test package",
   "update.releaseNotes.test1": "1. Verify Check for Updates",
   "update.releaseNotes.test2": "2. Verify Download & SHA256 Validation",
-  "update.releaseNotes.test3": "3. Verify Install Replace & Auto Restart"
+  "update.releaseNotes.test3": "3. Verify Install Replace & Auto Restart",
+  "update.macInstallerReady": "Installer downloaded",
+  "update.macInstallGuide": "The installer has been saved to:\n%1\n\nClick \"Quit and open installer\" to quit and mount it, then drag QuickShot into Applications to finish updating.",
+  "update.macExitAndOpen": "Quit and open installer",
+  "update.later": "Later"
 }

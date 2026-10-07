@@ -340,5 +340,9 @@
   "update.releaseNotes.testHeader": "ローカル模擬アップデートテストパッケージ",
   "update.releaseNotes.test1": "1. 「アップデートを確認」機能を検証",
   "update.releaseNotes.test2": "2. ダウンロードと SHA256 検証を検証",
-  "update.releaseNotes.test3": "3. インストール置換と自動再起動を検証"
+  "update.releaseNotes.test3": "3. インストール置換と自動再起動を検証",
+  "update.macInstallerReady": "インストーラーをダウンロードしました",
+  "update.macInstallGuide": "インストーラーの保存先：\n%1\n\n「終了してインストーラーを開く」をクリックするとアプリを終了してマウントします。QuickShot を「アプリケーション」にドラッグして更新を完了してください。",
+  "update.macExitAndOpen": "終了してインストーラーを開く",
+  "update.later": "後で"
 }

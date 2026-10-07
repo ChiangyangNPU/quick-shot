@@ -5,6 +5,7 @@
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QTimer>
+#include <QList>
 
 /**
  * @brief 更新管理器
@@ -49,6 +50,14 @@ public:
         QString downloadUrl;    ///< 下载链接
         QString checksum;       ///< SHA256 校验和
         qint64 fileSize;        ///< 文件大小（字节）
+
+        /// release API 的附件资产，按平台扩展名从中挑选安装包
+        struct Asset {
+            QString name;       ///< 附件名（如 "QuickShot-Release-v0.1.0.dmg"）
+            QString url;        ///< 下载地址
+            qint64 size = 0;    ///< 字节数
+        };
+        QList<Asset> assets;    ///< 全部附件（GitHub/Gitee 渠道填充，Official 渠道为空）
     };
 
     /**
@@ -337,6 +346,17 @@ private:
      * @author chiangyang
      */
     bool isNewerVersion(const QString &latest, const QString &current) const;
+
+    /**
+     * @brief 按当前平台从附件列表中挑选安装包
+     *
+     * macOS 优先 .dmg；Windows 优先名称带 "Windows" 字样的 .zip，其次任意 .zip。
+     * 未命中返回 nullptr，调用方回退到 getDownloadUrl 的版本号模板 URL。
+     * @param info 版本信息
+     * @return 匹配的附件指针（生命周期随 info）；无匹配为 nullptr
+     * @author chiangyang
+     */
+    const VersionInfo::Asset *pickPlatformAsset(const VersionInfo &info) const;
 
     /**
      * @brief 版本号比较
