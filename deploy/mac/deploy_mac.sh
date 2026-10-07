@@ -176,6 +176,8 @@ build_config() {
     <string>${VERSION}</string>
     <key>LSMinimumSystemVersion</key>
     <string>11.0</string>
+    <key>LSUIElement</key>
+    <string>1</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 QuickShot Team. All rights reserved.</string>
 </dict>
