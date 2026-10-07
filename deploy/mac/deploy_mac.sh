@@ -105,9 +105,37 @@ build_config() {
     cp "$BUILD_DIR/QuickShot" "$APP_BUNDLE/Contents/MacOS/"
     chmod +x "$APP_BUNDLE/Contents/MacOS/QuickShot"
 
-    # 复制图标
-    echo "Copying icon..."
-    cp "$PROJECT_ROOT/icons/app.png" "$APP_BUNDLE/Contents/Resources/"
+    # 生成应用图标：icons/app.svg（矢量）→ QuickLook 渲染 1024 主图 → 多尺寸 .icns，
+    # 并在 Info.plist 中以 CFBundleIconFile 声明
+    # （否则 Finder/Dock/DMG 安装窗口里 app 显示的是通用占位图标）
+    echo "Generating app icon..."
+    local ICONSET="$SCRIPT_DIR/app.iconset"
+    rm -rf "$ICONSET" && mkdir -p "$ICONSET"
+    # SVG 原始画布只有 32x32：改写宽高声明后让 QuickLook 按矢量渲染出满幅 1024 主图
+    local SVG_MASTER="$SCRIPT_DIR/app-icon-1024.png"
+    sed 's/width="32" height="32"/width="1024" height="1024"/' "$PROJECT_ROOT/icons/app.svg" \
+        > "$SCRIPT_DIR/app-icon-master.svg"
+    if qlmanage -t -s 1024 -o "$SCRIPT_DIR" "$SCRIPT_DIR/app-icon-master.svg" >/dev/null 2>&1 \
+        && [ -f "$SCRIPT_DIR/app-icon-master.svg.png" ]; then
+        mv "$SCRIPT_DIR/app-icon-master.svg.png" "$SVG_MASTER"
+    else
+        # QuickLook 渲染失败时回退到 200x200 的位图源
+        echo "Warning: SVG 图标渲染失败，回退使用 icons/app.png"
+        cp "$PROJECT_ROOT/icons/app.png" "$SVG_MASTER"
+    fi
+    rm -f "$SCRIPT_DIR/app-icon-master.svg"
+    sips -z 16 16     "$SVG_MASTER" --out "$ICONSET/icon_16x16.png"        >/dev/null
+    sips -z 32 32     "$SVG_MASTER" --out "$ICONSET/icon_16x16@2x.png"     >/dev/null
+    sips -z 32 32     "$SVG_MASTER" --out "$ICONSET/icon_32x32.png"        >/dev/null
+    sips -z 64 64     "$SVG_MASTER" --out "$ICONSET/icon_32x32@2x.png"     >/dev/null
+    sips -z 128 128   "$SVG_MASTER" --out "$ICONSET/icon_128x128.png"      >/dev/null
+    sips -z 256 256   "$SVG_MASTER" --out "$ICONSET/icon_128x128@2x.png"   >/dev/null
+    sips -z 256 256   "$SVG_MASTER" --out "$ICONSET/icon_256x256.png"      >/dev/null
+    sips -z 512 512   "$SVG_MASTER" --out "$ICONSET/icon_256x256@2x.png"   >/dev/null
+    sips -z 512 512   "$SVG_MASTER" --out "$ICONSET/icon_512x512.png"      >/dev/null
+    sips -z 1024 1024 "$SVG_MASTER" --out "$ICONSET/icon_512x512@2x.png"   >/dev/null
+    iconutil -c icns "$ICONSET" -o "$APP_BUNDLE/Contents/Resources/QuickShot.icns"
+    rm -rf "$ICONSET" "$SVG_MASTER"
 
     # 复制语言文件
     echo "Copying language files..."
@@ -131,6 +159,8 @@ build_config() {
     <key>CFBundleDevelopmentRegion</key>
     <string>English</string>
     <key>CFBundleExecutable</key>
+    <string>QuickShot</string>
+    <key>CFBundleIconFile</key>
     <string>QuickShot</string>
     <key>CFBundleIdentifier</key>
     <string>com.quickshot.app</string>
@@ -197,16 +227,77 @@ EOF
     echo "Verifying signature..."
     codesign --verify -v "$APP_BUNDLE"
 
-    # 创建DMG（staging 目录内放置 .app + 指向「应用程序」的符号链接，
-    # 挂载后拖拽安装与标准 mac 软件分发一致）
+    # 创建DMG（引导式安装窗口）：staging 放入 .app、Applications 快捷方式和背景图，
+    # 先打读写盘，用 Finder AppleScript 设置背景/图标布局，再转压缩只读盘。
+    # 任一环节失败自动退回「纯 app」朴素布局，不阻塞打包。
     echo "Creating DMG..."
     local DMG_STAGING="$SCRIPT_DIR/dmg-staging"
-    rm -rf "$DMG_STAGING"
-    mkdir -p "$DMG_STAGING"
-    cp -R "$APP_BUNDLE" "$DMG_STAGING/"
+    local DMG_RW="$SCRIPT_DIR/${CONFIG}-rw.dmg"
+    local VOLNAME="QuickShot ${CONFIG} v${VERSION}"
+    rm -rf "$DMG_STAGING" "$DMG_RW"
+    mkdir -p "$DMG_STAGING/.background"
+    # DMG 内的 app 统一命名为 QuickShot.app（对外分发名；构建中间产物叫 QuickShot-Release.app）
+    cp -R "$APP_BUNDLE" "$DMG_STAGING/QuickShot.app"
     ln -s /Applications "$DMG_STAGING/Applications"
-    hdiutil create -srcfolder "$DMG_STAGING" -volname "QuickShot ${CONFIG} v${VERSION}" -format UDZO -ov "$DMG_FILE"
-    rm -rf "$DMG_STAGING"
+    local HAS_BG=false
+    # 优先用 Pillow 现场生成带版本号的背景图；Pillow 不可用时回退到仓库内静态背景（无版本号）
+    if python3 -c "import PIL" >/dev/null 2>&1 \
+        && python3 "$SCRIPT_DIR/make_dmg_background.py" "$VERSION" "$DMG_STAGING/.background/background.png" >/dev/null 2>&1; then
+        HAS_BG=true
+    elif [ -f "$SCRIPT_DIR/dmg-background.png" ]; then
+        cp "$SCRIPT_DIR/dmg-background.png" "$DMG_STAGING/.background/background.png"
+        HAS_BG=true
+        echo "Note: 未检测到 Pillow，使用静态背景图（无版本号文本）"
+    fi
+    # 同名卷已被挂载（如用户正开着旧 DMG）会让 AppleScript 定位错卷：先弹出
+    if [ -d "/Volumes/$VOLNAME" ]; then
+        echo "Warning: 检测到同名卷已挂载，先弹出: $VOLNAME"
+        hdiutil eject "/Volumes/$VOLNAME" >/dev/null 2>&1 || hdiutil eject -force "/Volumes/$VOLNAME" >/dev/null 2>&1 || true
+    fi
+    hdiutil create -srcfolder "$DMG_STAGING" -volname "$VOLNAME" -format UDRW -ov "$DMG_RW" >/dev/null
+    # 用默认挂载点（/Volumes）挂载——自定义挂载点的卷 Finder 无法按卷名识别，AppleScript 会失
+    # 败；从 attach 输出的最后一列解析真实挂载路径，卸载时按该路径操作
+    local DMG_MOUNT
+    DMG_MOUNT=$(hdiutil attach "$DMG_RW" | tail -1 | awk -F'\t' '{print $NF}' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+    if [ -z "$DMG_MOUNT" ] || [ ! -d "$DMG_MOUNT" ]; then
+        echo "Warning: DMG 挂载失败或挂载点解析失败，使用朴素布局"
+        DMG_MOUNT=""
+    fi
+    if [ "$HAS_BG" = true ] && [ -n "$DMG_MOUNT" ]; then
+        sleep 2
+        # AppleScript 的报错写入打包日志（失败仍有 Warning 提示，不阻塞打包）
+        osascript <<OSA >/dev/null || echo "Warning: DMG 布局设置失败，使用朴素布局"
+tell application "Finder"
+    tell disk "$VOLNAME"
+        open
+        set current view of container window to icon view
+        set toolbar visible of container window to false
+        set statusbar visible of container window to false
+        set the bounds of container window to {200, 120, 860, 520}
+        set viewOptions to icon view options of container window
+        set arrangement of viewOptions to not arranged
+        set icon size of viewOptions to 96
+        set background picture of viewOptions to file ".background:background.png"
+        set position of item "QuickShot.app" of container window to {170, 240}
+        set position of item "Applications" of container window to {490, 240}
+        close
+        open
+        update without registering applications
+    end tell
+end tell
+OSA
+        sleep 2
+        hdiutil detach "$DMG_MOUNT" >/dev/null 2>&1 || hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
+    fi
+    # Finder 窗口可能仍占用卷：转换失败则强制卸载后重试一次
+    if ! hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_FILE" >/dev/null 2>&1; then
+        echo "Warning: DMG 转换被占用，强制卸载后重试"
+        hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
+        sleep 1
+        hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_FILE" >/dev/null
+    fi
+    rm -f "$DMG_RW"
+    rm -rf "$DMG_STAGING" "$DMG_MOUNT"
 
     # 清理构建目录
     echo "Cleaning build directory..."

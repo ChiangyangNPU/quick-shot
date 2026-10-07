@@ -62,6 +62,8 @@ deploy/build_Release/
 deploy/mac/build_*
 deploy/mac/QuickShot-*.app
 deploy/mac/QuickShot-*.dmg
+deploy/mac/*-rw.dmg
+deploy/mac/dmg-staging/
 deploy/win/build_Debug/
 deploy/win/build_Release/
 deploy/win/QuickShot-Debug-v1.0.0/
