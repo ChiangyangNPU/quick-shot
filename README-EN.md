@@ -2,6 +2,21 @@
 
 QuickShot is a lightweight, powerful screen capture and recording tool developed with Qt 6, designed to provide an efficient and smooth screenshot experience.
 
+## ⚠️ macOS First Launch: Screen Recording & System Audio Permissions
+
+The first time you open QuickShot to take a **screenshot or record the screen**, macOS shows a dialog: **"QuickShot" wants to record this computer's screen and audio** — this is the system's security requirement for accessing screen content. Allow it so that screenshots, recording, OCR and other features work properly:
+
+![macOS dialog: QuickShot wants to record the screen and audio](docs/images/macos-screen-recording-prompt.png)
+
+1. Click **Open System Settings** in the dialog (or go manually to: System Settings → Privacy & Security).
+2. In the **Screen & System Audio Recording** list: if QuickShot is already listed, simply turn on its toggle; if not, click the **＋** button at the bottom-left of the list, select QuickShot.app to add it, then turn the toggle on.
+3. In the **System Audio Only** list below, also make sure QuickShot's toggle is on (required for capturing system audio; add it via **＋** if missing).
+
+![System Settings: enable QuickShot in Screen & System Audio Recording / System Audio Only](docs/images/macos-screen-recording-settings.png)
+
+4. To record **microphone** audio, also enable QuickShot under Privacy & Security → Microphone.
+5. **Quit and relaunch QuickShot** for the permission to take effect.
+
 ## ✨ Key Features
 
 ### 1. Smart Capture Mode
