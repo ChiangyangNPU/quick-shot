@@ -108,6 +108,7 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           brew install qt onnxruntime
+          python3 -m pip install --quiet pillow
 
       - name: Build & package (macOS)
         if: runner.os == 'macOS'
