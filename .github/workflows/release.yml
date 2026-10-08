@@ -139,7 +139,9 @@ jobs:
         if: runner.os == 'macOS'
         run: |
           export QUICKSHOT_QT_PREFIX="$(brew --prefix qt)"
-          ./deploy/mac/deploy_mac.sh -r
+          # 显式用 bash 调用：脚本在 git 索引里的可执行位曾缺失，直接 ./ 会
+          # Permission denied（CI 上表现为步骤 1 秒即失败）
+          bash ./deploy/mac/deploy_mac.sh -r
 
       - name: Upload to Release (macOS)
         if: runner.os == 'macOS'
