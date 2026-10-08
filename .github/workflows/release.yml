@@ -37,6 +37,18 @@ jobs:
           fi
           echo "Release version: $VER"
 
+      # 发布说明取自 tag 注释（`git tag -a` 的 -m 内容）——文案随 tag 走，无需维护
+      # 额外文件，GitHub/Gitee 两端同一份；末尾附 Full Changelog 链接
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          {
+            git tag -l --format='%(contents)' "$GITHUB_REF_NAME" || true
+            echo ''
+            echo "**Full Changelog**: ${{ github.server_url }}/${{ github.repository }}/commits/$GITHUB_REF_NAME"
+          } > release-notes.md
+          wc -l release-notes.md
+
       # ---------- Windows（调用 deploy/win/deploy.ps1，产出 zip） ----------
       # 直接用 aqt 装包（install-qt-action 在该 runner 上连续失败，原因见 ci.yml 同款步骤）
       - name: Install Qt via aqt (Windows)
@@ -102,15 +114,26 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: deploy/win/QuickShot-Release-v*-Windows-x64.zip
-          # 首个创建 Release 的 job 生成说明（按提交自动归类）；另一 job 复用同一 Release
-          generate_release_notes: true
+          body_path: release-notes.md
 
       # ---------- macOS（调用 deploy/mac/deploy_mac.sh，产出 DMG） ----------
       - name: Install dependencies (macOS)
         if: runner.os == 'macOS'
         run: |
           brew install qt onnxruntime
-          python3 -m pip install --quiet pillow
+          # Pillow 只服务 DMG 背景图的动态版本号（装不上时 deploy_mac.sh 自动回退
+          # 静态背景图，不影响安装包）。runner 镜像的 python3 环境限制不一
+          # （PEP 668 externally-managed / 缺 pip），故逐级回退；仍失败只告警
+          if python3 -m pip install --quiet pillow \
+          || python3 -m pip install --quiet --break-system-packages pillow; then
+            python3 -c "import PIL, sys; print('Pillow', PIL.__version__, '| python:', sys.executable)"
+          elif python3 -m venv "$RUNNER_TEMP/pyenv" \
+            && "$RUNNER_TEMP/pyenv/bin/pip" install --quiet pillow; then
+            echo "$RUNNER_TEMP/pyenv/bin" >> "$GITHUB_PATH"
+            echo "Pillow installed via venv: $RUNNER_TEMP/pyenv"
+          else
+            echo "::warning::Pillow 安装失败（$(command -v python3)），DMG 背景将回退为静态图"
+          fi
 
       - name: Build & package (macOS)
         if: runner.os == 'macOS'
@@ -123,4 +146,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: deploy/mac/QuickShot-Release-v*.dmg
-          generate_release_notes: true
+          body_path: release-notes.md
