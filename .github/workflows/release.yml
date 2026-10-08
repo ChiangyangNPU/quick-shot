@@ -102,6 +102,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: deploy/win/QuickShot-Release-v*-Windows-x64.zip
+          # 首个创建 Release 的 job 生成说明（按提交自动归类）；另一 job 复用同一 Release
+          generate_release_notes: true
 
       # ---------- macOS（调用 deploy/mac/deploy_mac.sh，产出 DMG） ----------
       - name: Install dependencies (macOS)
@@ -121,3 +123,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: deploy/mac/QuickShot-Release-v*.dmg
+          generate_release_notes: true
