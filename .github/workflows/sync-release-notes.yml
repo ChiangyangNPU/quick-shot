@@ -1,0 +1,37 @@
+# 一次性修补工具：把已发布 Release 的描述同步为 tag 注释内容（不重新构建）。
+# 背景：v0.1.0 的 Release 描述被 release.yml 写成了提交信息（浅克隆下轻量 tag
+# 取不到注释，已在 release.yml 修正）。本文件推送触发一次，用完即删。
+name: Sync release notes
+
+on:
+  push:
+    paths:
+      - '.github/workflows/sync-release-notes.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: v0.1.0
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Update release notes from tag annotation
+        run: |
+          git fetch --tags --force >/dev/null 2>&1 || true
+          git cat-file -t "refs/tags/$TAG"
+          {
+            git tag -l --format='%(contents)' "$TAG"
+            echo ''
+            echo "**Full Changelog**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/commits/$TAG"
+          } > notes.md
+          wc -l notes.md
+          gh release edit "$TAG" --notes-file notes.md
+          echo "已更新 $TAG 的 Release 描述"

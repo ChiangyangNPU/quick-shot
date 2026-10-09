@@ -42,6 +42,13 @@ jobs:
       - name: Prepare release notes
         shell: bash
         run: |
+          # actions/checkout 对 tag 事件按 sha 拉取，浅克隆下本地是轻量 tag，
+          # `%(contents)` 会退化成提交信息；显式按 ref 拉取才拿得到带注释的 tag 对象
+          git fetch --depth=1 --force origin \
+            "+refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME" >/dev/null 2>&1 || true
+          if ! git cat-file -t "refs/tags/$GITHUB_REF_NAME" 2>/dev/null | grep -q '^tag$'; then
+            echo "::warning::标签 $GITHUB_REF_NAME 不是附注标签，发布说明将退化为提交信息"
+          fi
           {
             git tag -l --format='%(contents)' "$GITHUB_REF_NAME" || true
             echo ''
