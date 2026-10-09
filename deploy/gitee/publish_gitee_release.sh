@@ -158,9 +158,12 @@ else
     echo "已创建 Gitee Release: id=$RELEASE_ID"
 fi
 
-# ---------- 5. 上传附件（同名同大小视为已传，支持重跑） ----------
+# ---------- 5. 上传附件（大文件并行；同名同大小视为已传，支持重跑） ----------
 api_gitee "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$RELEASE_ID" > /tmp/gitee_release.json
 
+# 先筛出待上传清单：Gitee 已有同名且字节数一致的直接跳过
+UPLOAD_LIST="/tmp/gitee_upload_list.txt"
+: > "$UPLOAD_LIST"
 while IFS=$'\t' read -r id name size; do
     url="https://gitee.com/$GITEE_SLUG/releases/download/$TAG/$name"
     if python3 -c "
@@ -168,25 +171,58 @@ import json,sys
 d=json.load(open('/tmp/gitee_release.json'))
 sys.exit(0 if any(a.get('name')=='$name' for a in d.get('assets',[])) else 1)"; then
         if [ "$(remote_size "$url")" = "$size" ]; then
-            echo "Gitee 已有且大小一致，跳过: $name"
+            echo "Gitee 已有且大小一致，跳过: ${name}"
             continue
         fi
     fi
-    ok=0
-    for attempt in 1 2 3; do
-        # 变量一律用 ${} 包裹：后面紧跟中文全角字符时，bash 会把多字节字符
-        # 的字节并进变量名解析（macOS 自带 bash 3.2 实测 "name?: unbound variable"）
+    printf '%s\n' "$name" >> "$UPLOAD_LIST"
+done < /tmp/gh_assets.txt
+
+# 单个附件上传：失败重试 4 次，低速保护只拦死连接（15 分钟内均值 <512B/s）。
+# 在子 shell 里跑，结果靠状态文件回传（子 shell 改不了父进程变量）
+upload_asset() {
+    local name="$1" attempt code
+    for attempt in 1 2 3 4; do
+        # 变量用 ${} 包裹：后接中文全角字符时，bash 3.2 会把多字节字符并进变量名解析
         echo "上传 ${name}（第 ${attempt} 次）..."
         code=$(curl -s -A "$UA" --speed-limit 512 --speed-time 900 \
-            -o "/tmp/gitee_attach_$name.json" -w "%{http_code}" -X POST \
+            -o "/tmp/gitee_attach_${name}.json" -w "%{http_code}" -X POST \
             "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$RELEASE_ID/attach_files" \
             -F "access_token=$GITEE_TOKEN" -F "file=@$ASSET_DIR/$name")
-        [ "${code:-000}" -ge 200 ] && [ "${code:-000}" -lt 300 ] && { ok=1; break; }
-        echo "失败 HTTP ${code:-000}: $(head -c 200 "/tmp/gitee_attach_$name.json")" >&2
-        sleep 10
+        code="${code:-000}"
+        if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+            echo "$code" > "/tmp/gitee_attach_${name}.code"
+            return 0
+        fi
+        echo "失败 HTTP ${code}: $(head -c 200 "/tmp/gitee_attach_${name}.json")" >&2
+        sleep 15
     done
-    [ "$ok" -eq 1 ] || { echo "附件上传失败: $name" >&2; exit 1; }
-done < /tmp/gh_assets.txt
+    echo "$code" > "/tmp/gitee_attach_${name}.code"
+}
+
+# 并行上传：Gitee 对海外 IP 的限速按单连接算，两个安装包同时传可明显提速
+# （与 TMD 同策略）；每个文件各自重试与低速保护，互不阻塞
+if [ -s "$UPLOAD_LIST" ]; then
+    while read -r name; do
+        [ -n "$name" ] || continue
+        upload_asset "$name" &
+    done < "$UPLOAD_LIST"
+    wait || true
+fi
+
+# 汇总上传结果：状态文件缺失（子进程异常结束）按失败处理，不静默跳过
+UPLOAD_FAILED=0
+while read -r name; do
+    [ -n "$name" ] || continue
+    code=$(cat "/tmp/gitee_attach_${name}.code" 2>/dev/null || echo "000")
+    if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
+        echo "已上传: ${name}"
+    else
+        echo "附件上传失败: ${name} (HTTP ${code})" >&2
+        UPLOAD_FAILED=1
+    fi
+done < "$UPLOAD_LIST"
+[ "$UPLOAD_FAILED" -eq 0 ] || exit 1
 
 # ---------- 6. 校验：逐项核对 Gitee 下载地址的实际字节数 ----------
 FAILED=0
