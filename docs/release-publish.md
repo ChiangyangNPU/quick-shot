@@ -36,9 +36,11 @@ CI 与本地**共用同一个脚本**（`deploy/gitee/publish_gitee_release.sh`�
 # 1. 提交改动
 git add -A && git commit -m "chore: bump to vX.Y.Z"
 
-# 2. 打【附注】标签，发布说明写在 -m 里（双端 Release 描述都取自它）
-git tag -a vX.Y.Z -F notes.md --cleanup=verbatim   # 或 -m "…"
-#    注意：必须 -a（附注标签）；轻量标签取不到说明文字，会退化成提交信息
+# 2. 打【附注】标签。发布说明建议写在仓库文件 docs/release-notes-vX.Y.Z.md（随仓库长期保存，
+#    重发同版本时不用重写文案），用它作为 tag 注释
+git tag -a vX.Y.Z -F docs/release-notes-vX.Y.Z.md --cleanup=verbatim
+#    注意：必须 -a（附注标签），且要加 --cleanup=verbatim（否则 Markdown 的 # 标题行会被 git 清理掉）；
+#    轻量标签取不到说明文字，会退化成提交信息
 
 # 3. 推代码与标签到两个远程
 git push gitee master && git push github master:main
@@ -95,5 +97,7 @@ GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
 | CI 报 “Tag (vX.Y.Z) 与 CMakeLists.txt 版本不一致” | 版本号没改或 tag 打错，改 `CMakeLists.txt` 后重打 tag |
 | macOS 打包步骤 1 秒即失败 | `deploy/mac/deploy_mac.sh` 在 git 索引里丢了可执行位；工作流已改为 `bash 脚本` 调用，另请确认 `git ls-files -s` 显示 100755 |
 | CI 的 DMG 背景没有版本号 | macOS job 的 Pillow 安装失败（脚本已逐级回退 + 告警），DMG 会回退静态背景图，不影响安装包 |
-| Gitee 附件上传失败 | 单附件上限 100MB；DMG 经 ULMO 压缩约 82MB、zip 约 86MB，均在限内。CI 失败/超时用本地脚本补发 |
+| Gitee 附件上传失败 | 单附件上限 100MB；DMG 经 ULMO 压缩约 82MB、zip 约 86MB，均在限内。大文件已改成并行上传（贴近 TMD 策略）。CI 失败/超时用本地脚本补发 |
+| 同一版本要重发 | 得先清干净：删两端 tag 与 Release（GitHub Release 用网页删，或临时工作流 `gh release delete --cleanup-tag`；Gitee 用 `DELETE /releases/{id}` + `git push gitee :refs/tags/vX.Y.Z`），再按 §2 重新打 tag 推送 |
+| 傍晚/夜里上传特别慢 | 跨境链路按时间段波动明显（实测早上快很多）；慢时可先用本地脚本发，或次日再发 |
 | macOS 首次打开被 Gatekeeper 拦 | 未做 Apple 公证，右键 →「打开」放行；录屏/录音需在系统设置里授权 |
