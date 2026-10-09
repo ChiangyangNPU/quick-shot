@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 #
-# QuickShot → Gitee Release 发布（本地快速通道）
+# QuickShot → Gitee Release 发布
 #
-# 背景：GitHub Actions 的 release.yml 只发布 GitHub Release（无 Gitee 步骤，
-# 且 CI 直传 Gitee 走海外链路需数小时）。本脚本用本地网络把**同一份 CI 产物**
-# 传到 Gitee Release：先按 tag 取 GitHub Release 的产物，再创建/复用 Gitee
-# Release 并上传附件，最后以服务端实际下载字节数逐项校验。
+# 两条通路共用本脚本，行为一致：
+#   - CI：release.yml 的 `Publish to Gitee` job（tag 构建完成后自动执行，凭仓库密钥
+#         GITEE_TOKEN；缺失即报错退出，避免 CI 全绿而 Gitee 缺产物）
+#   - 本地：CI 失败/超时后补发，或想立刻发完
+#          GITEE_TOKEN=<私人令牌> deploy/gitee/publish_gitee_release.sh
+#
+# 做的事：按 tag 取 GitHub Release 的**同一份 CI 产物** → 创建/复用 Gitee Release
+# （说明取 tag 注释）→ 上传附件（失败重试）→ 以服务端实际下载字节数逐项校验。
 #
 # 用法：
 #   GITEE_TOKEN=<私人令牌> deploy/gitee/publish_gitee_release.sh [tag] [产物目录]
@@ -15,6 +19,8 @@
 #
 #   GITEE_TOKEN：Gitee → 设置 → 私人令牌，需 projects 权限
 #                （也可用 --token-file <文件> 从文件读取）
+#   GH_TOKEN：可选。读 GitHub Release 用；设置后带上令牌可规避匿名 API 限流
+#             （CI 里传的是 Actions 自动提供的 GITHUB_TOKEN）
 #
 # 可重复执行：已存在且下载字节数一致的附件会跳过上传。
 #
@@ -51,8 +57,34 @@ fi
 ASSET_DIR="${ASSET_DIR:-$PROJECT_ROOT/release-download}"
 mkdir -p "$ASSET_DIR"
 
-api_github() { curl -s -A "$UA" "$@"; }
+# GitHub API：有 GH_TOKEN 就带上（匿名调用有速率限制，CI 里必带）
+api_github() {
+    if [ -n "${GH_TOKEN:-}" ]; then
+        curl -s -A "$UA" -H "Authorization: Bearer $GH_TOKEN" "$@"
+    else
+        curl -s -A "$UA" "$@"
+    fi
+}
 api_gitee() { curl -s -A "$UA" "$@"; }
+
+# 文件字节数（macOS 的 stat -f%z 与 GNU 的 stat -c%s 不通用，用 wc 保持可移植）
+file_size() { wc -c < "$1" | tr -d ' \n'; }
+
+# 下载 GitHub Release 资源（$1=url $2=输出文件）
+gh_download() {
+    if [ -n "${GH_TOKEN:-}" ]; then
+        curl -sL -A "$UA" -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/octet-stream" --max-time 1800 -o "$2" "$1"
+    else
+        curl -sL -A "$UA" -H "Accept: application/octet-stream" \
+            --max-time 1800 -o "$2" "$1"
+    fi
+}
+
+# 远端附件的实际字节数（Gitee/GitHub API 不返回大小或不可信，直接看下载响应头）
+remote_size() {
+    curl -sIL -A "$UA" "$1" | tr -d '\r' | awk 'tolower($1)=="content-length:"{n=$2} END{print n+0}'
+}
 
 echo "== 发布 $TAG 到 Gitee（产物来自 GitHub Release） =="
 
@@ -80,14 +112,13 @@ PY
 # ---------- 2. 下载产物（走 api.github.com 资源接口，绕开 github.com 直连限制） ----------
 while IFS=$'\t' read -r id name size; do
     target="$ASSET_DIR/$name"
-    if [ -f "$target" ] && [ "$(stat -f%z "$target")" = "$size" ]; then
+    if [ -f "$target" ] && [ "$(file_size "$target")" = "$size" ]; then
         echo "已存在且大小一致，跳过下载: $name"
         continue
     fi
     echo "下载 $name ..."
-    curl -sL -H "Accept: application/octet-stream" --max-time 1800 \
-        -o "$target" "https://api.github.com/repos/$REPO_SLUG/releases/assets/$id"
-    actual="$(stat -f%z "$target")"
+    gh_download "https://api.github.com/repos/$REPO_SLUG/releases/assets/$id" "$target"
+    actual="$(file_size "$target")"
     if [ "$actual" != "$size" ]; then
         echo "错误：$name 下载不完整（本地 $actual ≠ 远端 $size）" >&2
         exit 1
@@ -127,10 +158,6 @@ else
 fi
 
 # ---------- 5. 上传附件（同名同大小视为已传，支持重跑） ----------
-remote_size() {
-    # Gitee API 不返回附件大小：以实际下载的 Content-Length 为准
-    curl -sIL -A "$UA" "$1" | tr -d '\r' | awk 'tolower($1)=="content-length:"{n=$2} END{print n+0}'
-}
 api_gitee "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$RELEASE_ID" > /tmp/gitee_release.json
 
 while IFS=$'\t' read -r id name size; do

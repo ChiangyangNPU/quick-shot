@@ -156,3 +156,36 @@ jobs:
         with:
           files: deploy/mac/QuickShot-Release-v*.dmg
           body_path: release-notes.md
+
+  # ---------- Gitee 发布：把同一份 CI 产物同步到 Gitee Release ----------
+  # 与本地快速通道共用 deploy/gitee/publish_gitee_release.sh，两条通路行为一致：
+  # 复用/创建 Gitee Release（说明取 tag 注释）→ 传附件（失败重试）→ 按实际下载
+  # 字节数逐项校验，可重复执行（同名同大小自动跳过）
+  gitee:
+    name: Publish to Gitee
+    needs: release
+    runs-on: ubuntu-latest
+    # 跨境链路偶发很慢（同作者的 TMD 项目曾实测小时级，正常时约 1 分钟）；
+    # 失败/超时不影响已发布的 GitHub Release，用本地脚本分钟级补发
+    # （见 docs/release-publish.md）
+    timeout-minutes: 355
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0      # Gitee Release 的说明取自 tag 注释，需要附注标签对象
+          fetch-tags: true
+
+      - name: Publish to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          # Actions 自动提供：供脚本读 GitHub Release（带上可规避匿名 API 限流）
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          # 密钥缺失即失败，避免出现「CI 全绿但 Gitee 没产物」
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "::error::仓库未配置 GITEE_TOKEN 密钥（Settings → Secrets and variables → Actions → New repository secret，值取 Gitee 私人令牌）；本地补发：GITEE_TOKEN=<令牌> bash deploy/gitee/publish_gitee_release.sh $TAG"
+            exit 1
+          fi
+          bash deploy/gitee/publish_gitee_release.sh "$TAG"
