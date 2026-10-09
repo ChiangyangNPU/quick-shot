@@ -1,0 +1,57 @@
+# 一次性工具：把已发布 Release 的 DMG 换成 ULMO 压缩版（不重新构建应用）。
+# 背景：v0.1.0 的 DMG 是 UDZO（zlib，98.0MB）；改用 ULMO（lzfse）后实测约 82.4MB
+# （-16%），给 Gitee 单附件 100MB 上限留出余量。deploy/mac/deploy_mac.sh 已改为
+# ULMO，本文件仅用于回填**已发布**的 v0.1.0 产物（镜像内 app 不变，只换压缩方式）。
+# 用完即删（下次发版由 CI 直接产出 ULMO DMG，不再需要本文件）。
+name: Rewrap DMG (ULMO)
+
+on:
+  push:
+    paths:
+      - '.github/workflows/rewrap-dmg.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  rewrap:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAG: v0.1.0
+      ASSET: QuickShot-Release-v0.1.0.dmg
+    steps:
+      - name: Download current asset
+        run: |
+          set -euo pipefail
+          mkdir -p orig
+          gh release download "$TAG" --pattern "$ASSET" --dir orig
+
+      - name: Convert to ULMO and verify image
+        run: |
+          set -euo pipefail
+          before=$(stat -f%z "orig/$ASSET")
+          hdiutil convert "orig/$ASSET" -format ULMO -o "$ASSET" >/dev/null
+          after=$(stat -f%z "$ASSET")
+          echo "ULMO 压缩: $before -> $after bytes"
+          hdiutil imageinfo "$ASSET" | grep -E '^Format:'
+
+          MP=$(hdiutil attach "$ASSET" -nobrowse -readonly | tail -1 \
+               | awk -F'\t' '{print $NF}' | sed 's/^[[:space:]]*//')
+          test -d "$MP/QuickShot.app" || { echo "::error::镜像内缺少 QuickShot.app"; exit 1; }
+          test -x "$MP/QuickShot.app/Contents/MacOS/QuickShot" || { echo "::error::可执行文件缺失"; exit 1; }
+          VER=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' \
+                "$MP/QuickShot.app/Contents/Info.plist")
+          echo "镜像内 QuickShot.app 版本: $VER"
+          test "$VER" = "0.1.0" || { echo "::error::版本号不符: $VER"; exit 1; }
+          hdiutil detach "$MP" >/dev/null
+          test "$after" -lt "$before" || { echo "::error::ULMO 未比原文件更小"; exit 1; }
+
+      - name: Replace release asset
+        run: |
+          set -euo pipefail
+          # GitHub 不支持原地替换附件：先删后传（窗口期只有几秒）
+          gh release delete-asset "$TAG" "$ASSET" --yes
+          gh release upload "$TAG" "$ASSET"
+          gh release view "$TAG" --json isDraft,assets \
+            --jq '"draft=\(.isDraft)", (.assets[] | "  \(.name)  \(.size) bytes")'
