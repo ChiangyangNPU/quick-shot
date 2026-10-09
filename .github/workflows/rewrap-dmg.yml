@@ -25,7 +25,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p orig
-          gh release download "$TAG" --pattern "$ASSET" --dir orig
+          # 无 checkout 步骤，gh 无法从工作目录推断仓库：显式传 --repo
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET" --dir orig
 
       - name: Convert to ULMO and verify image
         run: |
@@ -51,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           # GitHub 不支持原地替换附件：先删后传（窗口期只有几秒）
-          gh release delete-asset "$TAG" "$ASSET" --yes
-          gh release upload "$TAG" "$ASSET"
-          gh release view "$TAG" --json isDraft,assets \
+          gh release delete-asset "$TAG" "$ASSET" --repo "$GITHUB_REPOSITORY" --yes
+          gh release upload "$TAG" "$ASSET" --repo "$GITHUB_REPOSITORY"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets \
             --jq '"draft=\(.isDraft)", (.assets[] | "  \(.name)  \(.size) bytes")'
