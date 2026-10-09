@@ -378,12 +378,19 @@ OSA
         sleep 2
         hdiutil detach "$DMG_MOUNT" >/dev/null 2>&1 || hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
     fi
-    # Finder 窗口可能仍占用卷：转换失败则强制卸载后重试一次
-    if ! hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_FILE" >/dev/null 2>&1; then
-        echo "Warning: DMG 转换被占用，强制卸载后重试"
+    # 转只读压缩盘：格式用 ULMO（lzfse）而不是默认的 UDZO（zlib）——实测 v0.1.0
+    # 98.0MB → 82.4MB（-16%；同机对比 UDBZ 只到 93.1MB），让 DMG 在 Gitee
+    # 单附件 100MB 上限内有充足余量，用户下载也更快。不支持 ULMO 时回退 UDZO
+    # （Finder 窗口可能仍占用卷：转换失败先强制卸载再重试）
+    _convert_dmg() {
+        rm -f "$DMG_FILE"
+        hdiutil convert "$DMG_RW" -format "$1" -o "$DMG_FILE" >/dev/null
+    }
+    if ! _convert_dmg ULMO; then
+        echo "Warning: ULMO 转换失败（卷被占用或格式不支持），强制卸载后重试"
         hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
         sleep 1
-        hdiutil convert "$DMG_RW" -format UDZO -o "$DMG_FILE" >/dev/null
+        _convert_dmg ULMO || _convert_dmg UDZO
     fi
     rm -f "$DMG_RW"
     rm -rf "$DMG_STAGING" "$DMG_MOUNT"

@@ -19,6 +19,10 @@ CI 与本地**共用同一个脚本**（`deploy/gitee/publish_gitee_release.sh`�
 > 为什么 CI 里失败要红灯：`GITEE_TOKEN` 缺失或上传失败会直接 `exit 1`，避免出现
 > 「CI 全绿但 Gitee 没产物」。失败时 GitHub Release 仍已发布，用本地脚本补发即可。
 >
+> DMG 压缩格式：`deploy/mac/deploy_mac.sh` 用 **ULMO（lzfse）** 而非默认 UDZO（zlib）。
+> 实测 v0.1.0 从 98.0MB 降到 82.4MB（-16%，同机对比 UDBZ 仅到 93.1MB），既给
+> Gitee 单附件 100MB 上限留足余量，也让下载更快；不支持 ULMO 的老系统自动回退 UDZO。
+>
 > 参考：同作者的 TMD 项目同样走「build → publish(GitHub) → Upload to Gitee」，其 v0.1.2
 > 实测 Gitee 上传步骤约 50 秒完成；网络差时曾观察到小时级耗时，故 job 超时留了余量。
 
@@ -91,5 +95,5 @@ GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
 | CI 报 “Tag (vX.Y.Z) 与 CMakeLists.txt 版本不一致” | 版本号没改或 tag 打错，改 `CMakeLists.txt` 后重打 tag |
 | macOS 打包步骤 1 秒即失败 | `deploy/mac/deploy_mac.sh` 在 git 索引里丢了可执行位；工作流已改为 `bash 脚本` 调用，另请确认 `git ls-files -s` 显示 100755 |
 | CI 的 DMG 背景没有版本号 | macOS job 的 Pillow 安装失败（脚本已逐级回退 + 告警），DMG 会回退静态背景图，不影响安装包 |
-| Gitee 附件上传失败 | 单附件上限 100MB；当前 DMG 约 93MB、zip 约 86MB，均在限内。CI 失败/超时用本地脚本补发 |
+| Gitee 附件上传失败 | 单附件上限 100MB；DMG 经 ULMO 压缩约 82MB、zip 约 86MB，均在限内。CI 失败/超时用本地脚本补发 |
 | macOS 首次打开被 Gatekeeper 拦 | 未做 Apple 公证，右键 →「打开」放行；录屏/录音需在系统设置里授权 |
