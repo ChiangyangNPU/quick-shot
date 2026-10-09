@@ -2,6 +2,31 @@
 
 QuickShot is a lightweight, powerful screen capture and recording tool developed with Qt 6, designed to provide an efficient and smooth screenshot experience.
 
+## ⚠️ macOS First Open: Manually Allow the Un-notarized App
+
+QuickShot is **not notarized by Apple** yet. After installing from a DMG downloaded in a browser, the first launch is blocked by macOS: *"Apple could not verify 'QuickShot' is free of malware that may harm your Mac or compromise your privacy."* Follow these 4 steps once — afterwards it opens normally:
+
+![First launch blocked by macOS: QuickShot was not opened](docs/images/macos-first-open-blocked.png)
+
+1. Click **Done** in the dialog — do **not** click **Move to Trash** (that deletes the app).
+2. Open **System Settings → Privacy & Security**, find **"QuickShot" was blocked to protect your Mac** under **Security**, then click **Open Anyway**:
+
+![System Settings → Privacy & Security → Security → Open Anyway](docs/images/macos-first-open-settings-allow.png)
+
+3. Click **Open Anyway** once more in the confirmation dialog:
+
+![Confirmation dialog: Open Anyway](docs/images/macos-first-open-confirm.png)
+
+4. Authenticate with **Touch ID**, or click **Use Password…** and enter your admin password, to allow this action:
+
+![Admin authentication: Touch ID or admin password](docs/images/macos-first-open-admin-auth.png)
+
+macOS remembers your choice, so later launches open normally.
+
+> On some macOS versions, right-clicking (Control-clicking) QuickShot.app in Finder → **Open** also leads into the confirmation flow above; if nothing happens, use the System Settings path.
+> Removing this prompt entirely requires an Apple Developer certificate and notarization, which this project has not set up yet.
+> DMGs built locally (`deploy/mac/deploy_mac.sh`) carry no browser quarantine flag and are not blocked by Gatekeeper.
+
 ## ⚠️ macOS First Launch: Screen Recording & System Audio Permissions
 
 The first time you open QuickShot to take a **screenshot or record the screen**, macOS shows a dialog: **"QuickShot" wants to record this computer's screen and audio** — this is the system's security requirement for accessing screen content. Allow it so that screenshots, recording, OCR and other features work properly:

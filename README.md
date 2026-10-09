@@ -2,6 +2,31 @@
 
 QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基于 **Qt 6** 开发，旨在提供高效、流畅的截图体验。
 
+## ⚠️ macOS 首次打开：未公证应用需手动放行
+
+QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 安装后，首次双击打开会被 macOS 拦下，提示「Apple 无法验证"QuickShot"是否包含可能危害 Mac 安全或泄漏隐私的恶意软件」。按下面 4 步放行一次即可，之后都能正常打开：
+
+![macOS 首次打开被拦截：未打开"QuickShot"](docs/images/macos-first-open-blocked.png)
+
+1. 在弹窗里点「**完成**」——**不要**点「移到废纸篓」，那会把应用删掉。
+2. 打开「**系统设置 → 隐私与安全性**」，在「**安全性**」一栏找到「已阻止"QuickShot"以保护 Mac」，点右侧的「**仍要打开**」：
+
+![系统设置 → 隐私与安全性 → 安全性 → 仍要打开](docs/images/macos-first-open-settings-allow.png)
+
+3. 在确认弹窗里再点一次「**仍要打开**」：
+
+![确认弹窗：仍要打开](docs/images/macos-first-open-confirm.png)
+
+4. 按提示用**触控 ID** 验证，或点「**使用密码…**」输入管理员密码，允许此次操作：
+
+![管理员验证：触控 ID 或管理员密码](docs/images/macos-first-open-admin-auth.png)
+
+系统会记住这次选择，之后双击即可正常打开。
+
+> 部分 macOS 版本上，在 Finder 里**右键（或 Control + 点击）QuickShot.app →「打开」**也会进入上面的确认流程；若没有反应，按上面的系统设置路径操作。
+> 想彻底消除该提示，需要 Apple Developer 证书并对应用做公证（本项目暂未配置）。
+> 本地自行打包（`deploy/mac/deploy_mac.sh`）的 DMG 不带浏览器下载标记（quarantine），不会被 Gatekeeper 拦截。
+
 ## ⚠️ macOS 首次启动：录屏与系统录音授权
 
 首次打开 QuickShot 进行**截图或录屏**时，macOS 会弹出 **""QuickShot"想要录制此电脑的屏幕和音频"** 系统弹窗——这是系统对屏幕内容访问的安全要求，允许后截图、录屏、OCR 等功能才可正常使用：
