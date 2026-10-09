@@ -149,9 +149,10 @@ else
     RESP=$(api_gitee -X POST "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases" \
         -F "access_token=$GITEE_TOKEN" \
         -F "tag_name=$TAG" \
-        -F "name=QuickShot $TAG" \
+        -F "name=$TAG" \
         --form-string "body=$(cat "$NOTES_FILE")" \
         -F "target_commitish=master")
+    # 标题用纯 tag 名（vX.Y.Z），与 GitHub Release 默认标题保持一致
     RELEASE_ID=$(printf '%s' "$RESP" | json_id)
     [ -n "$RELEASE_ID" ] || { echo "创建 Gitee Release 失败: $RESP" >&2; exit 1; }
     echo "已创建 Gitee Release: id=$RELEASE_ID"
