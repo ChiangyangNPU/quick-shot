@@ -120,7 +120,7 @@ while IFS=$'\t' read -r id name size; do
     gh_download "https://api.github.com/repos/$REPO_SLUG/releases/assets/$id" "$target"
     actual="$(file_size "$target")"
     if [ "$actual" != "$size" ]; then
-        echo "错误：$name 下载不完整（本地 $actual ≠ 远端 $size）" >&2
+        echo "错误：${name} 下载不完整（本地 ${actual} ≠ 远端 ${size}）" >&2
         exit 1
     fi
 done < /tmp/gh_assets.txt
@@ -173,7 +173,9 @@ sys.exit(0 if any(a.get('name')=='$name' for a in d.get('assets',[])) else 1)"; 
     fi
     ok=0
     for attempt in 1 2 3; do
-        echo "上传 $name（第 $attempt 次）..."
+        # 变量一律用 ${} 包裹：后面紧跟中文全角字符时，bash 会把多字节字符
+        # 的字节并进变量名解析（macOS 自带 bash 3.2 实测 "name?: unbound variable"）
+        echo "上传 ${name}（第 ${attempt} 次）..."
         code=$(curl -s -A "$UA" --speed-limit 512 --speed-time 900 \
             -o "/tmp/gitee_attach_$name.json" -w "%{http_code}" -X POST \
             "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$RELEASE_ID/attach_files" \
