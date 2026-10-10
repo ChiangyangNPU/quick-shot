@@ -14,27 +14,6 @@
 #include "ConfigManager.h"
 
 // 静态成员变量初始化
-QColor StyleManager::s_recordBorderColor = QColor("#4CAF50");         ///< 录屏框当前颜色
-QColor StyleManager::s_captureBorderColor = QColor("#4da6ff");       ///< 截屏框当前颜色
-QColor StyleManager::s_toolbarBgColor = QColor("#cfcfcf");               ///< 工具栏当前背景颜色
-QColor StyleManager::s_recordControlBgColor = QColor("#cfcfcf");        ///< 录屏控制栏当前背景颜色
-QColor StyleManager::s_toolbarBtnColor = QColor("#e0e0e0");               ///< 工具栏按钮当前颜色
-QColor StyleManager::s_toolbarTextColor = QColor("#000");              ///< 工具栏按钮文字当前颜色
-QColor StyleManager::s_toolbarButtonHoverColor = QColor("#fff");       ///< 工具栏按钮悬停当前颜色
-QColor StyleManager::s_toolbarButtonDisabledColor = QColor("#d1d1d1");    ///< 工具栏按钮禁用当前颜色
-QColor StyleManager::s_subToolbarBgColor = QColor("#cfcfcf");            ///< 子工具栏当前背景颜色
-QColor StyleManager::s_settingButtonBgColor = QColor("#e0e0e0");       ///< 设置窗口按钮当前背景颜色
-QColor StyleManager::s_settingButtonTextColor = QColor("#000000");     ///< 设置窗口按钮文字当前颜色
-QColor StyleManager::s_toolbarButtonCheckedColor = QColor("#0078d7");   ///< 工具栏按钮选中当前颜色
-QColor StyleManager::s_closeButtonBgColor = QColor("#cc0000");         ///< 关闭按钮当前背景颜色
-QColor StyleManager::s_closeButtonHoverColor = QColor("#ff3333");      ///< 关闭按钮当前悬停颜色
-QColor StyleManager::s_tabWidgetBgColor = QColor("#ffffff");           ///< 选项卡背景当前颜色
-QColor StyleManager::s_tabButtonBgColor = QColor("#e0e0e0");           ///< 选项卡按钮背景当前颜色
-QColor StyleManager::s_tabButtonTextColor = QColor("#000000");         ///< 选项卡按钮文字当前颜色
-QColor StyleManager::s_tabButtonSelectedBgColor = QColor("#ffffff");    ///< 选项卡按钮选中背景当前颜色
-QColor StyleManager::s_tabButtonSelectedTextColor = QColor("#000000");  ///< 选项卡按钮选中文字当前颜色
-QColor StyleManager::s_handleCircleColor = QColor("#2563EB");            ///< 角手柄圆形当前颜色
-QColor StyleManager::s_handleCloseColor = QColor("#DC2626");             ///< 角手柄关闭按钮当前颜色
 QString StyleManager::s_toolbarButtonStyle = "text";                    ///< 工具栏按钮当前样式（文字模式）
 int StyleManager::s_defaultPenWidth = 5;                                      ///< 画笔默认粗细
 int StyleManager::s_defaultFontSize = 28;                                     ///< 文本默认字号
@@ -64,6 +43,96 @@ const QColor StyleManager::DEFAULT_TAB_BUTTON_SELECTED_TEXT_COLOR = QColor("#000
 const QColor StyleManager::DEFAULT_HANDLE_CIRCLE_COLOR = QColor("#2563EB");            ///< 角手柄圆形默认颜色
 const QColor StyleManager::DEFAULT_HANDLE_CLOSE_COLOR = QColor("#DC2626");             ///< 角手柄关闭按钮默认颜色
 const QString StyleManager::DEFAULT_TOOLBAR_BUTTON_STYLE = "text";              ///< 工具栏按钮默认样式（文字模式）
+
+// ============ 颜色存取（表驱动） ============
+// 21 个颜色的当前值按 StyleColorId 枚举顺序存放于 Meyers 单例，
+// 首次访问时以 DEFAULT_* 初始化；initFromConfig/resetToDefaults/设置页均经此存取。
+static std::array<QColor, StyleManager::kStyleColorCount>& colorStore() {
+    static std::array<QColor, StyleManager::kStyleColorCount> store = {
+        StyleManager::DEFAULT_CAPTURE_BORDER_COLOR,
+        StyleManager::DEFAULT_RECORD_BORDER_COLOR,
+        StyleManager::DEFAULT_TOOLBAR_BG_COLOR,
+        StyleManager::DEFAULT_SUB_TOOLBAR_BG_COLOR,
+        StyleManager::DEFAULT_RECORD_CONTROL_BG_COLOR,
+        StyleManager::DEFAULT_TOOLBAR_BTN_COLOR,
+        StyleManager::DEFAULT_TOOLBAR_TEXT_COLOR,
+        StyleManager::DEFAULT_TOOLBAR_BUTTON_HOVER_COLOR,
+        StyleManager::DEFAULT_TOOLBAR_BUTTON_DISABLED_COLOR,
+        StyleManager::DEFAULT_TOOLBAR_BUTTON_CHECKED_COLOR,
+        StyleManager::DEFAULT_CLOSE_BUTTON_BG_COLOR,
+        StyleManager::DEFAULT_CLOSE_BUTTON_HOVER_COLOR,
+        StyleManager::DEFAULT_SETTING_BUTTON_BG_COLOR,
+        StyleManager::DEFAULT_SETTING_BUTTON_TEXT_COLOR,
+        StyleManager::DEFAULT_TAB_WIDGET_BG_COLOR,
+        StyleManager::DEFAULT_TAB_BUTTON_BG_COLOR,
+        StyleManager::DEFAULT_TAB_BUTTON_TEXT_COLOR,
+        StyleManager::DEFAULT_TAB_BUTTON_SELECTED_BG_COLOR,
+        StyleManager::DEFAULT_TAB_BUTTON_SELECTED_TEXT_COLOR,
+        StyleManager::DEFAULT_HANDLE_CIRCLE_COLOR,
+        StyleManager::DEFAULT_HANDLE_CLOSE_COLOR
+    };
+    return store;
+}
+
+/**
+ * @brief 读取指定颜色的当前值
+ * @author chiangyang
+ */
+QColor StyleManager::color(StyleColorId id) {
+    return colorStore()[static_cast<size_t>(id)];
+}
+
+/**
+ * @brief 设置指定颜色的当前值
+ * @author chiangyang
+ */
+void StyleManager::setColor(StyleColorId id, const QColor &color) {
+    colorStore()[static_cast<size_t>(id)] = color;
+}
+
+// 逐色 getter/setter：公共 API 保留，实现委托 color()/setColor()
+QColor StyleManager::getCaptureBorderColor() { return color(StyleColorId::CaptureBorder); }
+void StyleManager::setCaptureBorderColor(const QColor &color) { setColor(StyleColorId::CaptureBorder, color); }
+QColor StyleManager::getRecordBorderColor() { return color(StyleColorId::RecordBorder); }
+void StyleManager::setRecordBorderColor(const QColor &color) { setColor(StyleColorId::RecordBorder, color); }
+QColor StyleManager::getToolbarBgColor() { return color(StyleColorId::ToolbarBg); }
+void StyleManager::setToolbarBgColor(const QColor &color) { setColor(StyleColorId::ToolbarBg, color); }
+QColor StyleManager::getSubToolbarBgColor() { return color(StyleColorId::SubToolbarBg); }
+void StyleManager::setSubToolbarBgColor(const QColor &color) { setColor(StyleColorId::SubToolbarBg, color); }
+QColor StyleManager::getRecordControlBgColor() { return color(StyleColorId::RecordControlBg); }
+void StyleManager::setRecordControlBgColor(const QColor &color) { setColor(StyleColorId::RecordControlBg, color); }
+QColor StyleManager::getToolbarBtnColor() { return color(StyleColorId::ToolbarBtn); }
+void StyleManager::setToolbarBtnColor(const QColor &color) { setColor(StyleColorId::ToolbarBtn, color); }
+QColor StyleManager::getToolbarTextColor() { return color(StyleColorId::ToolbarText); }
+void StyleManager::setToolbarTextColor(const QColor &color) { setColor(StyleColorId::ToolbarText, color); }
+QColor StyleManager::getToolbarButtonHoverColor() { return color(StyleColorId::ToolbarButtonHover); }
+void StyleManager::setToolbarButtonHoverColor(const QColor &color) { setColor(StyleColorId::ToolbarButtonHover, color); }
+QColor StyleManager::getToolbarButtonDisabledColor() { return color(StyleColorId::ToolbarButtonDisabled); }
+void StyleManager::setToolbarButtonDisabledColor(const QColor &color) { setColor(StyleColorId::ToolbarButtonDisabled, color); }
+QColor StyleManager::getToolbarButtonCheckedColor() { return color(StyleColorId::ToolbarButtonChecked); }
+void StyleManager::setToolbarButtonCheckedColor(const QColor &color) { setColor(StyleColorId::ToolbarButtonChecked, color); }
+QColor StyleManager::getCloseButtonBgColor() { return color(StyleColorId::CloseButtonBg); }
+void StyleManager::setCloseButtonBgColor(const QColor &color) { setColor(StyleColorId::CloseButtonBg, color); }
+QColor StyleManager::getCloseButtonHoverColor() { return color(StyleColorId::CloseButtonHover); }
+void StyleManager::setCloseButtonHoverColor(const QColor &color) { setColor(StyleColorId::CloseButtonHover, color); }
+QColor StyleManager::getSettingButtonBgColor() { return color(StyleColorId::SettingButtonBg); }
+void StyleManager::setSettingButtonBgColor(const QColor &color) { setColor(StyleColorId::SettingButtonBg, color); }
+QColor StyleManager::getSettingButtonTextColor() { return color(StyleColorId::SettingButtonText); }
+void StyleManager::setSettingButtonTextColor(const QColor &color) { setColor(StyleColorId::SettingButtonText, color); }
+QColor StyleManager::getTabWidgetBgColor() { return color(StyleColorId::TabWidgetBg); }
+void StyleManager::setTabWidgetBgColor(const QColor &color) { setColor(StyleColorId::TabWidgetBg, color); }
+QColor StyleManager::getTabButtonBgColor() { return color(StyleColorId::TabButtonBg); }
+void StyleManager::setTabButtonBgColor(const QColor &color) { setColor(StyleColorId::TabButtonBg, color); }
+QColor StyleManager::getTabButtonTextColor() { return color(StyleColorId::TabButtonText); }
+void StyleManager::setTabButtonTextColor(const QColor &color) { setColor(StyleColorId::TabButtonText, color); }
+QColor StyleManager::getTabButtonSelectedBgColor() { return color(StyleColorId::TabButtonSelectedBg); }
+void StyleManager::setTabButtonSelectedBgColor(const QColor &color) { setColor(StyleColorId::TabButtonSelectedBg, color); }
+QColor StyleManager::getTabButtonSelectedTextColor() { return color(StyleColorId::TabButtonSelectedText); }
+void StyleManager::setTabButtonSelectedTextColor(const QColor &color) { setColor(StyleColorId::TabButtonSelectedText, color); }
+QColor StyleManager::getHandleCircleColor() { return color(StyleColorId::HandleCircle); }
+void StyleManager::setHandleCircleColor(const QColor &color) { setColor(StyleColorId::HandleCircle, color); }
+QColor StyleManager::getHandleCloseColor() { return color(StyleColorId::HandleClose); }
+void StyleManager::setHandleCloseColor(const QColor &color) { setColor(StyleColorId::HandleClose, color); }
 
 // ============ 颜色配置元数据表（单一数据源） ============
 // 此表是颜色配置的唯一权威：ConfigManager 播种默认值（ensureDefaultValues /

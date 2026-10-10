@@ -22,27 +22,6 @@ class ConfigManager;
 class StyleManager {
 private:
     // 颜色设置
-    static QColor s_recordBorderColor;         ///< 录屏框当前颜色
-    static QColor s_captureBorderColor;        ///< 截屏框当前颜色
-    static QColor s_toolbarBgColor;            ///< 工具栏当前背景颜色
-    static QColor s_recordControlBgColor;      ///< 录屏控制栏当前背景颜色
-    static QColor s_toolbarBtnColor;           ///< 工具栏按钮当前颜色
-    static QColor s_toolbarTextColor;          ///< 工具栏按钮文字当前颜色
-    static QColor s_toolbarButtonHoverColor;   ///< 工具栏按钮悬停当前颜色
-    static QColor s_toolbarButtonDisabledColor; ///< 工具栏按钮禁用当前颜色
-    static QColor s_subToolbarBgColor;         ///< 子工具栏当前背景颜色
-    static QColor s_settingButtonBgColor;      ///< 设置窗口按钮当前背景颜色
-    static QColor s_settingButtonTextColor;    ///< 设置窗口按钮文字当前颜色
-    static QColor s_toolbarButtonCheckedColor; ///< 工具栏按钮选中当前颜色
-    static QColor s_closeButtonBgColor;        ///< 关闭按钮当前背景颜色
-    static QColor s_closeButtonHoverColor;     ///< 关闭按钮当前悬停颜色
-    static QColor s_tabWidgetBgColor;          ///< 选项卡背景当前颜色
-    static QColor s_tabButtonBgColor;          ///< 选项卡按钮背景当前颜色
-    static QColor s_tabButtonTextColor;        ///< 选项卡按钮文字当前颜色
-    static QColor s_tabButtonSelectedBgColor;  ///< 选项卡按钮选中背景当前颜色
-    static QColor s_tabButtonSelectedTextColor; ///< 选项卡按钮选中文字当前颜色
-    static QColor s_handleCircleColor;         ///< 文本编辑框角手柄圆形当前颜色
-    static QColor s_handleCloseColor;          ///< 文本编辑框角手柄关闭按钮当前颜色
 
 public:
     static QString s_toolbarButtonStyle;        ///< 工具栏按钮当前样式（"text"或"icon"）
@@ -121,6 +100,22 @@ public:
     static const std::array<StyleColorSetting, kStyleColorCount>& colorSettingTable();
 
     /**
+     * @brief 读取指定颜色的当前值（表驱动统一入口）
+     * @param id 颜色 ID
+     * @return 当前颜色
+     * @author chiangyang
+     */
+    static QColor color(StyleColorId id);
+
+    /**
+     * @brief 设置指定颜色的当前值（不触发样式刷新，联动由调用方负责）
+     * @param id 颜色 ID
+     * @param color 新颜色
+     * @author chiangyang
+     */
+    static void setColor(StyleColorId id, const QColor &color);
+
+    /**
      * @brief 从配置初始化样式（依赖注入）
      * @param cm ConfigManager 指针；nullptr 时重置为默认值
      * @note 应用启动时在 ConfigManager::setInstance 之后、任何窗口创建之前调用一次，
@@ -151,7 +146,7 @@ public:
      */
     static QString getToolbarBackgroundStyle() {
         return QString("background-color: %1; border-radius: 0.3em;")
-            .arg(s_toolbarBgColor.name());
+            .arg(color(StyleColorId::ToolbarBg).name());
     }
 
     /**
@@ -162,7 +157,7 @@ public:
      */
     static QString getSubToolbarStyle() {
         return QString("background-color: %1; border-radius: 0.3em;")
-            .arg(s_subToolbarBgColor.name());
+            .arg(color(StyleColorId::SubToolbarBg).name());
     }
 
     /**
@@ -178,10 +173,10 @@ public:
                     "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }"
                     "QPushButton:hover { background-color: %3; transform: scale(1.05); }"
                     "QPushButton::icon { color: %4; }"
-                ).arg(s_toolbarTextColor.name())
-                .arg(s_toolbarBtnColor.name())
-                .arg(s_toolbarButtonHoverColor.name())
-                .arg(s_toolbarBtnColor.name());
+                ).arg(color(StyleColorId::ToolbarText).name())
+                .arg(color(StyleColorId::ToolbarBtn).name())
+                .arg(color(StyleColorId::ToolbarButtonHover).name())
+                .arg(color(StyleColorId::ToolbarBtn).name());
     }
 
     /**
@@ -200,11 +195,11 @@ public:
             "QPushButton:hover { background-color: %4; transform: scale(1.05); }"
             "QPushButton:disabled { color: %1; background-color: %5; }"
             "QPushButton::icon { color: %1; }"
-        ).arg(s_toolbarTextColor.name())
-         .arg(s_toolbarBtnColor.name())
-         .arg(s_toolbarButtonCheckedColor.name())
-         .arg(s_toolbarButtonHoverColor.name())
-         .arg(s_toolbarButtonDisabledColor.name());
+        ).arg(color(StyleColorId::ToolbarText).name())
+         .arg(color(StyleColorId::ToolbarBtn).name())
+         .arg(color(StyleColorId::ToolbarButtonChecked).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name())
+         .arg(color(StyleColorId::ToolbarButtonDisabled).name());
     }
 
     /**
@@ -218,13 +213,13 @@ public:
     static QString getCloseButtonStyle() {
         return QString(
             "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }")
-            .arg(s_toolbarTextColor.name())
-            .arg(s_closeButtonBgColor.name()) +
+            .arg(color(StyleColorId::ToolbarText).name())
+            .arg(color(StyleColorId::CloseButtonBg).name()) +
             QString(
             "QPushButton:hover { background-color: %1; transform: scale(1.05); }")
-            .arg(s_closeButtonHoverColor.name()) +
+            .arg(color(StyleColorId::CloseButtonHover).name()) +
             QString("QPushButton::icon { color: %1; }")
-            .arg(s_toolbarTextColor.name());
+            .arg(color(StyleColorId::ToolbarText).name());
     }
 
     /**
@@ -284,8 +279,8 @@ public:
      */
     static QString getButtonCheckedStyle() {
         return QString("color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em;")
-            .arg(s_toolbarTextColor.name())
-            .arg(s_toolbarButtonCheckedColor.name());
+            .arg(color(StyleColorId::ToolbarText).name())
+            .arg(color(StyleColorId::ToolbarButtonChecked).name());
     }
 
     /**
@@ -305,10 +300,10 @@ public:
             "QComboBox QAbstractItemView::item { padding: 0.24em; }"
             "QComboBox QAbstractItemView::item:hover { background-color: #444; }"
             "QComboBox QAbstractItemView::item:selected { background-color: %4; color: %1; }"
-        ).arg(s_toolbarTextColor.name())
-         .arg(s_toolbarBtnColor.name())
+        ).arg(color(StyleColorId::ToolbarText).name())
+         .arg(color(StyleColorId::ToolbarBtn).name())
          .arg("#333")
-         .arg(s_toolbarButtonCheckedColor.name());
+         .arg(color(StyleColorId::ToolbarButtonChecked).name());
     }
 
     /**
@@ -322,7 +317,7 @@ public:
         return QString(
             "QCheckBox { color: %1; spacing: 4px; }"
             "QCheckBox::indicator { width: 0.67em; height: 0.67em; }"
-        ).arg(s_toolbarTextColor.name());
+        ).arg(color(StyleColorId::ToolbarText).name());
     }
 
     /**
@@ -480,8 +475,8 @@ public:
      */
     static QString getWindowStyle() {
         return QString("background-color: %1; border-radius: 0.24em; color: %2;")
-            .arg(s_recordControlBgColor.name())
-            .arg(s_toolbarTextColor.name());
+            .arg(color(StyleColorId::RecordControlBg).name())
+            .arg(color(StyleColorId::ToolbarText).name());
     }
     
     /**
@@ -533,7 +528,7 @@ public:
     static QString getGroupBoxStyle() {
         return QString(
             "QGroupBox { background-color: %1; color: #000; }"
-        ).arg(s_tabWidgetBgColor.name());
+        ).arg(color(StyleColorId::TabWidgetBg).name());
     }
     
     /**
@@ -548,10 +543,10 @@ public:
             "QPushButton { color: %1; background-color: %2; border: none; }"
             "QPushButton:hover { background-color: %4; }"
             "QPushButton:disabled { color: %1; background-color: %3; }"
-        ).arg(s_settingButtonTextColor.name())
-         .arg(s_settingButtonBgColor.name())
-         .arg(s_toolbarButtonDisabledColor.name())
-         .arg(s_toolbarButtonHoverColor.name());
+        ).arg(color(StyleColorId::SettingButtonText).name())
+         .arg(color(StyleColorId::SettingButtonBg).name())
+         .arg(color(StyleColorId::ToolbarButtonDisabled).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name());
     }
 
     /**
@@ -604,11 +599,11 @@ public:
             "QMessageBox QPushButton:hover { background-color: %4; }"
             "QMessageBox QPushButton:pressed { background-color: %4; }"
             "QMessageBox QPushButton:disabled { color: %2; background-color: %5; }"
-        ).arg(s_tabWidgetBgColor.name())
-         .arg(s_settingButtonTextColor.name())
-         .arg(s_settingButtonBgColor.name())
-         .arg(s_toolbarButtonHoverColor.name())
-         .arg(s_toolbarButtonDisabledColor.name());
+        ).arg(color(StyleColorId::TabWidgetBg).name())
+         .arg(color(StyleColorId::SettingButtonText).name())
+         .arg(color(StyleColorId::SettingButtonBg).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name())
+         .arg(color(StyleColorId::ToolbarButtonDisabled).name());
     }
     
     /**
@@ -623,8 +618,8 @@ public:
         return QString(
             "QProgressBar { border: none; background-color: %1; }"
             "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
-        ).arg(s_tabWidgetBgColor.name())
-         .arg(s_toolbarButtonHoverColor.name());
+        ).arg(color(StyleColorId::TabWidgetBg).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name());
     }
     
     /**
@@ -640,12 +635,12 @@ public:
             "QTabBar::tab { background-color: %2; color: %3; }"
             "QTabBar::tab:selected { background-color: %4; color: %5; }"
             "QTabBar::tab:hover { background-color: %6; }"
-        ).arg(s_tabWidgetBgColor.name())
-         .arg(s_tabButtonBgColor.name())
-         .arg(s_tabButtonTextColor.name())
-         .arg(s_tabButtonSelectedBgColor.name())
-         .arg(s_tabButtonSelectedTextColor.name())
-         .arg(s_toolbarButtonHoverColor.name());
+        ).arg(color(StyleColorId::TabWidgetBg).name())
+         .arg(color(StyleColorId::TabButtonBg).name())
+         .arg(color(StyleColorId::TabButtonText).name())
+         .arg(color(StyleColorId::TabButtonSelectedBg).name())
+         .arg(color(StyleColorId::TabButtonSelectedText).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name());
     }
 
     /**
@@ -685,385 +680,94 @@ public:
      */
     static bool reapplyGlobalStyleSheet();
 
-    // 颜色设置方法
-    
-    /**
-     * @brief 获取录屏框颜色
-     * @return 录屏框颜色
-     * @author chiangyang
-     */
-    static QColor getRecordBorderColor() {
-        return s_recordBorderColor;
-    }
-    
-    /**
-     * @brief 设置录屏框颜色
-     * @param color 录屏框颜色
-     * @author chiangyang
-     */
-    static void setRecordBorderColor(const QColor &color) {
-        s_recordBorderColor = color;
-    }
-    
-    /**
-     * @brief 获取截屏框颜色
-     * @return 截屏框颜色
-     * @author chiangyang
-     */
-    static QColor getCaptureBorderColor() {
-        return s_captureBorderColor;
-    }
-    
-    /**
-     * @brief 设置截屏框颜色
-     * @param color 截屏框颜色
-     * @author chiangyang
-     */
-    static void setCaptureBorderColor(const QColor &color) {
-        s_captureBorderColor = color;
-    }
-    
-    /**
-     * @brief 获取工具栏背景颜色
-     * @return 工具栏背景颜色
-     * @author chiangyang
-     */
-    static QColor getToolbarBgColor() {
-        return s_toolbarBgColor;
-    }
-    
-    /**
-     * @brief 设置工具栏背景颜色
-     * @param color 工具栏背景颜色
-     * @author chiangyang
-     */
-    static void setToolbarBgColor(const QColor &color) {
-        s_toolbarBgColor = color;
-    }
-    
-    /**
-     * @brief 获取录屏控制栏背景颜色
-     * @return 录屏控制栏背景颜色
-     * @author chiangyang
-     */
-    static QColor getRecordControlBgColor() {
-        return s_recordControlBgColor;
-    }
-    
-    /**
-     * @brief 设置录屏控制栏背景颜色
-     * @param color 录屏控制栏背景颜色
-     * @author chiangyang
-     */
-    static void setRecordControlBgColor(const QColor &color) {
-        s_recordControlBgColor = color;
-    }
-    
-    /**
-     * @brief 获取工具栏按钮颜色
-     * @return 工具栏按钮颜色
-     * @author chiangyang
-     */
-    static QColor getToolbarBtnColor() {
-        return s_toolbarBtnColor;
-    }
-    
-    /**
-     * @brief 设置工具栏按钮颜色
-     * @param color 工具栏按钮颜色
-     * @author chiangyang
-     */
-    static void setToolbarBtnColor(const QColor &color) {
-        s_toolbarBtnColor = color;
-    }
-    
-    /**
-     * @brief 获取工具栏文字颜色
-     * @return 工具栏文字颜色
-     * @author chiangyang
-     */
-    static QColor getToolbarTextColor() {
-        return s_toolbarTextColor;
-    }
-    
-    /**
-     * @brief 设置工具栏文字颜色
-     * @param color 工具栏文字颜色
-     * @author chiangyang
-     */
-    static void setToolbarTextColor(const QColor &color) {
-        s_toolbarTextColor = color;
-    }
-    
-    /**
-     * @brief 获取工具栏按钮悬停颜色
-     * @return 工具栏按钮悬停颜色
-     * @author chiangyang
-     */
-    static QColor getToolbarButtonHoverColor() {
-        return s_toolbarButtonHoverColor;
-    }
-    
-    /**
-     * @brief 设置工具栏按钮悬停颜色
-     * @param color 工具栏按钮悬停颜色
-     * @author chiangyang
-     */
-    static void setToolbarButtonHoverColor(const QColor &color) {
-        s_toolbarButtonHoverColor = color;
-    }
-    
-    /**
-     * @brief 获取工具栏按钮禁用颜色
-     * @return 工具栏按钮禁用颜色
-     * @author chiangyang
-     */
-    static QColor getToolbarButtonDisabledColor() {
-        return s_toolbarButtonDisabledColor;
-    }
-    
-    /**
-     * @brief 设置工具栏按钮禁用颜色
-     * @param color 工具栏按钮禁用颜色
-     * @author chiangyang
-     */
-    static void setToolbarButtonDisabledColor(const QColor &color) {
-        s_toolbarButtonDisabledColor = color;
-    }
-    
-    /**
-     * @brief 获取子工具栏背景颜色
-     * @return 子工具栏背景颜色
-     * @author chiangyang
-     */
-    static QColor getSubToolbarBgColor() {
-        return s_subToolbarBgColor;
-    }
-    
-    /**
-     * @brief 设置子工具栏背景颜色
-     * @param color 子工具栏背景颜色
-     * @author chiangyang
-     */
-    static void setSubToolbarBgColor(const QColor &color) {
-        s_subToolbarBgColor = color;
-    }
-    
-    /**
-     * @brief 获取设置按钮背景颜色
-     * @return 设置按钮背景颜色
-     * @author chiangyang
-     */
-    static QColor getSettingButtonBgColor() {
-        return s_settingButtonBgColor;
-    }
-    
-    /**
-     * @brief 设置设置按钮背景颜色
-     * @param color 设置按钮背景颜色
-     * @author chiangyang
-     */
-    static void setSettingButtonBgColor(const QColor &color) {
-        s_settingButtonBgColor = color;
-    }
-    
-    /**
-     * @brief 获取设置按钮文字颜色
-     * @return 设置按钮文字颜色
-     * @author chiangyang
-     */
-    static QColor getSettingButtonTextColor() {
-        return s_settingButtonTextColor;
-    }
-    
-    /**
-     * @brief 设置设置按钮文字颜色
-     * @param color 设置按钮文字颜色
-     * @author chiangyang
-     */
-    static void setSettingButtonTextColor(const QColor &color) {
-        s_settingButtonTextColor = color;
-    }
-    
-    /**
-     * @brief 获取工具栏按钮选中颜色
-     * @return 工具栏按钮选中颜色
-     * @author chiangyang
-     */
-    static QColor getToolbarButtonCheckedColor() {
-        return s_toolbarButtonCheckedColor;
-    }
-    
-    /**
-     * @brief 设置工具栏按钮选中颜色
-     * @param color 工具栏按钮选中颜色
-     * @author chiangyang
-     */
-    static void setToolbarButtonCheckedColor(const QColor &color) {
-        s_toolbarButtonCheckedColor = color;
-    }
-    
-    /**
-     * @brief 获取关闭按钮背景颜色
-     * @return 关闭按钮背景颜色
-     * @author chiangyang
-     */
-    static QColor getCloseButtonBgColor() {
-        return s_closeButtonBgColor;
-    }
-    
-    /**
-     * @brief 设置关闭按钮背景颜色
-     * @param color 关闭按钮背景颜色
-     * @author chiangyang
-     */
-    static void setCloseButtonBgColor(const QColor &color) {
-        s_closeButtonBgColor = color;
-    }
-    
-    /**
-     * @brief 获取关闭按钮悬停颜色
-     * @return 关闭按钮悬停颜色
-     * @author chiangyang
-     */
-    static QColor getCloseButtonHoverColor() {
-        return s_closeButtonHoverColor;
-    }
-    
-    /**
-     * @brief 设置关闭按钮悬停颜色
-     * @param color 关闭按钮悬停颜色
-     * @author chiangyang
-     */
-    static void setCloseButtonHoverColor(const QColor &color) {
-        s_closeButtonHoverColor = color;
-    }
-    
-    /**
-     * @brief 获取选项卡背景颜色
-     * @return 选项卡背景颜色
-     * @author chiangyang
-     */
-    static QColor getTabWidgetBgColor() {
-        return s_tabWidgetBgColor;
-    }
-    
-    /**
-     * @brief 设置选项卡背景颜色
-     * @param color 选项卡背景颜色
-     * @author chiangyang
-     */
-    static void setTabWidgetBgColor(const QColor &color) {
-        s_tabWidgetBgColor = color;
-    }
-    
-    /**
-     * @brief 获取选项卡按钮背景颜色
-     * @return 选项卡按钮背景颜色
-     * @author chiangyang
-     */
-    static QColor getTabButtonBgColor() {
-        return s_tabButtonBgColor;
-    }
-    
-    /**
-     * @brief 设置选项卡按钮背景颜色
-     * @param color 选项卡按钮背景颜色
-     * @author chiangyang
-     */
-    static void setTabButtonBgColor(const QColor &color) {
-        s_tabButtonBgColor = color;
-    }
-    
-    /**
-     * @brief 获取选项卡按钮文字颜色
-     * @return 选项卡按钮文字颜色
-     * @author chiangyang
-     */
-    static QColor getTabButtonTextColor() {
-        return s_tabButtonTextColor;
-    }
-    
-    /**
-     * @brief 设置选项卡按钮文字颜色
-     * @param color 选项卡按钮文字颜色
-     * @author chiangyang
-     */
-    static void setTabButtonTextColor(const QColor &color) {
-        s_tabButtonTextColor = color;
-    }
-    
-    /**
-     * @brief 获取选项卡按钮选中背景颜色
-     * @return 选项卡按钮选中背景颜色
-     * @author chiangyang
-     */
-    static QColor getTabButtonSelectedBgColor() {
-        return s_tabButtonSelectedBgColor;
-    }
-    
-    /**
-     * @brief 设置选项卡按钮选中背景颜色
-     * @param color 选项卡按钮选中背景颜色
-     * @author chiangyang
-     */
-    static void setTabButtonSelectedBgColor(const QColor &color) {
-        s_tabButtonSelectedBgColor = color;
-    }
-    
-    /**
-     * @brief 获取选项卡按钮选中文字颜色
-     * @return 选项卡按钮选中文字颜色
-     * @author chiangyang
-     */
-    static QColor getTabButtonSelectedTextColor() {
-        return s_tabButtonSelectedTextColor;
-    }
+    // ============ 逐色 getter/setter（公共 API 保留，实现为一行委托，见 StyleManager.cpp） ============
+    // 21 个颜色的当前值统一存于 colorStore()（StyleManager.cpp 内 Meyers 单例，按 StyleColorId 顺序）。
+    // 表内条目经 colorSettingTable() 的函数指针引用这些函数；部分 getter 亦被
+    // Selector/SnipScreen/OverlayTextEdit 等直接调用。
 
-    /**
-     * @brief 设置选项卡按钮选中文字颜色
-     * @param color 选项卡按钮选中文字颜色
-     * @author chiangyang
-     */
-    static void setTabButtonSelectedTextColor(const QColor &color) {
-        s_tabButtonSelectedTextColor = color;
-    }
+    // 截屏框颜色
+    static QColor getCaptureBorderColor();
+    static void setCaptureBorderColor(const QColor &color);
 
-    /**
-     * @brief 获取角手柄圆形颜色
-     * @return 角手柄圆形颜色
-     * @author chiangyang
-     */
-    static QColor getHandleCircleColor() {
-        return s_handleCircleColor;
-    }
+    // 录屏框颜色
+    static QColor getRecordBorderColor();
+    static void setRecordBorderColor(const QColor &color);
 
-    /**
-     * @brief 设置角手柄圆形颜色
-     * @param color 角手柄圆形颜色
-     * @author chiangyang
-     */
-    static void setHandleCircleColor(const QColor &color) {
-        s_handleCircleColor = color;
-    }
+    // 工具栏背景颜色
+    static QColor getToolbarBgColor();
+    static void setToolbarBgColor(const QColor &color);
 
-    /**
-     * @brief 获取角手柄关闭按钮颜色
-     * @return 角手柄关闭按钮颜色
-     * @author chiangyang
-     */
-    static QColor getHandleCloseColor() {
-        return s_handleCloseColor;
-    }
+    // 子工具栏背景颜色
+    static QColor getSubToolbarBgColor();
+    static void setSubToolbarBgColor(const QColor &color);
 
-    /**
-     * @brief 设置角手柄关闭按钮颜色
-     * @param color 角手柄关闭按钮颜色
-     * @author chiangyang
-     */
-    static void setHandleCloseColor(const QColor &color) {
-        s_handleCloseColor = color;
-    }
+    // 录屏控制栏背景颜色
+    static QColor getRecordControlBgColor();
+    static void setRecordControlBgColor(const QColor &color);
+
+    // 工具栏按钮颜色
+    static QColor getToolbarBtnColor();
+    static void setToolbarBtnColor(const QColor &color);
+
+    // 工具栏按钮文字颜色
+    static QColor getToolbarTextColor();
+    static void setToolbarTextColor(const QColor &color);
+
+    // 工具栏按钮悬停颜色
+    static QColor getToolbarButtonHoverColor();
+    static void setToolbarButtonHoverColor(const QColor &color);
+
+    // 工具栏按钮禁用颜色
+    static QColor getToolbarButtonDisabledColor();
+    static void setToolbarButtonDisabledColor(const QColor &color);
+
+    // 工具栏按钮选中颜色
+    static QColor getToolbarButtonCheckedColor();
+    static void setToolbarButtonCheckedColor(const QColor &color);
+
+    // 关闭按钮背景颜色
+    static QColor getCloseButtonBgColor();
+    static void setCloseButtonBgColor(const QColor &color);
+
+    // 关闭按钮悬停颜色
+    static QColor getCloseButtonHoverColor();
+    static void setCloseButtonHoverColor(const QColor &color);
+
+    // 设置窗口按钮背景颜色
+    static QColor getSettingButtonBgColor();
+    static void setSettingButtonBgColor(const QColor &color);
+
+    // 设置窗口按钮文字颜色
+    static QColor getSettingButtonTextColor();
+    static void setSettingButtonTextColor(const QColor &color);
+
+    // 选项卡背景颜色
+    static QColor getTabWidgetBgColor();
+    static void setTabWidgetBgColor(const QColor &color);
+
+    // 选项卡按钮背景颜色
+    static QColor getTabButtonBgColor();
+    static void setTabButtonBgColor(const QColor &color);
+
+    // 选项卡按钮文字颜色
+    static QColor getTabButtonTextColor();
+    static void setTabButtonTextColor(const QColor &color);
+
+    // 选项卡按钮选中背景颜色
+    static QColor getTabButtonSelectedBgColor();
+    static void setTabButtonSelectedBgColor(const QColor &color);
+
+    // 选项卡按钮选中文字颜色
+    static QColor getTabButtonSelectedTextColor();
+    static void setTabButtonSelectedTextColor(const QColor &color);
+
+    // 角手柄圆形颜色
+    static QColor getHandleCircleColor();
+    static void setHandleCircleColor(const QColor &color);
+
+    // 角手柄关闭按钮颜色
+    static QColor getHandleCloseColor();
+    static void setHandleCloseColor(const QColor &color);
 
     /**
      * @brief 获取工具栏按钮样式
@@ -1160,33 +864,17 @@ public:
      * @author chiangyang
      */
     static void resetToDefaults() {
+        // 颜色：遍历颜色表逐项恢复默认色
+        for (const auto& s : colorSettingTable()) {
+            setColor(s.id, s.defaultColor);
+        }
+
         // 标注工具默认值
         s_defaultPenWidth = DEFAULT_PEN_WIDTH;
         s_defaultFontSize = DEFAULT_FONT_SIZE;
         s_defaultEraserWidth = DEFAULT_ERASER_WIDTH;
         s_defaultMosaicSize = DEFAULT_MOSAIC_SIZE;
 
-        s_recordBorderColor = DEFAULT_RECORD_BORDER_COLOR;
-        s_captureBorderColor = DEFAULT_CAPTURE_BORDER_COLOR;
-        s_toolbarBgColor = DEFAULT_TOOLBAR_BG_COLOR;
-        s_recordControlBgColor = DEFAULT_RECORD_CONTROL_BG_COLOR;
-        s_toolbarBtnColor = DEFAULT_TOOLBAR_BTN_COLOR;
-        s_toolbarTextColor = DEFAULT_TOOLBAR_TEXT_COLOR;
-        s_toolbarButtonHoverColor = DEFAULT_TOOLBAR_BUTTON_HOVER_COLOR;
-        s_toolbarButtonDisabledColor = DEFAULT_TOOLBAR_BUTTON_DISABLED_COLOR;
-        s_subToolbarBgColor = DEFAULT_SUB_TOOLBAR_BG_COLOR;
-        s_settingButtonBgColor = DEFAULT_SETTING_BUTTON_BG_COLOR;
-        s_settingButtonTextColor = DEFAULT_SETTING_BUTTON_TEXT_COLOR;
-        s_toolbarButtonCheckedColor = DEFAULT_TOOLBAR_BUTTON_CHECKED_COLOR;
-        s_closeButtonBgColor = DEFAULT_CLOSE_BUTTON_BG_COLOR;
-        s_closeButtonHoverColor = DEFAULT_CLOSE_BUTTON_HOVER_COLOR;
-        s_tabWidgetBgColor = DEFAULT_TAB_WIDGET_BG_COLOR;
-        s_tabButtonBgColor = DEFAULT_TAB_BUTTON_BG_COLOR;
-        s_tabButtonTextColor = DEFAULT_TAB_BUTTON_TEXT_COLOR;
-        s_tabButtonSelectedBgColor = DEFAULT_TAB_BUTTON_SELECTED_BG_COLOR;
-        s_tabButtonSelectedTextColor = DEFAULT_TAB_BUTTON_SELECTED_TEXT_COLOR;
-        s_handleCircleColor = DEFAULT_HANDLE_CIRCLE_COLOR;
-        s_handleCloseColor = DEFAULT_HANDLE_CLOSE_COLOR;
         s_toolbarButtonStyle = DEFAULT_TOOLBAR_BUTTON_STYLE;
     }
     
