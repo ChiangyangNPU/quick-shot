@@ -64,6 +64,7 @@ public:
         NotConfigured,  ///< 引擎未配置（缺 Key/URL）
         ApiError,       ///< 翻译服务业务错误（非 200 等）
         EmptyText,      ///< 空文本，无可翻译内容
+        Busy,           ///< 翻译服务忙（批量翻译进行中，暂不接受新请求）
         Unknown         ///< 未知错误（兜底）
     };
 

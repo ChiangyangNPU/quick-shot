@@ -103,6 +103,8 @@ QString TranslateService::errorMessage(TranslateEngine::TranslateError code) {
         return tm->get("translate.errApi");
     case TranslateEngine::TranslateError::EmptyText:
         return tm->get("translate.errEmpty");
+    case TranslateEngine::TranslateError::Busy:
+        return tm->get("translate.errBusy");
     default:
         return tm->get("translate.errUnknown");
     }
@@ -222,6 +224,13 @@ void TranslateService::setCurrentEngine(const QString &name) {
 void TranslateService::translate(const QString &text,
                                  const QString &sourceLang,
                                  const QString &targetLang) {
+    if (m_batchActive) {
+        // 批量翻译进行中拒绝单发请求：引擎与批量状态都是单请求槽位，
+        // 并发进入会导致批量结果错位（写入错误的 m_batchIndex 槽位）
+        LOG_WARNING("TranslateService: single translate rejected, batch in progress");
+        emit failed(TranslateEngine::TranslateError::Busy, "Batch translation in progress");
+        return;
+    }
     if (!m_currentEngine) {
         emit failed(TranslateEngine::TranslateError::NotConfigured, "No translation engine available");
         return;
@@ -248,6 +257,14 @@ void TranslateService::translate(const QString &text,
 void TranslateService::translateBatch(const QStringList &texts,
                                       const QString &sourceLang,
                                       const QString &targetLang) {
+    if (m_batchActive) {
+        // 重入保护：批量进行中再次 translateBatch 会覆盖状态机，
+        // 上一批的迟到结果会推进这一批的游标
+        LOG_WARNING(QString("TranslateService: translateBatch re-entry rejected, %1 segments in progress")
+                        .arg(m_batchTotal));
+        emit batchFinished(texts);
+        return;
+    }
     if (texts.isEmpty()) {
         emit batchFinished(QStringList());
         return;
@@ -278,6 +295,17 @@ void TranslateService::translateBatch(const QStringList &texts,
  */
 void TranslateService::translateNextBatchItem() {
     if (m_batchIndex >= m_batchTotal) {
+        return;
+    }
+    if (!m_currentEngine) {
+        // 引擎在批量中途被重建（如 loadConfig），剩余段落用原文兜底结束，
+        // 避免解引用空指针
+        LOG_WARNING("TranslateService: engine lost during batch, aborting with originals");
+        for (int i = m_batchIndex; i < m_batchTotal; ++i) {
+            m_batchTranslated[i] = m_batchOriginals[i];
+        }
+        m_batchIndex = m_batchTotal;
+        onBatchItemFinished();
         return;
     }
     const QString &text = m_batchOriginals[m_batchIndex];

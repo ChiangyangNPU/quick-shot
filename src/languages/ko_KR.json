@@ -297,6 +297,7 @@
   "translate.errNotConfigured": "번역 엔진이 구성되지 않았습니다. 설정에서 구성해 주세요.",
   "translate.errApi": "번역 서비스에서 오류를 반환했습니다.",
   "translate.errEmpty": "번역할 텍스트가 없습니다.",
+  "translate.errBusy": "일괄 번역이 진행 중입니다. 잠시 후 다시 시도하세요.",
   "translate.errUnknown": "번역에 실패했습니다. 나중에 다시 시도하세요.",
   "translate.showDetails": "상세 정보 표시",
   "translate.button": "번역",

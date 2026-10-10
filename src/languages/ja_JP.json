@@ -297,6 +297,7 @@
   "translate.errNotConfigured": "翻訳エンジンが設定されていません。設定で構成してください。",
   "translate.errApi": "翻訳サービスがエラーを返しました。",
   "translate.errEmpty": "翻訳するテキストがありません。",
+  "translate.errBusy": "一括翻訳を実行中です。後でもう一度お試しください。",
   "translate.errUnknown": "翻訳に失敗しました。後で再試行してください。",
   "translate.showDetails": "詳細を表示",
   "translate.button": "翻訳",

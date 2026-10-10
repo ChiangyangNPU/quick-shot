@@ -297,6 +297,7 @@
   "translate.errNotConfigured": "Translation engine is not configured, please set it up in settings.",
   "translate.errApi": "Translation service returned an error.",
   "translate.errEmpty": "No text to translate.",
+  "translate.errBusy": "A batch translation is in progress. Please try again later.",
   "translate.errUnknown": "Translation failed, please try again later.",
   "translate.showDetails": "Show Details",
   "translate.button": "Translate",

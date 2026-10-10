@@ -89,15 +89,18 @@ void MyMemoryEngine::onReplyFinished() {
 
     if (status != 200 || translated.isEmpty()) {
         QString detail = obj.value("responseDetails").toString();
-        // 源语言与目标语言相同时，MyMemory 返回 403 提示选择两个不同语言
-        if (status == 403 || detail.contains("DISTINCT LANGUAGES", Qt::CaseInsensitive)) {
+        // 先按响应内容分类：MyMemory 的额度耗尽与同语言错误都可能伴随 403 状态码，
+        // 若先判状态码会把"额度用尽"误报成"语言相同"
+        // 同语言：MyMemory 返回 "PLEASE SELECT TWO DISTINCT LANGUAGES"
+        if (detail.contains("DISTINCT LANGUAGES", Qt::CaseInsensitive)) {
             LOG_INFO("MyMemoryEngine: source language matches target language");
             emit failed(TranslateError::SameLanguage, detail);
             return;
         }
-        // 额度用尽：MyMemory 返回 quota/limit 相关提示
+        // 额度用尽：quota / limit / 今日免费额度提示
         if (detail.contains("QUOTA", Qt::CaseInsensitive)
-            || detail.contains("LIMIT", Qt::CaseInsensitive)) {
+            || detail.contains("LIMIT", Qt::CaseInsensitive)
+            || detail.contains("TRANSLATIONS FOR TODAY", Qt::CaseInsensitive)) {
             LOG_INFO(QString("MyMemoryEngine: rate limit, detail=%1").arg(detail));
             emit failed(TranslateError::RateLimit, detail);
             return;

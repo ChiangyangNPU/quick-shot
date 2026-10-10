@@ -33,7 +33,9 @@ bool LibreTranslateEngine::isAvailable() const {
  * @author chiangyang
  */
 QString LibreTranslateEngine::toLibreLang(const QString &code) {
-    if (code == "zh-CN" || code == "zh-TW") return "zh";
+    // LibreTranslate 用 "zt" 表示繁体中文，映射成 "zh" 会导致繁体退化为简体
+    if (code == "zh-CN") return "zh";
+    if (code == "zh-TW" || code == "zh-HK") return "zt";
     return code;
 }
 

@@ -297,6 +297,7 @@
   "translate.errNotConfigured": "翻译引擎未配置，请在设置中完成配置。",
   "translate.errApi": "翻译服务返回错误。",
   "translate.errEmpty": "没有可翻译的文本。",
+  "translate.errBusy": "正在批量翻译中，请稍后再试。",
   "translate.errUnknown": "翻译失败，请稍后重试。",
   "translate.showDetails": "详细信息",
   "translate.button": "翻译",
