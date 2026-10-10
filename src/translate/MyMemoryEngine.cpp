@@ -1,13 +1,11 @@
 #include "MyMemoryEngine.h"
 #include "../log/Logger.h"
 
-#include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonValue>
 
 /**
  * @brief 构造函数
@@ -15,25 +13,16 @@
  * @author chiangyang
  */
 MyMemoryEngine::MyMemoryEngine(QObject *parent)
-    : TranslateEngine(parent)
-    , m_networkManager(new QNetworkAccessManager(this)) {
+    : TranslateEngine(parent) {
 }
 
 /**
- * @brief 异步翻译文本
- * @param text 源文本
- * @param sourceLang 源语言代码，"auto" 时使用 Autodetect 自动检测
- * @param targetLang 目标语言代码
+ * @brief 构造并发送 MyMemory GET 请求
  * @author chiangyang
  */
-void MyMemoryEngine::translate(const QString &text,
-                               const QString &sourceLang,
-                               const QString &targetLang) {
-    if (text.isEmpty()) {
-        emit failed(TranslateError::EmptyText, "Empty text");
-        return;
-    }
-
+QNetworkReply *MyMemoryEngine::sendRequest(const QString &text,
+                                           const QString &sourceLang,
+                                           const QString &targetLang) {
     // MyMemory 支持 "Autodetect" 作为源语言，可自动检测源语言
     QString src = (sourceLang == "auto" || sourceLang.isEmpty()) ? "Autodetect" : sourceLang;
 
@@ -46,71 +35,50 @@ void MyMemoryEngine::translate(const QString &text,
     }
     url.setQuery(query);
 
-    m_pendingOriginal = text;
-
-    QNetworkRequest request(url);
-    QNetworkReply *reply = m_networkManager->get(request);
-    connect(reply, &QNetworkReply::finished, this, &MyMemoryEngine::onReplyFinished);
-
     LOG_INFO(QString("MyMemoryEngine: request sent, src=%1 tgt=%2 length=%3")
                  .arg(src, targetLang).arg(text.length()));
+    return httpGet(url);
 }
 
 /**
- * @brief 网络回复完成槽函数，解析 JSON 并发出结果信号
+ * @brief 解析 MyMemory JSON 响应
  * @author chiangyang
  */
-void MyMemoryEngine::onReplyFinished() {
-    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    if (!reply) {
-        return;
-    }
-    reply->deleteLater();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        QString errStr = reply->errorString();
-        LOG_INFO(QString("MyMemoryEngine: network error: %1").arg(errStr));
-        // SSL/TLS 握手或初始化失败单独分类，提示用户部署 TLS 后端插件
-        if (reply->error() == QNetworkReply::SslHandshakeFailedError
-            || errStr.contains("SSL", Qt::CaseInsensitive)) {
-            emit failed(TranslateError::SslFailed, errStr);
-        } else {
-            emit failed(TranslateError::NetworkFailed, errStr);
-        }
-        return;
-    }
-
-    QByteArray data = reply->readAll();
-    QJsonDocument doc = QJsonDocument::fromJson(data);
-    QJsonObject obj = doc.object();
+bool MyMemoryEngine::parseResponse(const QByteArray &data,
+                                   QString &outTranslated,
+                                   TranslateError &outError,
+                                   QString &outDetail) {
+    QJsonObject obj = QJsonDocument::fromJson(data).object();
 
     int status = obj.value("responseStatus").toInt();
-    QString translated = obj.value("responseData").toObject().value("translatedText").toString();
+    outTranslated = obj.value("responseData").toObject().value("translatedText").toString();
 
-    if (status != 200 || translated.isEmpty()) {
-        QString detail = obj.value("responseDetails").toString();
-        // 先按响应内容分类：MyMemory 的额度耗尽与同语言错误都可能伴随 403 状态码，
-        // 若先判状态码会把"额度用尽"误报成"语言相同"
-        // 同语言：MyMemory 返回 "PLEASE SELECT TWO DISTINCT LANGUAGES"
-        if (detail.contains("DISTINCT LANGUAGES", Qt::CaseInsensitive)) {
-            LOG_INFO("MyMemoryEngine: source language matches target language");
-            emit failed(TranslateError::SameLanguage, detail);
-            return;
-        }
-        // 额度用尽：quota / limit / 今日免费额度提示
-        if (detail.contains("QUOTA", Qt::CaseInsensitive)
-            || detail.contains("LIMIT", Qt::CaseInsensitive)
-            || detail.contains("TRANSLATIONS FOR TODAY", Qt::CaseInsensitive)) {
-            LOG_INFO(QString("MyMemoryEngine: rate limit, detail=%1").arg(detail));
-            emit failed(TranslateError::RateLimit, detail);
-            return;
-        }
-        LOG_INFO(QString("MyMemoryEngine: API error, status=%1 detail=%2")
-                     .arg(status).arg(detail));
-        emit failed(TranslateError::ApiError, detail.isEmpty() ? "Translation API error" : detail);
-        return;
+    if (status == 200 && !outTranslated.isEmpty()) {
+        return true;
     }
 
-    LOG_INFO("MyMemoryEngine: translation succeeded");
-    emit finished(m_pendingOriginal, translated);
+    QString detail = obj.value("responseDetails").toString();
+    // 先按响应内容分类：MyMemory 的额度耗尽与同语言错误都可能伴随 403 状态码，
+    // 若先判状态码会把"额度用尽"误报成"语言相同"
+    // 同语言：MyMemory 返回 "PLEASE SELECT TWO DISTINCT LANGUAGES"
+    if (detail.contains("DISTINCT LANGUAGES", Qt::CaseInsensitive)) {
+        LOG_INFO("MyMemoryEngine: source language matches target language");
+        outError = TranslateError::SameLanguage;
+        outDetail = detail;
+        return false;
+    }
+    // 额度用尽：quota / limit / 今日免费额度提示
+    if (detail.contains("QUOTA", Qt::CaseInsensitive)
+        || detail.contains("LIMIT", Qt::CaseInsensitive)
+        || detail.contains("TRANSLATIONS FOR TODAY", Qt::CaseInsensitive)) {
+        LOG_INFO(QString("MyMemoryEngine: rate limit, detail=%1").arg(detail));
+        outError = TranslateError::RateLimit;
+        outDetail = detail;
+        return false;
+    }
+    LOG_INFO(QString("MyMemoryEngine: API error, status=%1 detail=%2")
+                 .arg(status).arg(detail));
+    outError = TranslateError::ApiError;
+    outDetail = detail.isEmpty() ? "Translation API error" : detail;
+    return false;
 }

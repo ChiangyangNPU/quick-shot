@@ -1,7 +1,6 @@
 #include "BaiduTranslateEngine.h"
 #include "../log/Logger.h"
 
-#include <QNetworkRequest>
 #include <QNetworkReply>
 #include <QUrl>
 #include <QUrlQuery>
@@ -18,8 +17,7 @@
  * @author chiangyang
  */
 BaiduTranslateEngine::BaiduTranslateEngine(QObject *parent)
-    : TranslateEngine(parent)
-    , m_networkManager(new QNetworkAccessManager(this)) {
+    : TranslateEngine(parent) {
 }
 
 /**
@@ -49,28 +47,15 @@ QString BaiduTranslateEngine::toBaiduLang(const QString &code) {
 }
 
 /**
- * @brief 异步翻译文本
- * @param text 源文本
- * @param sourceLang 源语言代码，支持 "auto"
- * @param targetLang 目标语言代码
+ * @brief 构造并发送百度 GET 请求（签名 = MD5(appid + q + salt + key)）
  * @author chiangyang
  */
-void BaiduTranslateEngine::translate(const QString &text,
-                                     const QString &sourceLang,
-                                     const QString &targetLang) {
-    if (text.isEmpty()) {
-        emit failed(TranslateError::EmptyText, "Empty text");
-        return;
-    }
-    if (!isAvailable()) {
-        emit failed(TranslateError::NotConfigured, "Baidu AppID/Key not configured");
-        return;
-    }
-
+QNetworkReply *BaiduTranslateEngine::sendRequest(const QString &text,
+                                                 const QString &sourceLang,
+                                                 const QString &targetLang) {
     QString from = (sourceLang == "auto" || sourceLang.isEmpty()) ? "auto" : toBaiduLang(sourceLang);
     QString to = toBaiduLang(targetLang);
     QString salt = QString::number(QDateTime::currentMSecsSinceEpoch());
-    // 签名 = MD5(appid + q + salt + key)
     QString signStr = m_appId + text + salt + m_key;
     QByteArray sign = QCryptographicHash::hash(signStr.toUtf8(), QCryptographicHash::Md5).toHex();
 
@@ -84,48 +69,28 @@ void BaiduTranslateEngine::translate(const QString &text,
     query.addQueryItem("sign", QString::fromUtf8(sign));
     url.setQuery(query);
 
-    m_pendingOriginal = text;
-
-    QNetworkRequest request(url);
-    QNetworkReply *reply = m_networkManager->get(request);
-    connect(reply, &QNetworkReply::finished, this, &BaiduTranslateEngine::onReplyFinished);
-
     LOG_INFO(QString("BaiduTranslateEngine: request sent, from=%1 to=%2 length=%3")
                  .arg(from, to).arg(text.length()));
+    return httpGet(url);
 }
 
 /**
- * @brief 网络回复完成槽函数，解析 JSON 并发出结果信号
+ * @brief 解析百度 JSON 响应
  * @author chiangyang
  */
-void BaiduTranslateEngine::onReplyFinished() {
-    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    if (!reply) {
-        return;
-    }
-    reply->deleteLater();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        QString errStr = reply->errorString();
-        LOG_INFO(QString("BaiduTranslateEngine: network error: %1").arg(errStr));
-        if (reply->error() == QNetworkReply::SslHandshakeFailedError
-            || errStr.contains("SSL", Qt::CaseInsensitive)) {
-            emit failed(TranslateError::SslFailed, errStr);
-        } else {
-            emit failed(TranslateError::NetworkFailed, errStr);
-        }
-        return;
-    }
-
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    QJsonObject obj = doc.object();
+bool BaiduTranslateEngine::parseResponse(const QByteArray &data,
+                                         QString &outTranslated,
+                                         TranslateError &outError,
+                                         QString &outDetail) {
+    QJsonObject obj = QJsonDocument::fromJson(data).object();
 
     if (obj.contains("error_code")) {
         QString code = obj.value("error_code").toString();
         QString msg = obj.value("error_msg").toString();
         LOG_INFO(QString("BaiduTranslateEngine: API error %1: %2").arg(code, msg));
-        emit failed(TranslateError::ApiError, QString("Baidu %1: %2").arg(code, msg));
-        return;
+        outError = TranslateError::ApiError;
+        outDetail = QString("Baidu %1: %2").arg(code, msg);
+        return false;
     }
 
     QJsonArray results = obj.value("trans_result").toArray();
@@ -133,13 +98,6 @@ void BaiduTranslateEngine::onReplyFinished() {
     for (const QJsonValue &v : results) {
         lines.append(v.toObject().value("dst").toString());
     }
-    QString translated = lines.join("\n");
-
-    if (translated.isEmpty()) {
-        emit failed(TranslateError::ApiError, "Empty translation result");
-        return;
-    }
-
-    LOG_INFO("BaiduTranslateEngine: translation succeeded");
-    emit finished(m_pendingOriginal, translated);
+    outTranslated = lines.join("\n");
+    return true;
 }

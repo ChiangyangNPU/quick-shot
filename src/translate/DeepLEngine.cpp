@@ -16,8 +16,7 @@
  * @author chiangyang
  */
 DeepLEngine::DeepLEngine(QObject *parent)
-    : TranslateEngine(parent)
-    , m_networkManager(new QNetworkAccessManager(this)) {
+    : TranslateEngine(parent) {
 }
 
 /**
@@ -42,24 +41,12 @@ QString DeepLEngine::toDeepLLang(const QString &code) {
 }
 
 /**
- * @brief 异步翻译文本
- * @param text 源文本
- * @param sourceLang 源语言代码，"auto" 时不传 source_lang
- * @param targetLang 目标语言代码
+ * @brief 构造并发送 DeepL POST 请求（表单编码 + DeepL-Auth-Key 鉴权）
  * @author chiangyang
  */
-void DeepLEngine::translate(const QString &text,
-                            const QString &sourceLang,
-                            const QString &targetLang) {
-    if (text.isEmpty()) {
-        emit failed(TranslateError::EmptyText, "Empty text");
-        return;
-    }
-    if (!isAvailable()) {
-        emit failed(TranslateError::NotConfigured, "DeepL Key not configured");
-        return;
-    }
-
+QNetworkReply *DeepLEngine::sendRequest(const QString &text,
+                                        const QString &sourceLang,
+                                        const QString &targetLang) {
     QUrl url("https://api-free.deepl.com/v2/translate");
     QNetworkRequest request(url);
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
@@ -74,51 +61,24 @@ void DeepLEngine::translate(const QString &text,
     }
     QByteArray body = query.toString(QUrl::FullyEncoded).toUtf8();
 
-    m_pendingOriginal = text;
-
-    QNetworkReply *reply = m_networkManager->post(request, body);
-    connect(reply, &QNetworkReply::finished, this, &DeepLEngine::onReplyFinished);
-
     LOG_INFO(QString("DeepLEngine: request sent, target=%1 length=%2")
                  .arg(toDeepLLang(targetLang)).arg(text.length()));
+    return httpPost(request, body);
 }
 
 /**
- * @brief 网络回复完成槽函数，解析 JSON 并发出结果信号
+ * @brief 解析 DeepL JSON 响应
  * @author chiangyang
  */
-void DeepLEngine::onReplyFinished() {
-    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    if (!reply) {
-        return;
-    }
-    reply->deleteLater();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        QString errStr = reply->errorString();
-        LOG_INFO(QString("DeepLEngine: network error: %1").arg(errStr));
-        if (reply->error() == QNetworkReply::SslHandshakeFailedError
-            || errStr.contains("SSL", Qt::CaseInsensitive)) {
-            emit failed(TranslateError::SslFailed, errStr);
-        } else {
-            emit failed(TranslateError::NetworkFailed, errStr);
-        }
-        return;
-    }
-
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    QJsonArray translations = doc.object().value("translations").toArray();
+bool DeepLEngine::parseResponse(const QByteArray &data,
+                                QString &outTranslated,
+                                TranslateError &outError,
+                                QString &outDetail) {
+    QJsonArray translations = QJsonDocument::fromJson(data).object().value("translations").toArray();
     QStringList lines;
     for (const QJsonValue &v : translations) {
         lines.append(v.toObject().value("text").toString());
     }
-    QString translated = lines.join("\n");
-
-    if (translated.isEmpty()) {
-        emit failed(TranslateError::ApiError, "Empty translation result");
-        return;
-    }
-
-    LOG_INFO("DeepLEngine: translation succeeded");
-    emit finished(m_pendingOriginal, translated);
+    outTranslated = lines.join("\n");
+    return true;
 }

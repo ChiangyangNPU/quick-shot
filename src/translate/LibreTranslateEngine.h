@@ -2,10 +2,7 @@
 #define LIBRE_TRANSLATE_ENGINE_H
 
 #include "TranslateEngine.h"
-#include <QNetworkAccessManager>
 #include <QString>
-
-class QNetworkReply;
 
 /**
  * @brief LibreTranslate 翻译引擎
@@ -54,37 +51,34 @@ public:
      */
     void setUrl(const QString &url) { m_url = url; }
 
-public slots:
+protected:
     /**
-     * @brief 异步翻译文本
-     * @param text 源文本
-     * @param sourceLang 源语言代码，支持 "auto"
-     * @param targetLang 目标语言代码
+     * @brief 发送 POST 请求（JSON 报文）
      * @author chiangyang
      */
-    void translate(const QString &text,
-                   const QString &sourceLang,
-                   const QString &targetLang) override;
+    QNetworkReply *sendRequest(const QString &text,
+                               const QString &sourceLang,
+                               const QString &targetLang) override;
 
-private slots:
     /**
-     * @brief 网络回复完成槽函数
+     * @brief 解析 LibreTranslate JSON 响应（error / translatedText）
      * @author chiangyang
      */
-    void onReplyFinished();
+    bool parseResponse(const QByteArray &data,
+                       QString &outTranslated,
+                       TranslateError &outError,
+                       QString &outDetail) override;
 
 private:
     /**
      * @brief 将通用语言代码转换为 LibreTranslate 语言代码
      * @param code 通用语言代码
-     * @return LibreTranslate 语言代码（如 zh）
+     * @return LibreTranslate 语言代码（如 zh、zt）
      * @author chiangyang
      */
     static QString toLibreLang(const QString &code);
 
-    QNetworkAccessManager *m_networkManager; ///< 网络管理器
-    QString m_url;                           ///< 服务地址
-    QString m_pendingOriginal;               ///< 当前待翻译的原文
+    QString m_url; ///< 服务地址
 };
 
 #endif // LIBRE_TRANSLATE_ENGINE_H

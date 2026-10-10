@@ -13,8 +13,7 @@
  * @author chiangyang
  */
 LibreTranslateEngine::LibreTranslateEngine(QObject *parent)
-    : TranslateEngine(parent)
-    , m_networkManager(new QNetworkAccessManager(this)) {
+    : TranslateEngine(parent) {
 }
 
 /**
@@ -40,24 +39,12 @@ QString LibreTranslateEngine::toLibreLang(const QString &code) {
 }
 
 /**
- * @brief 异步翻译文本
- * @param text 源文本
- * @param sourceLang 源语言代码，支持 "auto"
- * @param targetLang 目标语言代码
+ * @brief 构造并发送 LibreTranslate POST 请求（JSON 报文）
  * @author chiangyang
  */
-void LibreTranslateEngine::translate(const QString &text,
-                                     const QString &sourceLang,
-                                     const QString &targetLang) {
-    if (text.isEmpty()) {
-        emit failed(TranslateError::EmptyText, "Empty text");
-        return;
-    }
-    if (!isAvailable()) {
-        emit failed(TranslateError::NotConfigured, "LibreTranslate URL not configured");
-        return;
-    }
-
+QNetworkReply *LibreTranslateEngine::sendRequest(const QString &text,
+                                                 const QString &sourceLang,
+                                                 const QString &targetLang) {
     // 规范化地址：确保以 /translate 结尾
     QString base = m_url;
     if (!base.endsWith("/translate")) {
@@ -75,54 +62,29 @@ void LibreTranslateEngine::translate(const QString &text,
     body["target"] = toLibreLang(targetLang);
     body["format"] = "text";
 
-    m_pendingOriginal = text;
-
-    QNetworkReply *reply = m_networkManager->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
-    connect(reply, &QNetworkReply::finished, this, &LibreTranslateEngine::onReplyFinished);
-
     LOG_INFO(QString("LibreTranslateEngine: request sent, target=%1 length=%2")
                  .arg(toLibreLang(targetLang)).arg(text.length()));
+    return httpPost(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
 }
 
 /**
- * @brief 网络回复完成槽函数，解析 JSON 并发出结果信号
+ * @brief 解析 LibreTranslate JSON 响应
  * @author chiangyang
  */
-void LibreTranslateEngine::onReplyFinished() {
-    QNetworkReply *reply = qobject_cast<QNetworkReply *>(sender());
-    if (!reply) {
-        return;
-    }
-    reply->deleteLater();
-
-    if (reply->error() != QNetworkReply::NoError) {
-        QString errStr = reply->errorString();
-        LOG_INFO(QString("LibreTranslateEngine: network error: %1").arg(errStr));
-        if (reply->error() == QNetworkReply::SslHandshakeFailedError
-            || errStr.contains("SSL", Qt::CaseInsensitive)) {
-            emit failed(TranslateError::SslFailed, errStr);
-        } else {
-            emit failed(TranslateError::NetworkFailed, errStr);
-        }
-        return;
-    }
-
-    QJsonDocument doc = QJsonDocument::fromJson(reply->readAll());
-    QJsonObject obj = doc.object();
+bool LibreTranslateEngine::parseResponse(const QByteArray &data,
+                                         QString &outTranslated,
+                                         TranslateError &outError,
+                                         QString &outDetail) {
+    QJsonObject obj = QJsonDocument::fromJson(data).object();
 
     if (obj.contains("error")) {
         QString msg = obj.value("error").toString();
         LOG_INFO(QString("LibreTranslateEngine: API error: %1").arg(msg));
-        emit failed(TranslateError::ApiError, msg);
-        return;
+        outError = TranslateError::ApiError;
+        outDetail = msg;
+        return false;
     }
 
-    QString translated = obj.value("translatedText").toString();
-    if (translated.isEmpty()) {
-        emit failed(TranslateError::ApiError, "Empty translation result");
-        return;
-    }
-
-    LOG_INFO("LibreTranslateEngine: translation succeeded");
-    emit finished(m_pendingOriginal, translated);
+    outTranslated = obj.value("translatedText").toString();
+    return true;
 }

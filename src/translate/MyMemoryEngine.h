@@ -2,10 +2,7 @@
 #define MYMEMORY_ENGINE_H
 
 #include "TranslateEngine.h"
-#include <QNetworkAccessManager>
 #include <QString>
-
-class QNetworkReply;
 
 /**
  * @brief MyMemory 翻译引擎
@@ -54,29 +51,26 @@ public:
      */
     void setEmail(const QString &email) { m_email = email; }
 
-public slots:
+protected:
     /**
-     * @brief 异步翻译文本
-     * @param text 源文本
-     * @param sourceLang 源语言代码，"auto" 时按英文兜底
-     * @param targetLang 目标语言代码
+     * @brief 发送 GET 请求（langpair + 可选 email）
      * @author chiangyang
      */
-    void translate(const QString &text,
-                   const QString &sourceLang,
-                   const QString &targetLang) override;
+    QNetworkReply *sendRequest(const QString &text,
+                               const QString &sourceLang,
+                               const QString &targetLang) override;
 
-private slots:
     /**
-     * @brief 网络回复完成槽函数
+     * @brief 解析 MyMemory JSON 响应（responseStatus/responseData/responseDetails）
      * @author chiangyang
      */
-    void onReplyFinished();
+    bool parseResponse(const QByteArray &data,
+                       QString &outTranslated,
+                       TranslateError &outError,
+                       QString &outDetail) override;
 
 private:
-    QNetworkAccessManager *m_networkManager; ///< 网络管理器
-    QString m_email;                         ///< 联系邮箱（可选）
-    QString m_pendingOriginal;               ///< 当前待翻译的原文（用于结果回传）
+    QString m_email; ///< 联系邮箱（可选）
 };
 
 #endif // MYMEMORY_ENGINE_H

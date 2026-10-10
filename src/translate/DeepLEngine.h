@@ -2,10 +2,7 @@
 #define DEEPL_ENGINE_H
 
 #include "TranslateEngine.h"
-#include <QNetworkAccessManager>
 #include <QString>
-
-class QNetworkReply;
 
 /**
  * @brief DeepL 翻译引擎
@@ -54,24 +51,23 @@ public:
      */
     void setKey(const QString &key) { m_key = key; }
 
-public slots:
+protected:
     /**
-     * @brief 异步翻译文本
-     * @param text 源文本
-     * @param sourceLang 源语言代码，"auto" 时不传 source_lang 由 DeepL 自动检测
-     * @param targetLang 目标语言代码
+     * @brief 发送 POST 请求（表单编码 + DeepL-Auth-Key 鉴权头）
      * @author chiangyang
      */
-    void translate(const QString &text,
-                   const QString &sourceLang,
-                   const QString &targetLang) override;
+    QNetworkReply *sendRequest(const QString &text,
+                               const QString &sourceLang,
+                               const QString &targetLang) override;
 
-private slots:
     /**
-     * @brief 网络回复完成槽函数
+     * @brief 解析 DeepL JSON 响应（translations[].text）
      * @author chiangyang
      */
-    void onReplyFinished();
+    bool parseResponse(const QByteArray &data,
+                       QString &outTranslated,
+                       TranslateError &outError,
+                       QString &outDetail) override;
 
 private:
     /**
@@ -82,9 +78,7 @@ private:
      */
     static QString toDeepLLang(const QString &code);
 
-    QNetworkAccessManager *m_networkManager; ///< 网络管理器
-    QString m_key;                           ///< DeepL API Key
-    QString m_pendingOriginal;               ///< 当前待翻译的原文
+    QString m_key; ///< DeepL API Key
 };
 
 #endif // DEEPL_ENGINE_H

@@ -2,10 +2,7 @@
 #define BAIDU_TRANSLATE_ENGINE_H
 
 #include "TranslateEngine.h"
-#include <QNetworkAccessManager>
 #include <QString>
-
-class QNetworkReply;
 
 /**
  * @brief 百度翻译引擎
@@ -60,24 +57,23 @@ public:
      */
     void setKey(const QString &key) { m_key = key; }
 
-public slots:
+protected:
     /**
-     * @brief 异步翻译文本
-     * @param text 源文本
-     * @param sourceLang 源语言代码，支持 "auto"
-     * @param targetLang 目标语言代码
+     * @brief 发送 GET 请求（MD5 签名置于 query）
      * @author chiangyang
      */
-    void translate(const QString &text,
-                   const QString &sourceLang,
-                   const QString &targetLang) override;
+    QNetworkReply *sendRequest(const QString &text,
+                               const QString &sourceLang,
+                               const QString &targetLang) override;
 
-private slots:
     /**
-     * @brief 网络回复完成槽函数
+     * @brief 解析百度 JSON 响应（error_code / trans_result）
      * @author chiangyang
      */
-    void onReplyFinished();
+    bool parseResponse(const QByteArray &data,
+                       QString &outTranslated,
+                       TranslateError &outError,
+                       QString &outDetail) override;
 
 private:
     /**
@@ -88,10 +84,8 @@ private:
      */
     static QString toBaiduLang(const QString &code);
 
-    QNetworkAccessManager *m_networkManager; ///< 网络管理器
-    QString m_appId;                         ///< 百度 AppID
-    QString m_key;                           ///< 百度密钥
-    QString m_pendingOriginal;               ///< 当前待翻译的原文
+    QString m_appId; ///< 百度 AppID
+    QString m_key;   ///< 百度密钥
 };
 
 #endif // BAIDU_TRANSLATE_ENGINE_H
