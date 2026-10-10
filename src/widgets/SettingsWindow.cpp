@@ -519,26 +519,15 @@ void SettingsWindow::setupShortcutsTab() {
     globalLayout->setContentsMargins(10, 10, 10, 10);
     globalLayout->setSpacing(10);
 
-    // 可配置全局热键：截图/录屏/历史/贴图/全屏/活动窗口/录屏暂停/录屏停止/隐藏贴图（行 0-8）
-    // 全部通过 addShortcutRow 数据驱动创建，默认值与 ShortcutTypes.h 的 kShortcutConfigs 数据表保持一致
-    addShortcutRow(globalLayout, 0, "snip",         "shortcut_snip",
-                   "Alt+Q",        "shortcut.snip.label",        "Snip");
-    addShortcutRow(globalLayout, 1, "record",       "shortcut_record",
-                   "Alt+S",        "shortcut.record.label",      "Record");
-    addShortcutRow(globalLayout, 2, "history",      "shortcut_history",
-                   "Alt+H",        "shortcut.history.label",     "History");
-    addShortcutRow(globalLayout, 3, "pin",          "shortcut_pin",
-                   "Alt+P",        "shortcut.pin.label",         "Pin Clipboard");
-    addShortcutRow(globalLayout, 4, "fullscreen",   "shortcut_fullscreen",
-                   "Alt+Shift+F",  "shortcut.fullscreen.label",  "Fullscreen Capture");
-    addShortcutRow(globalLayout, 5, "activewindow", "shortcut_activewindow",
-                   "Alt+Shift+W",  "shortcut.activewindow.label","Active Window Capture");
-    addShortcutRow(globalLayout, 6, "recordpause",  "shortcut_recordpause",
-                   "Alt+Shift+S",  "shortcut.recordpause.label", "Record Pause/Resume");
-    addShortcutRow(globalLayout, 7, "recordstop",   "shortcut_recordstop",
-                   "Alt+Shift+Q",  "shortcut.recordstop.label",  "Record Stop");
-    addShortcutRow(globalLayout, 8, "togglepins",   "shortcut_togglepins",
-                   "Alt+Shift+P",  "shortcut.togglepins.label",  "Toggle All Pins");
+    // 可配置全局热键（行 0-8）：configKey/默认键/标签全部来自 kShortcutConfigs 数据表，
+    // 新增快捷键只需在表中加一行，此处自动生成（消除与数据表手抄同步的维护负担）
+    for (int i = 0; i < kShortcutConfigCount; ++i) {
+        const ShortcutConfigItem &cfg = kShortcutConfigs[i];
+        addShortcutRow(globalLayout, i,
+                       shortcutTypeToString(cfg.type),
+                       cfg.configKey, cfg.defaultValue,
+                       cfg.settingsLabelKey, cfg.settingsLabelFallback);
+    }
 
     // ===== 分类二：标注工具（1-8 切换工具，固定）=====
     m_shortcutGroupTools = new QGroupBox(

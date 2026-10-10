@@ -43,6 +43,8 @@ struct ShortcutConfigItem {
     const char* defaultValue;    ///< 默认快捷键字符串
     const char* trayTextKey;     ///< 托盘菜单文本的 i18n 键（nullptr=无托盘菜单项）
     const char* trayFallback;    ///< 托盘菜单文本回退值（i18n 缺失时使用）
+    const char* settingsLabelKey;     ///< 设置页行标签的 i18n 键
+    const char* settingsLabelFallback;///< 设置页行标签回退值（i18n 缺失时使用）
 };
 
 /**
@@ -53,15 +55,15 @@ struct ShortcutConfigItem {
  * @author chiangyang
  */
 static const ShortcutConfigItem kShortcutConfigs[] = {
-    { ShortcutType::Snip,         "shortcut_snip",         "Alt+Q",        "trayCapture",      "Capture" },
-    { ShortcutType::Record,       "shortcut_record",       "Alt+S",        "trayRecord",       "Record" },
-    { ShortcutType::History,      "shortcut_history",      "Alt+H",        "tray.history",     "History" },
-    { ShortcutType::Pin,          "shortcut_pin",          "Alt+P",        "tray.pin",         "Pin Clipboard" },
-    { ShortcutType::Fullscreen,   "shortcut_fullscreen",   "Alt+Shift+F",  "tray.fullscreen",  "Fullscreen Capture" },
-    { ShortcutType::ActiveWindow, "shortcut_activewindow", "Alt+Shift+W",  "tray.activewindow","Active Window Capture" },
-    { ShortcutType::RecordPause,  "shortcut_recordpause",  "Alt+Shift+S",  "tray.recordpause", "Record Pause/Resume" },
-    { ShortcutType::RecordStop,   "shortcut_recordstop",   "Alt+Shift+Q",  "tray.recordstop",  "Record Stop" },
-    { ShortcutType::TogglePins,   "shortcut_togglepins",   "Alt+Shift+P",  "tray.togglepins",  "Toggle All Pins" },
+    { ShortcutType::Snip,         "shortcut_snip",         "Alt+Q",        "trayCapture",      "Capture",                "shortcut.snip.label",         "Snip" },
+    { ShortcutType::Record,       "shortcut_record",       "Alt+S",        "trayRecord",       "Record",                 "shortcut.record.label",       "Record" },
+    { ShortcutType::History,      "shortcut_history",      "Alt+H",        "tray.history",     "History",                "shortcut.history.label",      "History" },
+    { ShortcutType::Pin,          "shortcut_pin",          "Alt+P",        "tray.pin",         "Pin Clipboard",          "shortcut.pin.label",          "Pin Clipboard" },
+    { ShortcutType::Fullscreen,   "shortcut_fullscreen",   "Alt+Shift+F",  "tray.fullscreen",  "Fullscreen Capture",     "shortcut.fullscreen.label",   "Fullscreen Capture" },
+    { ShortcutType::ActiveWindow, "shortcut_activewindow", "Alt+Shift+W",  "tray.activewindow","Active Window Capture",  "shortcut.activewindow.label", "Active Window Capture" },
+    { ShortcutType::RecordPause,  "shortcut_recordpause",  "Alt+Shift+S",  "tray.recordpause", "Record Pause/Resume",    "shortcut.recordpause.label",  "Record Pause/Resume" },
+    { ShortcutType::RecordStop,   "shortcut_recordstop",   "Alt+Shift+Q",  "tray.recordstop",  "Record Stop",            "shortcut.recordstop.label",   "Record Stop" },
+    { ShortcutType::TogglePins,   "shortcut_togglepins",   "Alt+Shift+P",  "tray.togglepins",  "Toggle All Pins",        "shortcut.togglepins.label",   "Toggle All Pins" },
 };
 
 /**
