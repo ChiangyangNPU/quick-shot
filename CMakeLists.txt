@@ -223,6 +223,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/ElidedLabel.h
         src/widgets/settings/SettingsAboutTab.cpp
         src/widgets/settings/SettingsAboutTab.h
+        src/widgets/settings/SettingsHistoryTab.cpp
+        src/widgets/settings/SettingsHistoryTab.h
         src/widgets/PrecisionSlider.cpp
         src/widgets/PrecisionSlider.h
         src/widgets/MessageBox.cpp

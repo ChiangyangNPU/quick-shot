@@ -28,6 +28,7 @@
 #include "StyleManager.h"
 #include "ElidedLabel.h"
 #include "settings/SettingsAboutTab.h"
+#include "settings/SettingsHistoryTab.h"
 
 class ConfigManager;
 class QGridLayout;
@@ -433,16 +434,6 @@ private:
     void updateAllGroupBoxStyles();
 
     /**
-     * @brief 刷新历史记录选项卡滚动区的 QPalette 背景色
-     * @param color 新的背景色（通常是 StyleManager::getTabWidgetBgColor()）
-     *
-     * 历史记录选项卡用 QPalette 设背景（避免 setStyleSheet 禁用子控件原生渲染），
-     * 每次改颜色时需重新设置 m_historyScrollContent 和 historyScrollArea->viewport() 的调色板。
-     * @author chiangyang
-     */
-    void updateHistoryTabPalette(const QColor &color);
-
-    /**
      * @brief 刷新常规/翻译/历史记录三个选项卡根容器的背景色
      * @param color 新的背景色（通常是 StyleManager::getTabWidgetBgColor()）
      *
@@ -472,11 +463,8 @@ private:
 
     QTabWidget *tabWidget;          ///< 选项卡控件
     QScrollArea *styleScrollArea;   ///< 样式选项卡滚动区域
-    QScrollArea *historyScrollArea; ///< 历史记录选项卡滚动区域
-    QWidget *m_historyScrollContent; ///< 历史记录选项卡滚动区域内的内容容器
     QWidget *m_generalTab;          ///< 通用选项卡根容器
     QWidget *m_translateTab;        ///< 翻译选项卡根容器
-    QWidget *m_historyTab;          ///< 历史记录选项卡根容器
 
     // General
     QComboBox *langCombo;           ///< 语言下拉框
@@ -516,20 +504,8 @@ private:
     QGroupBox *m_shortcutGroupPinWindow = nullptr;  ///< 快捷键选项卡-PinWindow 快捷键分组（固定）
     QScrollArea *m_shortcutsScrollArea = nullptr;   ///< 快捷键选项卡滚动区域
 
-    // History
-    QGroupBox *historyRecordGroup;      ///< 历史记录设置组
-    QGroupBox *historyStorageGroup;     ///< 历史存储设置组
-    QGroupBox *historyDataGroup;        ///< 历史数据管理组
-    QGroupBox *historyStatsGroup;       ///< 历史统计信息组
-    QCheckBox *m_screenshotHistoryCheck;  ///< 记录截图历史复选框
-    QCheckBox *m_clipboardHistoryCheck;   ///< 记录剪贴板历史复选框
-    QLabel *lblRetentionDays;               ///< 保留天数标签
-    QComboBox *cmbRetentionDays;            ///< 保留天数下拉框
-    QLabel *lblMaxItems;                    ///< 最大记录数标签
-    QComboBox *cmbMaxItems;                 ///< 最大记录数下拉框
-    QLabel *lblHistoryStats;                ///< 历史统计信息标签
-    QPushButton *btnCleanHistory;           ///< 清理历史按钮
-    QPushButton *btnClearHistory;           ///< 清空历史按钮
+    // History（选项卡内容内聚在 SettingsHistoryTab）
+    SettingsHistoryTab *m_historyTabWidget; ///< 历史记录选项卡
 
     // About（选项卡内容内聚在 SettingsAboutTab：应用信息 + 软件更新）
     SettingsAboutTab *m_aboutTab;   ///< 关于选项卡
@@ -662,12 +638,6 @@ private:
     void setupHistoryTab();
 
     /**
-     * @brief 更新历史统计信息
-     * @author chiangyang
-     */
-    void updateHistoryStats();
-
-    /**
      * @brief 显示颜色选择器
      * @param currentColor 当前颜色
      * @return 选择的颜色
@@ -747,16 +717,6 @@ private:
      * @author chiangyang
      */
     void updateGeneralControlWidths();
-
-    /**
-     * @brief 重新计算历史记录选项卡下拉框的固定宽度
-     *
-     * 取保留天数与最大记录数两个下拉框的最大内容宽度作为统一宽度。
-     * 在 setupHistoryTab 构造时、语言切换时与 DPI 变化时均会调用，
-     * 消除原先 setupHistoryTab 与 retranslateUi 中的重复代码。
-     * @author chiangyang
-     */
-    void updateHistoryComboWidth();
 
     /**
      * @brief 重新计算所有需要固定宽度的控件

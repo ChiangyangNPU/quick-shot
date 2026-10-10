@@ -3,7 +3,6 @@
 #include "../core/ConfigManager.h"
 #include "../core/TranslationManager.h"
 #include "../shortcut/ShortcutTypes.h"
-#include "../history/HistoryManager.h"
 #include "../translate/TranslateService.h"
 #ifdef ENABLE_OCR
 #include "../ocr/OcrEngine.h"
@@ -38,7 +37,7 @@
  * @param parent 父对象
  * @author chiangyang
  */
-SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr), historyScrollArea(nullptr), m_configManager(nullptr), lblConfigTitle(nullptr), lblConfigFileName(nullptr), btnOpenConfigDir(nullptr), btnChangeConfig(nullptr) {
+SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr), m_configManager(nullptr), lblConfigTitle(nullptr), lblConfigFileName(nullptr), btnOpenConfigDir(nullptr), btnChangeConfig(nullptr) {
     LOG_INFO("SettingsWindow instance created");
     setWindowTitle("Settings");
     
@@ -222,18 +221,6 @@ void SettingsWindow::updateGeneralControlWidths() {
  * 消除原先 setupHistoryTab 与 retranslateUi 中的重复代码。
  * @author chiangyang
  */
-void SettingsWindow::updateHistoryComboWidth() {
-    if (!cmbRetentionDays || !cmbMaxItems) {
-        return;
-    }
-
-    int w1 = cmbRetentionDays->sizeHint().width();
-    int w2 = cmbMaxItems->sizeHint().width();
-    int maxW = qMax(w1, w2);
-    cmbRetentionDays->setFixedWidth(maxW);
-    cmbMaxItems->setFixedWidth(maxW);
-}
-
 /**
  * @brief 重新计算所有需要固定宽度的控件
  *
@@ -243,7 +230,7 @@ void SettingsWindow::updateHistoryComboWidth() {
  */
 void SettingsWindow::updateControlWidths() {
     updateGeneralControlWidths();
-    updateHistoryComboWidth();
+    if (m_historyTabWidget) m_historyTabWidget->updateComboWidths();
     updateTranslateComboWidth();
 }
 
@@ -1322,32 +1309,8 @@ void SettingsWindow::retranslateUi() {
         cmbToolbarButtonStyle->setCurrentIndex(currentIndex);
     }
 
-    // History
-    if (historyRecordGroup) historyRecordGroup->setTitle(tm->get("history.recordSettings", "Record Settings"));
-    if (m_screenshotHistoryCheck) m_screenshotHistoryCheck->setText(tm->get("history.enableScreenshot", "Record Screenshot History"));
-    if (m_clipboardHistoryCheck) m_clipboardHistoryCheck->setText(tm->get("history.enableClipboard", "Record Clipboard History"));
-    if (historyStorageGroup) historyStorageGroup->setTitle(tm->get("history.storage.title", "Storage Settings"));
-    if (lblRetentionDays) lblRetentionDays->setText(tm->get("history.storage.retentionDays", "Retention Period") + ":");
-    if (cmbRetentionDays) {
-        int retentionIdx = cmbRetentionDays->currentIndex();
-        cmbRetentionDays->blockSignals(true);
-        cmbRetentionDays->clear();
-        cmbRetentionDays->addItem(tm->get("history.storage.days7", "7 days"), 7);
-        cmbRetentionDays->addItem(tm->get("history.storage.days30", "30 days"), 30);
-        cmbRetentionDays->addItem(tm->get("history.storage.days90", "90 days"), 90);
-        cmbRetentionDays->addItem(tm->get("history.storage.days180", "180 days"), 180);
-        cmbRetentionDays->addItem(tm->get("history.storage.days365", "365 days"), 365);
-        cmbRetentionDays->setCurrentIndex(retentionIdx);
-        cmbRetentionDays->blockSignals(false);
-    }
-    if (lblMaxItems) lblMaxItems->setText(tm->get("history.storage.maxItems", "Max Records") + ":");
-    // 语言切换后重新计算下拉框宽度（复用 updateHistoryComboWidth，消除重复）
-    updateHistoryComboWidth();
-    if (historyDataGroup) historyDataGroup->setTitle(tm->get("history.dataManagement.title", "Data Management"));
-    if (btnCleanHistory) btnCleanHistory->setText(tm->get("history.dataManagement.cleanExpired", "Clean Expired Records"));
-    if (btnClearHistory) btnClearHistory->setText(tm->get("history.dataManagement.clearAll", "Clear All History"));
-    if (historyStatsGroup) historyStatsGroup->setTitle(tm->get("history.stats.title", "Statistics"));
-    updateHistoryStats();
+    // History 历史记录选项卡文案（含保留天数下拉框重建与统计刷新）
+    m_historyTabWidget->retranslateUi();
 }
 
 /**
@@ -1901,7 +1864,6 @@ void SettingsWindow::applyColorPostUpdate(StyleManager::StyleColorCategory categ
             }
             updateAllGroupBoxStyles();
             updateAllTabsPalette(newColor);
-            updateHistoryTabPalette(newColor);
             break;
     }
 }
@@ -2322,183 +2284,8 @@ void SettingsWindow::setAnimatedHeight(int height) {
  * @author chiangyang
  */
 void SettingsWindow::setupHistoryTab() {
-    TranslationManager *tm = TranslationManager::instance();
-
-    // 创建滚动内容容器
-    // 注意：用 QPalette 设置背景色，不要用 setStyleSheet。
-    // QScrollArea 的 viewport 不会自动继承 QTabWidget::pane 的背景色，
-    // 需要显式设置。若用 setStyleSheet 会禁用子控件（如 QCheckBox）的
-    // 原生主题绘制，导致复选框指示器空白、对勾不显示。
-    QWidget *scrollContent = new QWidget();
-    m_historyScrollContent = scrollContent;
-    scrollContent->setAutoFillBackground(true);
-    QPalette scrollPal = scrollContent->palette();
-    scrollPal.setColor(QPalette::Window, StyleManager::getTabWidgetBgColor());
-    scrollContent->setPalette(scrollPal);
-    QVBoxLayout *layout = new QVBoxLayout(scrollContent);
-    layout->setContentsMargins(15, 15, 15, 15);
-    layout->setSpacing(15);
-
-    // ===== 记录开关组 =====
-    historyRecordGroup = new QGroupBox(tm->get("history.recordSettings", "Record Settings"), scrollContent);
-    historyRecordGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *recordLayout = new QVBoxLayout(historyRecordGroup);
-
-    m_screenshotHistoryCheck = new QCheckBox(tm->get("history.enableScreenshot", "Record Screenshot History"), historyRecordGroup);
-    m_screenshotHistoryCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
-    m_clipboardHistoryCheck = new QCheckBox(tm->get("history.enableClipboard", "Record Clipboard History"), historyRecordGroup);
-    m_clipboardHistoryCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
-
-    // 从 HistoryManager 加载当前设置
-    m_screenshotHistoryCheck->setChecked(HistoryManager::instance()->isScreenshotEnabled());
-    m_clipboardHistoryCheck->setChecked(HistoryManager::instance()->isClipboardEnabled());
-
-    recordLayout->addWidget(m_screenshotHistoryCheck);
-    recordLayout->addWidget(m_clipboardHistoryCheck);
-
-    connect(m_screenshotHistoryCheck, &QCheckBox::toggled, this, [](bool checked) {
-        HistoryManager::instance()->setScreenshotEnabled(checked);
-    });
-    connect(m_clipboardHistoryCheck, &QCheckBox::toggled, this, [](bool checked) {
-        HistoryManager::instance()->setClipboardEnabled(checked);
-    });
-
-    layout->addWidget(historyRecordGroup);
-
-    // ===== 存储设置组 =====
-    historyStorageGroup = new QGroupBox(tm->get("history.storage.title", "Storage Settings"), scrollContent);
-    historyStorageGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QGridLayout *storageLayout = new QGridLayout(historyStorageGroup);
-
-    lblRetentionDays = new QLabel(tm->get("history.storage.retentionDays", "Retention Period") + ":", historyStorageGroup);
-    cmbRetentionDays = new QComboBox(historyStorageGroup);
-    cmbRetentionDays->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    cmbRetentionDays->addItem(tm->get("history.storage.days7", "7 days"), 7);
-    cmbRetentionDays->addItem(tm->get("history.storage.days30", "30 days"), 30);
-    cmbRetentionDays->addItem(tm->get("history.storage.days90", "90 days"), 90);
-    cmbRetentionDays->addItem(tm->get("history.storage.days180", "180 days"), 180);
-    cmbRetentionDays->addItem(tm->get("history.storage.days365", "365 days"), 365);
-
-    int retentionDays = HistoryManager::instance()->retentionDays();
-    int retIdx = cmbRetentionDays->findData(retentionDays);
-    if (retIdx >= 0) {
-        cmbRetentionDays->setCurrentIndex(retIdx);
-    }
-
-    lblMaxItems = new QLabel(tm->get("history.storage.maxItems", "Max Records") + ":", historyStorageGroup);
-    cmbMaxItems = new QComboBox(historyStorageGroup);
-    cmbMaxItems->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    cmbMaxItems->addItem("500", 500);
-    cmbMaxItems->addItem("1000", 1000);
-    cmbMaxItems->addItem("2000", 2000);
-    cmbMaxItems->addItem("5000", 5000);
-    cmbMaxItems->addItem("10000", 10000);
-
-    int maxItems = HistoryManager::instance()->maxItems();
-    int maxIdx = cmbMaxItems->findData(maxItems);
-    if (maxIdx >= 0) {
-        cmbMaxItems->setCurrentIndex(maxIdx);
-    }
-
-    storageLayout->addWidget(lblRetentionDays, 0, 0);
-    storageLayout->addWidget(cmbRetentionDays, 0, 1);
-    storageLayout->addWidget(lblMaxItems, 1, 0);
-    storageLayout->addWidget(cmbMaxItems, 1, 1);
-
-    // 设置下拉框宽度自适应内容（sizeAdjustPolicy 仅构造时设置一次）
-    cmbRetentionDays->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    cmbMaxItems->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-    // 取两个下拉框的最大内容宽度作为统一宽度（抽取到 updateHistoryComboWidth，
-    // 便于语言切换与 DPI 变化时重新计算）
-    updateHistoryComboWidth();
-    // 第0列（标签）拉伸，第1列（下拉框）不拉伸
-    storageLayout->setColumnStretch(0, 1);
-    storageLayout->setColumnStretch(1, 0);
-
-    connect(cmbRetentionDays, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        int days = cmbRetentionDays->itemData(index).toInt();
-        HistoryManager::instance()->setRetentionDays(days);
-    });
-    connect(cmbMaxItems, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
-        int count = cmbMaxItems->itemData(index).toInt();
-        HistoryManager::instance()->setMaxItems(count);
-    });
-
-    layout->addWidget(historyStorageGroup);
-
-    // ===== 数据管理组 =====
-    historyDataGroup = new QGroupBox(tm->get("history.dataManagement.title", "Data Management"), scrollContent);
-    historyDataGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QHBoxLayout *dataLayout = new QHBoxLayout(historyDataGroup);
-
-    btnCleanHistory = new QPushButton(tm->get("history.dataManagement.cleanExpired", "Clean Expired Records"), historyDataGroup);
-    btnClearHistory = new QPushButton(tm->get("history.dataManagement.clearAll", "Clear All History"), historyDataGroup);
-
-    // 主操作按钮样式：高度更大、视觉更突出（尺寸由全局 qss #primaryButton 管理）
-    btnCleanHistory->setObjectName("primaryButton");
-    btnClearHistory->setObjectName("primaryButton");
-    btnCleanHistory->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    btnClearHistory->setStyleSheet(StyleManager::getSettingsButtonStyle());
-
-    connect(btnCleanHistory, &QPushButton::clicked, this, []() {
-        HistoryManager::instance()->cleanupExpired();
-    });
-    connect(btnClearHistory, &QPushButton::clicked, this, [this]() {
-        TranslationManager *tm = TranslationManager::instance();
-        if (MessageBox::question(this,
-                tm->get("history.dataManagement.confirmClearTitle", "Confirm Clear"),
-                tm->get("history.dataManagement.confirmClearMsg",
-                        "Are you sure you want to clear all history? This action cannot be undone."))) {
-            HistoryManager::instance()->clearAll();
-            updateHistoryStats();
-        }
-    });
-
-    dataLayout->addWidget(btnCleanHistory);
-    dataLayout->addWidget(btnClearHistory);
-
-    layout->addWidget(historyDataGroup);
-
-    // ===== 统计信息 =====
-    historyStatsGroup = new QGroupBox(tm->get("history.stats.title", "Statistics"), scrollContent);
-    historyStatsGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *statsLayout = new QVBoxLayout(historyStatsGroup);
-
-    lblHistoryStats = new QLabel(historyStatsGroup);
-    statsLayout->addWidget(lblHistoryStats);
-
-    layout->addWidget(historyStatsGroup);
-    layout->addStretch();
-
-    // 创建滚动区域
-    // 注意：不调用 setStyleSheet 设置滚动条样式，滚动条样式由全局 QSS 提供。
-    // 若用 setStyleSheet 会禁用子控件（如 QCheckBox）的原生主题绘制，
-    // 导致复选框指示器空白、对勾不显示。
-    historyScrollArea = new QScrollArea();
-    historyScrollArea->setWidget(scrollContent);
-    historyScrollArea->setWidgetResizable(true);
-    historyScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    historyScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    historyScrollArea->setFrameShape(QFrame::NoFrame);
-    // 用 QPalette 设置 viewport 背景色，避免默认背景色与选项卡背景不一致
-    QPalette viewportPal = historyScrollArea->palette();
-    viewportPal.setColor(QPalette::Window, StyleManager::getTabWidgetBgColor());
-    historyScrollArea->setPalette(viewportPal);
-    historyScrollArea->setAutoFillBackground(true);
-
-    // 创建历史记录选项卡容器
-    // 用 #objectName 选择器设背景色，只匹配 tab 根容器自身，不影响子控件原生渲染
-    m_historyTab = new QWidget();
-    m_historyTab->setObjectName("historyTabBg");
-    m_historyTab->setStyleSheet(QString("#historyTabBg { background-color: %1; }").arg(StyleManager::getTabWidgetBgColor().name()));
-    QVBoxLayout *historyTabLayout = new QVBoxLayout(m_historyTab);
-    historyTabLayout->setContentsMargins(0, 0, 0, 0);
-    historyTabLayout->setSpacing(0);
-    historyTabLayout->addWidget(historyScrollArea);
-
-    tabWidget->addTab(m_historyTab, tm->get("history.tabName", "History"));
-
-    updateHistoryStats();
+    m_historyTabWidget = new SettingsHistoryTab(this);
+    tabWidget->addTab(m_historyTabWidget, TranslationManager::instance()->get("history.tabName", "History"));
 }
 
 /**
@@ -2532,11 +2319,8 @@ void SettingsWindow::updateAllGroupBoxStyles() {
     if (m_shortcutGroupAnnotation) m_shortcutGroupAnnotation->setStyleSheet(style);
     if (m_shortcutGroupPinWindow) m_shortcutGroupPinWindow->setStyleSheet(style);
 
-    // History 历史记录选项卡
-    if (historyRecordGroup) historyRecordGroup->setStyleSheet(style);
-    if (historyStorageGroup) historyStorageGroup->setStyleSheet(style);
-    if (historyDataGroup) historyDataGroup->setStyleSheet(style);
-    if (historyStatsGroup) historyStatsGroup->setStyleSheet(style);
+    // History 历史记录选项卡（样式刷新内聚在 SettingsHistoryTab）
+    if (m_historyTabWidget) m_historyTabWidget->refreshStyles();
 
     // About 关于选项卡（GroupBox 样式刷新内聚在 SettingsAboutTab）
     if (m_aboutTab) m_aboutTab->refreshStyles();
@@ -2547,22 +2331,10 @@ void SettingsWindow::updateAllGroupBoxStyles() {
  * @param color 新的背景色（通常是 StyleManager::getTabWidgetBgColor()）
  *
  * 历史记录选项卡用 QPalette 设背景（避免 setStyleSheet 禁用子控件原生渲染），
- * 每次改颜色时需重新设置 m_historyScrollContent 和 historyScrollArea->viewport() 的调色板。
+ * 每次改颜色时需重新设置选项卡滚动内容与 viewport 的调色板（内聚在
+ * SettingsHistoryTab::applyTabBackground）。
  * @author chiangyang
  */
-void SettingsWindow::updateHistoryTabPalette(const QColor &color) {
-    if (m_historyScrollContent) {
-        QPalette pal = m_historyScrollContent->palette();
-        pal.setColor(QPalette::Window, color);
-        m_historyScrollContent->setPalette(pal);
-    }
-    if (historyScrollArea) {
-        QPalette vpPal = historyScrollArea->palette();
-        vpPal.setColor(QPalette::Window, color);
-        historyScrollArea->setPalette(vpPal);
-    }
-}
-
 /**
  * @brief 刷新常规/翻译/历史记录三个选项卡根容器的背景色
  * @param color 新的背景色（通常是 StyleManager::getTabWidgetBgColor()）
@@ -2581,8 +2353,8 @@ void SettingsWindow::updateAllTabsPalette(const QColor &color) {
     if (m_translateTab) {
         m_translateTab->setStyleSheet(QString("#translateTabBg { %1 }").arg(style));
     }
-    if (m_historyTab) {
-        m_historyTab->setStyleSheet(QString("#historyTabBg { %1 }").arg(style));
+    if (m_historyTabWidget) {
+        m_historyTabWidget->applyTabBackground(color);
     }
     // 快捷键选项卡：外层容器 + 滚动内容容器同步更新
     if (m_shortcutsScrollArea) {
@@ -2601,34 +2373,6 @@ void SettingsWindow::updateAllTabsPalette(const QColor &color) {
  * @brief 更新历史统计信息
  * @author chiangyang
  */
-void SettingsWindow::updateHistoryStats() {
-    if (!lblHistoryStats) return;
-
-    HistoryManager *manager = HistoryManager::instance();
-    TranslationManager *tm = TranslationManager::instance();
-
-    int screenshotCount = manager->getItemCount(HistoryType::Screenshot);
-    int textCount = manager->getItemCount(HistoryType::ClipboardText);
-    qint64 storageSize = manager->getStorageSize();
-
-    QString sizeStr;
-    if (storageSize < 1024) {
-        sizeStr = QString("%1 B").arg(storageSize);
-    } else if (storageSize < 1024 * 1024) {
-        sizeStr = QString("%1 KB").arg(storageSize / 1024.0, 0, 'f', 1);
-    } else {
-        sizeStr = QString("%1 MB").arg(storageSize / (1024.0 * 1024.0), 0, 'f', 1);
-    }
-
-    lblHistoryStats->setText(QString("%1: %2 %3\n%4: %5 %3\n%6: %7")
-                                 .arg(tm->get("history.stats.screenshots", "Screenshots"))
-                                 .arg(screenshotCount)
-                                 .arg(tm->get("history.stats.items", "items"))
-                                 .arg(tm->get("history.stats.texts", "Texts"))
-                                 .arg(textCount)
-                                 .arg(tm->get("history.stats.storage", "Storage Used"))
-                                 .arg(sizeStr));
-}
 
 bool SettingsWindow::eventFilter(QObject *obj, QEvent *event) {
     // 处理拖动相关事件
@@ -2663,8 +2407,8 @@ bool SettingsWindow::eventFilter(QObject *obj, QEvent *event) {
             scrollArea = m_shortcutsScrollArea;
         } else if (currentIndex == 2 && styleScrollArea) {
             scrollArea = styleScrollArea;
-        } else if (currentIndex == 4 && historyScrollArea) {
-            scrollArea = historyScrollArea;
+        } else if (currentIndex == 4 && m_historyTabWidget) {
+            scrollArea = m_historyTabWidget->scrollArea();
         }
 
         if (scrollArea) {
