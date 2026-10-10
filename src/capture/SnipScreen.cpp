@@ -10,6 +10,7 @@
 #include "../history/HistoryManager.h"
 #include "../shortcut/AnnotationShortcutController.h"
 #include "../ocr/OcrEngine.h"
+#include "../ocr/OcrAsyncHelper.h"
 #include "../ocr/OcrResultDialog.h"
 #include "../translate/TranslateService.h"
 #include "../widgets/TranslateOverlayWindow.h"
@@ -29,8 +30,6 @@
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QTimer>
-#include <QtConcurrent>
-#include <QFutureWatcher>
 #include <memory>
 
 #ifdef Q_OS_WIN
@@ -1165,60 +1164,23 @@ void SnipScreen::updateInputMask() {
 void SnipScreen::performOcr(const QPixmap &pixmap) {
     if (pixmap.isNull()) return;
 
-    TranslationManager *tm = TranslationManager::instance();
     QRect sel = m_selector->selected();
-
-    // 在选区正中创建加载提示标签
     // 提示标签是 SnipScreen 的子控件，move() 使用父相对坐标，需从全局坐标转换
     QRect localSel = sel.translated(-m_virtualGeometry.topLeft());
-    auto centerInSelection = [this, localSel](QWidget *w) {
-        w->adjustSize();
-        int x = localSel.x() + (localSel.width() - w->width()) / 2;
-        int y = localSel.y() + (localSel.height() - w->height()) / 2;
-        w->move(x, y);
-    };
 
-    QLabel *loadingLabel = new QLabel(tm->get("ocr.recognizing"), this);
-    loadingLabel->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-    loadingLabel->setAlignment(Qt::AlignCenter);
-    centerInSelection(loadingLabel);
-    loadingLabel->show();
-
-    // 异步执行 OCR
-    auto *watcher = new QFutureWatcher<OcrEngine::OcrResult>(this);
-    connect(watcher, &QFutureWatcher<OcrEngine::OcrResult>::finished, this, [this, watcher, loadingLabel, sel, centerInSelection]() {
-        loadingLabel->hide();
-        loadingLabel->deleteLater();
-
-        OcrEngine::OcrResult result = watcher->result();
-        if (result.texts.isEmpty()) {
-            TranslationManager *tm = TranslationManager::instance();
-            QLabel *noText = new QLabel(tm->get("ocr.noText"), this);
-            noText->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-            noText->setAlignment(Qt::AlignCenter);
-            centerInSelection(noText);
-            noText->show();
-            QTimer::singleShot(2000, noText, &QWidget::deleteLater);
-        } else {
-            auto *dialog = new OcrResultDialog(result);
-            // 将弹框居中在选区（弹框是独立窗口，使用全局坐标）
-            dialog->adjustSize();
-            int dx = sel.x() + (sel.width() - dialog->width()) / 2;
-            int dy = sel.y() + (sel.height() - dialog->height()) / 2;
-            dialog->move(dx, dy);
-            dialog->show();
-        }
-        watcher->deleteLater();
-
+    OcrAsync::run(this, pixmap.toImage(), localSel, false,
+                  [this, sel](const OcrEngine::OcrResult &result) {
         // OCR 识别结束后释放模型资源，下次识别时重新初始化
         OcrEngine::instance()->release();
-    });
 
-    QImage image = pixmap.toImage();
-    QFuture<OcrEngine::OcrResult> future = QtConcurrent::run([image]() {
-        return OcrEngine::instance()->recognize(image);
+        auto *dialog = new OcrResultDialog(result);
+        // 将弹框居中在选区（弹框是独立窗口，使用全局坐标）
+        dialog->adjustSize();
+        int dx = sel.x() + (sel.width() - dialog->width()) / 2;
+        int dy = sel.y() + (sel.height() - dialog->height()) / 2;
+        dialog->move(dx, dy);
+        dialog->show();
     });
-    watcher->setFuture(future);
 }
 
 // ============================================================
@@ -1243,53 +1205,16 @@ void SnipScreen::performTranslate() {
         return;
     }
 
-    TranslationManager *tm = TranslationManager::instance();
     QRect sel = m_selector->selected();
     QRect localSel = sel.translated(-m_virtualGeometry.topLeft());
 
-    // 居中辅助函数：将控件居中在选区内
-    auto centerInSelection = [this, localSel](QWidget *w) {
-        w->adjustSize();
-        int x = localSel.x() + (localSel.width() - w->width()) / 2;
-        int y = localSel.y() + (localSel.height() - w->height()) / 2;
-        w->move(x, y);
-    };
-
-    // 3. 显示"识别中"加载提示
-    QLabel *loadingLabel = new QLabel(tm->get("ocr.recognizing"), this);
-    loadingLabel->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-    loadingLabel->setAlignment(Qt::AlignCenter);
-    centerInSelection(loadingLabel);
-    loadingLabel->show();
-
     LOG_INFO("[SnipScreen] Translate requested, starting OCR");
 
-    // 4. 异步执行 OCR 识别
-    auto *watcher = new QFutureWatcher<OcrEngine::OcrResult>(this);
-    connect(watcher, &QFutureWatcher<OcrEngine::OcrResult>::finished, this,
-            [this, watcher, loadingLabel, pixmap, sel, centerInSelection]() {
-        loadingLabel->hide();
-        loadingLabel->deleteLater();
-
-        OcrEngine::OcrResult result = watcher->result();
-        // 释放 OCR 模型资源，下次识别时重新初始化
-        OcrEngine::instance()->release();
-
-        if (result.texts.isEmpty()) {
-            // 无识别文本
-            QLabel *noText = new QLabel(TranslationManager::instance()->get("ocr.noText"), this);
-            noText->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-            noText->setAlignment(Qt::AlignCenter);
-            centerInSelection(noText);
-            noText->show();
-            QTimer::singleShot(2000, noText, &QWidget::deleteLater);
-            watcher->deleteLater();
-            return;
-        }
-
-        // 5. 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
+    // 3. 异步 OCR（识别完成即释放模型）→ 批量翻译显示译文叠加窗口
+    OcrAsync::run(this, pixmap.toImage(), localSel, true,
+                  [this, pixmap, sel, localSel](const OcrEngine::OcrResult &result) {
+        // 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
         //    翻译成功显示 Overlay 后退出截图框（类似贴图完成后销毁截图框和工具栏）
-        QRect localSel = sel.translated(-m_virtualGeometry.topLeft());
         TranslateOverlayWindow::translateAndShow(
             this, pixmap, result.texts, result.polygons,
             QPoint(sel.x(), sel.y()), localSel,
@@ -1297,15 +1222,7 @@ void SnipScreen::performTranslate() {
 
         LOG_INFO(QString("[SnipScreen] OCR done, %1 segments, starting batch translation")
                      .arg(result.texts.size()));
-
-        watcher->deleteLater();
     });
-
-    QImage image = pixmap.toImage();
-    QFuture<OcrEngine::OcrResult> future = QtConcurrent::run([image]() {
-        return OcrEngine::instance()->recognize(image);
-    });
-    watcher->setFuture(future);
 }
 
 // ============================================================

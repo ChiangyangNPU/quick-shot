@@ -233,6 +233,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/utils/Utils.h
         src/ocr/OcrEngine.cpp
         src/ocr/OcrEngine.h
+        src/ocr/OcrAsyncHelper.cpp
+        src/ocr/OcrAsyncHelper.h
         src/ocr/OcrPreprocess.cpp
         src/ocr/OcrPreprocess.h
         src/ocr/OcrDetPostprocess.cpp

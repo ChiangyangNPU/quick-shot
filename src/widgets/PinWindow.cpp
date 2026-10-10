@@ -8,6 +8,7 @@
 #include "../capture/Annotation.h"
 #include "../shortcut/AnnotationShortcutController.h"
 #include "../ocr/OcrEngine.h"
+#include "../ocr/OcrAsyncHelper.h"
 #include "../ocr/OcrResultDialog.h"
 #include "../translate/TranslateService.h"
 #include "TranslateOverlayWindow.h"
@@ -24,8 +25,6 @@
 #include <QVBoxLayout>
 #include <QCheckBox>
 #include <QShortcut>
-#include <QtConcurrent>
-#include <QFutureWatcher>
 #include <memory>
 #include <cmath>
 #include <QApplication>
@@ -92,7 +91,7 @@ int PinWindow::instanceCount() {
 }
 
 PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
-    : QWidget(parent), m_pixmap(pixmap), m_isMoving(false), m_isResizing(false), m_ocrLoadingLabel(nullptr) {
+    : QWidget(parent), m_pixmap(pixmap), m_isMoving(false), m_isResizing(false) {
     s_instances.insert(this);  // 加入注册表，供 toggleAll 统一显隐
     LOG_INFO(QString("PinWindow instance created, pixmap px: %1x%2 (geometry set by caller after setScreen)")
              .arg(pixmap.width()).arg(pixmap.height()));
@@ -452,55 +451,16 @@ void PinWindow::contextMenuEvent(QContextMenuEvent *event) {
 
     // 添加 OCR 菜单项
     QAction *ocrAction = menu.addAction(tm->get("ocr.button"));
-    connect(ocrAction, &QAction::triggered, this, [this, tm]() {
-        // 显示加载提示
-        if (m_ocrLoadingLabel) {
-            m_ocrLoadingLabel->hide();
-            m_ocrLoadingLabel->deleteLater();
-        }
-        m_ocrLoadingLabel = new QLabel(tm->get("ocr.recognizing"), this);
-        m_ocrLoadingLabel->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-        m_ocrLoadingLabel->setAlignment(Qt::AlignCenter);
-        m_ocrLoadingLabel->adjustSize();
-        m_ocrLoadingLabel->move((width() - m_ocrLoadingLabel->width()) / 2, (height() - m_ocrLoadingLabel->height()) / 2);
-        m_ocrLoadingLabel->show();
-
-        // 异步执行 OCR
-        auto *watcher = new QFutureWatcher<OcrEngine::OcrResult>(this);
-        connect(watcher, &QFutureWatcher<OcrEngine::OcrResult>::finished, this, [this, watcher, tm]() {
-            if (m_ocrLoadingLabel) {
-                m_ocrLoadingLabel->hide();
-                m_ocrLoadingLabel->deleteLater();
-                m_ocrLoadingLabel = nullptr;
-            }
-
-            OcrEngine::OcrResult result = watcher->result();
-            if (result.texts.isEmpty()) {
-                QLabel *noText = new QLabel(tm->get("ocr.noText"), this);
-                // padding 用 em、font-size 用 pt，随屏幕 DPI 自动缩放
-                noText->setStyleSheet(
-                    "QLabel { background-color: rgba(0,0,0,180); color: white; "
-                    "padding: 0.6em 1em; border-radius: 3px; font-size: 10pt; }");
-                noText->setAlignment(Qt::AlignCenter);
-                noText->adjustSize();
-                noText->move((width() - noText->width()) / 2, (height() - noText->height()) / 2);
-                noText->show();
-                QTimer::singleShot(2000, noText, &QWidget::deleteLater);
-            } else {
-                auto *dialog = new OcrResultDialog(result);
-                dialog->adjustSize();
-                dialog->move(x() + (width() - dialog->width()) / 2,
-                             y() + (height() - dialog->height()) / 2);
-                dialog->show();
-            }
-            watcher->deleteLater();
+    connect(ocrAction, &QAction::triggered, this, [this]() {
+        // 异步 OCR：加载提示/无文本提示由公共助手处理，弹框居中在贴图窗口
+        OcrAsync::run(this, m_pixmap.toImage(), QRect(), false,
+                      [this](const OcrEngine::OcrResult &result) {
+            auto *dialog = new OcrResultDialog(result);
+            dialog->adjustSize();
+            dialog->move(x() + (width() - dialog->width()) / 2,
+                         y() + (height() - dialog->height()) / 2);
+            dialog->show();
         });
-
-        QImage image = m_pixmap.toImage();
-        QFuture<OcrEngine::OcrResult> future = QtConcurrent::run([image]() {
-            return OcrEngine::instance()->recognize(image);
-        });
-        watcher->setFuture(future);
     });
 
     // 添加翻译菜单项
@@ -609,65 +569,19 @@ void PinWindow::performTranslate() {
         return;
     }
 
-    TranslationManager *tm = TranslationManager::instance();
-
-    // 显示"识别中"加载提示（居中在 PinWindow）
-    if (m_ocrLoadingLabel) {
-        m_ocrLoadingLabel->hide();
-        m_ocrLoadingLabel->deleteLater();
-    }
-    m_ocrLoadingLabel = new QLabel(tm->get("ocr.recognizing"), this);
-    m_ocrLoadingLabel->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-    m_ocrLoadingLabel->setAlignment(Qt::AlignCenter);
-    m_ocrLoadingLabel->adjustSize();
-    m_ocrLoadingLabel->move((width() - m_ocrLoadingLabel->width()) / 2,
-                            (height() - m_ocrLoadingLabel->height()) / 2);
-    m_ocrLoadingLabel->show();
-
     LOG_INFO("PinWindow: Translate requested, starting OCR");
 
-    // 异步执行 OCR 识别
-    auto *watcher = new QFutureWatcher<OcrEngine::OcrResult>(this);
-    connect(watcher, &QFutureWatcher<OcrEngine::OcrResult>::finished, this, [this, watcher]() {
-        if (m_ocrLoadingLabel) {
-            m_ocrLoadingLabel->hide();
-            m_ocrLoadingLabel->deleteLater();
-            m_ocrLoadingLabel = nullptr;
-        }
-
-        OcrEngine::OcrResult result = watcher->result();
-        // 释放 OCR 模型资源，下次识别时重新初始化
-        OcrEngine::instance()->release();
-
-        if (result.texts.isEmpty()) {
-            // 无识别文本
-            QLabel *noText = new QLabel(TranslationManager::instance()->get("ocr.noText"), this);
-            noText->setStyleSheet(StyleManager::getOcrLoadingLabelStyle());
-            noText->setAlignment(Qt::AlignCenter);
-            noText->adjustSize();
-            noText->move((width() - noText->width()) / 2, (height() - noText->height()) / 2);
-            noText->show();
-            QTimer::singleShot(2000, noText, &QWidget::deleteLater);
-            watcher->deleteLater();
-            return;
-        }
-
-        // 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
+    // 异步 OCR（识别完成即释放模型）→ 批量翻译并显示译文叠加窗口
+    // （封装了标签提示、信号连接、错误处理）
+    OcrAsync::run(this, m_pixmap.toImage(), QRect(), true,
+                  [this](const OcrEngine::OcrResult &result) {
         TranslateOverlayWindow::translateAndShow(
             this, m_pixmap, result.texts, result.polygons,
             pos(), rect());
 
         LOG_INFO(QString("PinWindow: OCR done, %1 segments, starting batch translation")
                      .arg(result.texts.size()));
-
-        watcher->deleteLater();
     });
-
-    QImage image = m_pixmap.toImage();
-    QFuture<OcrEngine::OcrResult> future = QtConcurrent::run([image]() {
-        return OcrEngine::instance()->recognize(image);
-    });
-    watcher->setFuture(future);
 }
 
 // ============================================================

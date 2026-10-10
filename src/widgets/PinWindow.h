@@ -167,7 +167,6 @@ private:
     QPoint m_dragPosition;      ///< 拖拽起始位置
     bool m_isMoving;            ///< 是否正在移动
     bool m_isResizing;          ///< 是否正在调整大小
-    QLabel *m_ocrLoadingLabel; ///< OCR 识别中的加载提示标签
 
     // ---------- 标注相关 ----------
     PinAnnotationToolBar *m_toolBar = nullptr;   ///< 标注工具栏（独立顶层窗口）
