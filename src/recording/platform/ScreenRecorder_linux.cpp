@@ -163,4 +163,25 @@ void screenRecorderImplSetAudioDevice(int index) {
     Q_UNUSED(index);
 }
 
+/**
+ * @brief 设置系统音频录制开关
+ *
+ * SnipScreen 无条件调用（Linux 链接需要此符号）。
+ * 音频捕获待 Linux 录屏实现（编码器）时一并接入。
+ * @param enabled 是否启用
+ * @author chiangyang
+ */
+void ScreenRecorder::setAudioEnabled(bool enabled) {
+    m_impl->systemAudioEnabled = enabled;
+}
+
+/**
+ * @brief 设置麦克风录制开关
+ * @param enabled 是否启用
+ * @author chiangyang
+ */
+void ScreenRecorder::setMicrophoneEnabled(bool enabled) {
+    m_impl->microphoneEnabled = enabled;
+}
+
 #endif // Q_OS_LINUX
