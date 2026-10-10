@@ -120,6 +120,23 @@ private:
     Qt::CursorShape cursorForEdge(ResizeEdge edge) const;
 
     /**
+     * @brief 依据当前全局鼠标位置计算调整后的窗口几何（含最小尺寸钳制）。
+     *        mouseMoveEvent 与 eventFilter 两条拖拽路径共用此实现。
+     * @param globalPos 当前全局鼠标位置
+     * @return 调整后的几何
+     * @author chiangyang
+     */
+    QRect resizedGeometry(const QPoint &globalPos) const;
+
+    /**
+     * @brief 依据当前全局鼠标位置拖动窗口。
+     *        mouseMoveEvent 与 eventFilter 两条拖拽路径共用此实现。
+     * @param globalPos 当前全局鼠标位置
+     * @author chiangyang
+     */
+    void applyDrag(const QPoint &globalPos);
+
+    /**
      * @brief 设置 UI 布局
      * @author chiangyang
      */

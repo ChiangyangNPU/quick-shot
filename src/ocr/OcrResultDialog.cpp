@@ -51,66 +51,11 @@ OcrResultDialog::OcrResultDialog(const OcrEngine::OcrResult &result, QWidget *pa
     : QWidget(parent) {
     LOG_INFO("OcrResultDialog: Creating dialog");
 
-    // 按 Y 坐标合并同行文本：同行用空格，跨行用换行
-    if (result.texts.isEmpty()) {
-        m_fullText.clear();
-    } else if (result.texts.size() == 1) {
-        m_fullText = result.texts.first();
-    } else {
-        // 计算每个区域的中心 Y 坐标
-        struct TextItem { QString text; float cy; float cx; };
-        QVector<TextItem> items;
-        for (int i = 0; i < result.texts.size(); ++i) {
-            float cy = 0, cx = 0;
-            if (i < result.polygons.size() && !result.polygons[i].isEmpty()) {
-                for (const auto &pt : result.polygons[i]) {
-                    cx += pt.x();
-                    cy += pt.y();
-                }
-                cx /= result.polygons[i].size();
-                cy /= result.polygons[i].size();
-            }
-            items.append({result.texts[i], cy, cx});
-        }
-
-        // 按 Y 排序，同行（Y 差距小于行高阈值）的按 X 排序
-        float avgHeight = 0;
-        for (int i = 0; i < items.size(); ++i) {
-            if (i < result.polygons.size() && result.polygons[i].size() >= 2) {
-                float minY = 1e9, maxY = -1e9;
-                for (const auto &pt : result.polygons[i]) {
-                    minY = qMin(minY, (float)pt.y());
-                    maxY = qMax(maxY, (float)pt.y());
-                }
-                avgHeight += (maxY - minY);
-            }
-        }
-        avgHeight /= qMax(1, (int)items.size());
-        float lineThreshold = avgHeight * 0.6f; // 同行判定阈值
-
-        // 简单的行合并：遍历排序后的 items，Y 差距小则同行
-        std::sort(items.begin(), items.end(), [](const TextItem &a, const TextItem &b) {
-            return a.cy < b.cy || (a.cy == b.cy && a.cx < b.cx);
-        });
-
-        QStringList lines;
-        QString currentLine = items[0].text;
-        float currentY = items[0].cy;
-
-        for (int i = 1; i < items.size(); ++i) {
-            if (qAbs(items[i].cy - currentY) < lineThreshold) {
-                // 同行，用空格连接
-                currentLine += " " + items[i].text;
-            } else {
-                // 换行
-                lines.append(currentLine);
-                currentLine = items[i].text;
-                currentY = items[i].cy;
-            }
-        }
-        lines.append(currentLine);
-        m_fullText = lines.join("\n");
-    }
+    // 文本分行直接信任 OcrDetPostprocess::mergeBoxes 的行级合并结果：
+    // result.texts 与行级检测框一一对应（已按 行序→行内X序 排列），
+    // 此处按行连接即可。此前此处还有一遍按质心 Y 的二次行合并（阈值 0.6），
+    // 与后处理的 0.5 阈值不一致，且可能把紧凑相邻的两行误并成一行，已删除。
+    m_fullText = result.texts.join('\n');
 
     setupUi();
     retranslateUi();
@@ -295,62 +240,80 @@ void OcrResultDialog::mousePressEvent(QMouseEvent *event) {
 }
 
 /**
+ * @brief 依据当前全局鼠标位置计算调整后的窗口几何（含最小尺寸钳制）
+ * @param globalPos 当前全局鼠标位置
+ * @return 调整后的几何
+ * @author chiangyang
+ */
+QRect OcrResultDialog::resizedGeometry(const QPoint &globalPos) const {
+    QPoint delta = globalPos - m_resizeStartPos;
+    QRect geo = m_startGeometry;
+
+    switch (m_resizeEdge) {
+    case ResizeEdge::Left:
+        geo.setLeft(geo.left() + delta.x());
+        break;
+    case ResizeEdge::Right:
+        geo.setRight(geo.right() + delta.x());
+        break;
+    case ResizeEdge::Top:
+        geo.setTop(geo.top() + delta.y());
+        break;
+    case ResizeEdge::Bottom:
+        geo.setBottom(geo.bottom() + delta.y());
+        break;
+    case ResizeEdge::TopLeft:
+        geo.setTopLeft(geo.topLeft() + delta);
+        break;
+    case ResizeEdge::TopRight:
+        geo.setTopRight(geo.topRight() + delta);
+        break;
+    case ResizeEdge::BottomLeft:
+        geo.setBottomLeft(geo.bottomLeft() + delta);
+        break;
+    case ResizeEdge::BottomRight:
+        geo.setBottomRight(geo.bottomRight() + delta);
+        break;
+    default:
+        break;
+    }
+
+    // 确保不小于最小尺寸
+    if (geo.width() < minimumWidth()) {
+        if (m_resizeEdge == ResizeEdge::Left || m_resizeEdge == ResizeEdge::TopLeft || m_resizeEdge == ResizeEdge::BottomLeft)
+            geo.setLeft(geo.right() - minimumWidth());
+        else
+            geo.setRight(geo.left() + minimumWidth());
+    }
+    if (geo.height() < minimumHeight()) {
+        if (m_resizeEdge == ResizeEdge::Top || m_resizeEdge == ResizeEdge::TopLeft || m_resizeEdge == ResizeEdge::TopRight)
+            geo.setTop(geo.bottom() - minimumHeight());
+        else
+            geo.setBottom(geo.top() + minimumHeight());
+    }
+
+    return geo;
+}
+
+/**
+ * @brief 依据当前全局鼠标位置拖动窗口
+ * @param globalPos 当前全局鼠标位置
+ * @author chiangyang
+ */
+void OcrResultDialog::applyDrag(const QPoint &globalPos) {
+    move(m_widgetStartPos + (globalPos - m_dragStartPos));
+}
+
+/**
  * @brief 鼠标移动事件，用于拖动窗口或调整大小
  * @param event 鼠标事件
  * @author chiangyang
  */
 void OcrResultDialog::mouseMoveEvent(QMouseEvent *event) {
     if (m_isResizing && (event->buttons() & Qt::LeftButton)) {
-        QPoint delta = event->globalPosition().toPoint() - m_resizeStartPos;
-        QRect geo = m_startGeometry;
-
-        switch (m_resizeEdge) {
-        case ResizeEdge::Left:
-            geo.setLeft(geo.left() + delta.x());
-            break;
-        case ResizeEdge::Right:
-            geo.setRight(geo.right() + delta.x());
-            break;
-        case ResizeEdge::Top:
-            geo.setTop(geo.top() + delta.y());
-            break;
-        case ResizeEdge::Bottom:
-            geo.setBottom(geo.bottom() + delta.y());
-            break;
-        case ResizeEdge::TopLeft:
-            geo.setTopLeft(geo.topLeft() + delta);
-            break;
-        case ResizeEdge::TopRight:
-            geo.setTopRight(geo.topRight() + delta);
-            break;
-        case ResizeEdge::BottomLeft:
-            geo.setBottomLeft(geo.bottomLeft() + delta);
-            break;
-        case ResizeEdge::BottomRight:
-            geo.setBottomRight(geo.bottomRight() + delta);
-            break;
-        default:
-            break;
-        }
-
-        // 确保不小于最小尺寸
-        if (geo.width() < minimumWidth()) {
-            if (m_resizeEdge == ResizeEdge::Left || m_resizeEdge == ResizeEdge::TopLeft || m_resizeEdge == ResizeEdge::BottomLeft)
-                geo.setLeft(geo.right() - minimumWidth());
-            else
-                geo.setRight(geo.left() + minimumWidth());
-        }
-        if (geo.height() < minimumHeight()) {
-            if (m_resizeEdge == ResizeEdge::Top || m_resizeEdge == ResizeEdge::TopLeft || m_resizeEdge == ResizeEdge::TopRight)
-                geo.setTop(geo.bottom() - minimumHeight());
-            else
-                geo.setBottom(geo.top() + minimumHeight());
-        }
-
-        setGeometry(geo);
+        setGeometry(resizedGeometry(event->globalPosition().toPoint()));
     } else if (m_isDragging && (event->buttons() & Qt::LeftButton)) {
-        QPoint delta = event->globalPosition().toPoint() - m_dragStartPos;
-        move(m_widgetStartPos + delta);
+        applyDrag(event->globalPosition().toPoint());
     } else {
         // 更新光标形状
         ResizeEdge edge = edgeAt(event->position().toPoint());
@@ -591,39 +554,9 @@ bool OcrResultDialog::eventFilter(QObject *obj, QEvent *event) {
             // 如果正在拖动或调整大小，继续处理
             if ((m_isResizing || m_isDragging) && (mouseEvent->buttons() & Qt::LeftButton)) {
                 if (m_isResizing) {
-                    QPoint delta = mouseEvent->globalPosition().toPoint() - m_resizeStartPos;
-                    QRect geo = m_startGeometry;
-
-                    switch (m_resizeEdge) {
-                    case ResizeEdge::Left: geo.setLeft(geo.left() + delta.x()); break;
-                    case ResizeEdge::Right: geo.setRight(geo.right() + delta.x()); break;
-                    case ResizeEdge::Top: geo.setTop(geo.top() + delta.y()); break;
-                    case ResizeEdge::Bottom: geo.setBottom(geo.bottom() + delta.y()); break;
-                    case ResizeEdge::TopLeft: geo.setTopLeft(geo.topLeft() + delta); break;
-                    case ResizeEdge::TopRight: geo.setTopRight(geo.topRight() + delta); break;
-                    case ResizeEdge::BottomLeft: geo.setBottomLeft(geo.bottomLeft() + delta); break;
-                    case ResizeEdge::BottomRight: geo.setBottomRight(geo.bottomRight() + delta); break;
-                    default: break;
-                    }
-
-                    // 确保不小于最小尺寸
-                    if (geo.width() < minimumWidth()) {
-                        if (m_resizeEdge == ResizeEdge::Left || m_resizeEdge == ResizeEdge::TopLeft || m_resizeEdge == ResizeEdge::BottomLeft)
-                            geo.setLeft(geo.right() - minimumWidth());
-                        else
-                            geo.setRight(geo.left() + minimumWidth());
-                    }
-                    if (geo.height() < minimumHeight()) {
-                        if (m_resizeEdge == ResizeEdge::Top || m_resizeEdge == ResizeEdge::TopLeft || m_resizeEdge == ResizeEdge::TopRight)
-                            geo.setTop(geo.bottom() - minimumHeight());
-                        else
-                            geo.setBottom(geo.top() + minimumHeight());
-                    }
-
-                    setGeometry(geo);
-                } else if (m_isDragging) {
-                    QPoint delta = mouseEvent->globalPosition().toPoint() - m_dragStartPos;
-                    move(m_widgetStartPos + delta);
+                    setGeometry(resizedGeometry(mouseEvent->globalPosition().toPoint()));
+                } else {
+                    applyDrag(mouseEvent->globalPosition().toPoint());
                 }
 
                 return true; // 拦截事件
