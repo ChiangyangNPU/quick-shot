@@ -75,6 +75,25 @@ static void raiseWindowAboveMenuBar(WId wid) {
 SnipScreen::SnipScreen(QWidget *parent)
     : QWidget(parent)
 {
+    initWindowFlags();
+    createComponents();
+    setupAnnotationHost();
+    initScreenWatchTimer();
+    connectTranslationSignals();
+    connectRecordingSignals();
+    connectSelectorSignals();
+    connectToolbarSignals();
+    connectRecordingToolbarSignals();
+    connectToolbarStyleSignals();
+    initAnnotationShortcuts();
+}
+
+// ============================================================
+// 构造阶段：窗口标志
+// ============================================================
+
+void SnipScreen::initWindowFlags()
+{
 #ifdef Q_OS_MACOS
     // macOS Sidecar/AirPlay 副屏不支持跨多屏的透明窗口：
     // 单屏窗口 + 不透明背景，
@@ -87,7 +106,14 @@ SnipScreen::SnipScreen(QWidget *parent)
     // 背景透明，让截图作为背景绘制
     setAttribute(Qt::WA_TranslucentBackground);
 #endif
+}
 
+// ============================================================
+// 构造阶段：核心组件创建
+// ============================================================
+
+void SnipScreen::createComponents()
+{
     // 创建选区组件，注入 Hunter 检测器
     m_selector = new Selector(&m_hunter, this);
     m_selector->installEventFilter(this);  // 安装事件过滤器，拦截鼠标事件
@@ -106,7 +132,14 @@ SnipScreen::SnipScreen(QWidget *parent)
 
     // 创建录屏器
     m_screenRecorder = new ScreenRecorder(this);
+}
 
+// ============================================================
+// 构造阶段：标注交互 Host 装配
+// ============================================================
+
+void SnipScreen::setupAnnotationHost()
+{
     // 创建标注交互处理器，注入 SnipScreen 特有的 Host 回调
     m_annotationHandler = std::make_unique<AnnotationInteractionHandler>();
     AnnotationInteractionHandler::Host host;
@@ -140,21 +173,42 @@ SnipScreen::SnipScreen(QWidget *parent)
     host.setCursor = [this](Qt::CursorShape s) { m_selector->setCursor(s); };
     host.setBareKeysEnabled = [this](bool e) { if (m_annotationController) m_annotationController->setBareKeysEnabled(e); };
     m_annotationHandler->setHost(std::move(host));
+}
 
+// ============================================================
+// 构造阶段：macOS 副屏监视定时器
+// ============================================================
+
+void SnipScreen::initScreenWatchTimer()
+{
 #ifdef Q_OS_MACOS
     // macOS 单屏窗口模式：轮询鼠标位置，跨屏时自动切换窗口到鼠标所在屏
     m_screenWatchTimer = new QTimer(this);
     m_screenWatchTimer->setInterval(30);
     connect(m_screenWatchTimer, &QTimer::timeout, this, &SnipScreen::checkScreenSwitch);
 #endif
+}
 
+// ============================================================
+// 构造阶段：信号连接
+// ============================================================
+
+void SnipScreen::connectTranslationSignals()
+{
     // 语言切换时更新工具栏文字
     connect(TranslationManager::instance(), &TranslationManager::languageChanged,
             [this](const QString &) {
         m_toolbar->retranslateUi();
         m_recordingToolbar->retranslateUi();
     });
+}
 
+// ============================================================
+// 构造阶段：录制控制栏 / 录制器信号
+// ============================================================
+
+void SnipScreen::connectRecordingSignals()
+{
     // 录制控制信号连接
     connect(m_recordingControl, &RecordingControlWindow::startRequested, [this]() {
         QRect selection = m_selector->selected();
@@ -246,7 +300,14 @@ SnipScreen::SnipScreen(QWidget *parent)
         // 录制出错，重新启用截图按钮
         m_recordingToolbar->setScreenshotButtonEnabled(true);
     });
+}
 
+// ============================================================
+// 构造阶段：选区信号
+// ============================================================
+
+void SnipScreen::connectSelectorSignals()
+{
     // 选区信号连接
     // 选区开始时隐藏工具栏，重置标注状态
     connect(m_selector, &Selector::selecting, [this]() {
@@ -267,7 +328,14 @@ SnipScreen::SnipScreen(QWidget *parent)
 
     // 用户右键取消选区 → 退出截图
     connect(m_selector, &Selector::stopped, this, &SnipScreen::exit);
+}
 
+// ============================================================
+// 构造阶段：截图工具栏信号
+// ============================================================
+
+void SnipScreen::connectToolbarSignals()
+{
     // 工具栏标注工具信号连接
     connect(m_toolbar, &ScreenshotToolBar::toolSelected, [this](int toolId) {
         // ToolId 和 AnnotationType 从 0 开始，直接映射
@@ -319,7 +387,14 @@ SnipScreen::SnipScreen(QWidget *parent)
     connect(m_toolbar, &ScreenshotToolBar::translateRequested, [this]() {
         performTranslate();
     });
+}
 
+// ============================================================
+// 构造阶段：录屏工具栏信号
+// ============================================================
+
+void SnipScreen::connectRecordingToolbarSignals()
+{
     // 录屏工具栏信号连接
     connect(m_recordingToolbar, &RecordingToolBar::toolSelected, [this](int toolId) {
         m_annotationHandler->setTool(static_cast<AnnotationType>(toolId));
@@ -436,7 +511,14 @@ SnipScreen::SnipScreen(QWidget *parent)
         m_selector->updateTimerText(text);
         updateInputMask();
     });
+}
 
+// ============================================================
+// 构造阶段：截图工具栏画笔 / 字号信号
+// ============================================================
+
+void SnipScreen::connectToolbarStyleSignals()
+{
     // 画笔样式信号连接
     connect(m_toolbar, &ScreenshotToolBar::penColorChanged, [this](const QColor &color) {
         m_annotationHandler->setColor(color);
@@ -450,7 +532,14 @@ SnipScreen::SnipScreen(QWidget *parent)
         m_annotationHandler->setFontSize(size);
         LOG_INFO(QString("[SnipScreen] Font size changed: %1").arg(size));
     });
+}
 
+// ============================================================
+// 构造阶段：标注快捷键
+// ============================================================
+
+void SnipScreen::initAnnotationShortcuts()
+{
     // 创建标注快捷键控制器（策略模式：SnipScreen 作为 IShortcutHandler 实现）
     // 内部统一用 QShortcut 注册全部标注快捷键，并处理文本编辑冲突
     m_annotationController = new AnnotationShortcutController(this, this);

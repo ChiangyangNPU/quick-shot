@@ -287,6 +287,19 @@ protected:
     void mouseDoubleClickEvent(QMouseEvent *event) override;
 
 private:
+    // ========== 构造阶段（由构造函数按序调用）==========
+    void initWindowFlags();                    // 平台相关的窗口标志与透明属性
+    void createComponents();                   // 创建选区 / 工具栏 / 录制器等核心组件
+    void setupAnnotationHost();                // 装配 AnnotationInteractionHandler 的 Host 回调
+    void initScreenWatchTimer();               // macOS 副屏监视定时器（其他平台空实现）
+    void connectTranslationSignals();          // 语言切换 → 工具栏文字刷新
+    void connectRecordingSignals();            // 录制控制栏与录制器信号
+    void connectSelectorSignals();             // 选区信号
+    void connectToolbarSignals();              // 截图工具栏信号
+    void connectRecordingToolbarSignals();     // 录屏工具栏信号
+    void connectToolbarStyleSignals();         // 截图工具栏画笔 / 字号信号
+    void initAnnotationShortcuts();            // 标注快捷键与 Enter 快捷键
+
     /**
      * @brief 抓取整个虚拟桌面的截图
      *
