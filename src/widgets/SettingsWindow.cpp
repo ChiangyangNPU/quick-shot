@@ -37,7 +37,7 @@
  * @param parent 父对象
  * @author chiangyang
  */
-SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr), m_configManager(nullptr), lblConfigTitle(nullptr), lblConfigFileName(nullptr), btnOpenConfigDir(nullptr), btnChangeConfig(nullptr) {
+SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr) {
     LOG_INFO("SettingsWindow instance created");
     setWindowTitle("Settings");
     
@@ -182,38 +182,6 @@ int SettingsWindow::calculateDpiScaledWidth() const {
 }
 
 /**
- * @brief 重新计算通用选项卡中控件的固定宽度
- *
- * 基于当前字体（随 DPI 缩放）重新计算标签固定宽度与下拉框最小宽度，
- * 确保 DPI 变化后控件宽度能容纳放大后的文本，避免文字被截断。
- * 在 setupGeneralTab 构造时与 DPI 变化时均会调用。
- * @author chiangyang
- */
-void SettingsWindow::updateGeneralControlWidths() {
-    if (!lblLanguage || !lblOcrLanguage || !langCombo || !cmbOcrLanguage) {
-        return;
-    }
-
-    // 设置标签宽度一致，下拉框宽度一致
-    int labelWidth = qMax(lblLanguage->sizeHint().width(), lblOcrLanguage->sizeHint().width());
-    lblLanguage->setFixedWidth(labelWidth);
-    lblOcrLanguage->setFixedWidth(labelWidth);
-
-    QFontMetrics fm(langCombo->font());
-    int langMaxTextWidth = 0;
-    for (int i = 0; i < langCombo->count(); ++i) {
-        langMaxTextWidth = qMax(langMaxTextWidth, fm.horizontalAdvance(langCombo->itemText(i)));
-    }
-    int ocrMaxTextWidth = 0;
-    for (int i = 0; i < cmbOcrLanguage->count(); ++i) {
-        ocrMaxTextWidth = qMax(ocrMaxTextWidth, fm.horizontalAdvance(cmbOcrLanguage->itemText(i)));
-    }
-    int comboMinWidth = qMax(langMaxTextWidth, ocrMaxTextWidth) + 40;
-    langCombo->setMinimumWidth(comboMinWidth);
-    cmbOcrLanguage->setMinimumWidth(comboMinWidth);
-}
-
-/**
  * @brief 重新计算历史记录选项卡下拉框的固定宽度
  *
  * 取保留天数与最大记录数两个下拉框的最大内容宽度作为统一宽度。
@@ -229,7 +197,7 @@ void SettingsWindow::updateGeneralControlWidths() {
  * @author chiangyang
  */
 void SettingsWindow::updateControlWidths() {
-    updateGeneralControlWidths();
+    if (m_generalTabWidget) m_generalTabWidget->updateControlWidths();
     if (m_historyTabWidget) m_historyTabWidget->updateComboWidths();
     if (m_translateTabWidget) m_translateTabWidget->updateComboWidths();
 }
@@ -265,213 +233,16 @@ void SettingsWindow::setupUi() {
  * @author chiangyang
  */
 void SettingsWindow::setupGeneralTab() {
-    m_generalTab = new QWidget();
-    m_generalTab->setObjectName("generalTabBg");
-    m_generalTab->setStyleSheet(QString("#generalTabBg { background-color: %1; }").arg(StyleManager::getTabWidgetBgColor().name()));
-    QVBoxLayout *layout = new QVBoxLayout(m_generalTab);
-    layout->setContentsMargins(10, 10, 10, 10);
-    layout->setSpacing(10);
-    
-    // Language
-    QHBoxLayout *langLayout = new QHBoxLayout();
-    lblLanguage = new QLabel(TranslationManager::instance()->get("language", "Language:"), m_generalTab);
-    langCombo = new QComboBox(m_generalTab);
-    langCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    langCombo->addItem("简体中文", "zh_CN");
-    langCombo->addItem("繁體中文（香港）", "zh_HK");
-    langCombo->addItem("繁體中文（台灣）", "zh_TW");
-    langCombo->addItem("English", "en_US");
-    langCombo->addItem("日本語", "ja_JP");
-    langCombo->addItem("한국어", "ko_KR");
-    connect(langCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsWindow::onLanguageChanged);
-    
-    langLayout->addWidget(lblLanguage);
-    langLayout->addWidget(langCombo);
-    langLayout->addStretch();
-    
-    // Auto Start
-    autoStartCheck = new QCheckBox(TranslationManager::instance()->get("autoStart", "Run on Startup"), m_generalTab);
-    autoStartCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
-    connect(autoStartCheck, &QCheckBox::checkStateChanged, this, &SettingsWindow::onAutoStartChanged);
-
-    // Log Print
-    logPrintCheck = new QCheckBox(TranslationManager::instance()->get("logPrint.checkbox", "Enable Log Printing"), m_generalTab);
-    logPrintCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
-    connect(logPrintCheck, &QCheckBox::checkStateChanged, this, &SettingsWindow::onLogPrintChanged);
-
-    btnOpenLogFile = new QPushButton(TranslationManager::instance()->get("logPrint.openLogFile", "Open Log File"), m_generalTab);
-    btnOpenLogFile->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnOpenLogFile, &QPushButton::clicked, this, &SettingsWindow::onOpenLogFile);
-
-    btnClearLogFile = new QPushButton(TranslationManager::instance()->get("logPrint.clearLogFile", "Clear Logs"), m_generalTab);
-    btnClearLogFile->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnClearLogFile, &QPushButton::clicked, this, &SettingsWindow::onClearLogFile);
-
-    QHBoxLayout *logPrintLayout = new QHBoxLayout();
-    logPrintLayout->addWidget(logPrintCheck);
-    logPrintLayout->addWidget(btnOpenLogFile);
-    logPrintLayout->addWidget(btnClearLogFile);
-    logPrintLayout->addStretch();
-
-    layout->addLayout(langLayout);
-    layout->addWidget(autoStartCheck);
-    layout->addLayout(logPrintLayout);
-
-    // OCR Language
-    QHBoxLayout *ocrLayout = new QHBoxLayout();
-    lblOcrLanguage = new QLabel(TranslationManager::instance()->get("ocr.language", "OCR Language:"), m_generalTab);
-    cmbOcrLanguage = new QComboBox(m_generalTab);
-    cmbOcrLanguage->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.ch_en", "Chinese + English"), "ch_en");
-    cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.en", "English"), "en");
-    cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.ja", "Japanese"), "ja");
-    cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.ko", "Korean"), "ko");
-    cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.multi", "Multilingual"), "multi");
-    connect(cmbOcrLanguage, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsWindow::onOcrLanguageChanged);
-
-    ocrLayout->addWidget(lblOcrLanguage);
-    ocrLayout->addWidget(cmbOcrLanguage);
-
-    // GPU Acceleration
-    gpuAccelCheck = new QCheckBox(TranslationManager::instance()->get("ocr.gpuAccel", "GPU Acceleration"), m_generalTab);
-    gpuAccelCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
-    connect(gpuAccelCheck, &QCheckBox::checkStateChanged, this, &SettingsWindow::onGpuAccelChanged);
-#ifdef ENABLE_OCR
-    gpuAccelCheck->setVisible(true);
-#else
-    gpuAccelCheck->setVisible(false);
-#endif
-
-    ocrLayout->addWidget(gpuAccelCheck);
-    ocrLayout->addStretch();
-
-    layout->addLayout(ocrLayout);
-
-    saveGroup = new QGroupBox(m_generalTab);
-    saveGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    auto *saveLayout = new QGridLayout(saveGroup);
-    saveLayout->setColumnStretch(1, 1);
-
-    lblCaptureSaveDir = new QLabel(TranslationManager::instance()->get("capture.saveDir", "Screenshot Save:"), saveGroup);
-    editCaptureSaveDir = new QLineEdit(saveGroup);
-    editCaptureSaveDir->setReadOnly(true);
-    editCaptureSaveDir->setStyleSheet(StyleManager::getPathEditStyle());
-    btnCaptureChooseDir = new QPushButton(TranslationManager::instance()->get("capture.chooseDir", "Choose"), saveGroup);
-    btnCaptureChooseDir->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnCaptureChooseDir, &QPushButton::clicked, this, &SettingsWindow::onChooseCaptureSaveDir);
-    
-    btnCaptureResetDir = new QPushButton(TranslationManager::instance()->get("capture.resetDir", "Reset"), saveGroup);
-    btnCaptureResetDir->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnCaptureResetDir, &QPushButton::clicked, this, &SettingsWindow::onResetCaptureSaveDir);
-
-    lblRecordSaveDir = new QLabel(TranslationManager::instance()->get("record.saveDir", "Record Save:"), saveGroup);
-    editRecordSaveDir = new QLineEdit(saveGroup);
-    editRecordSaveDir->setReadOnly(true);
-    editRecordSaveDir->setStyleSheet(StyleManager::getPathEditStyle());
-    btnRecordChooseDir = new QPushButton(TranslationManager::instance()->get("record.chooseDir", "Choose"), saveGroup);
-    btnRecordChooseDir->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnRecordChooseDir, &QPushButton::clicked, this, &SettingsWindow::onChooseRecordSaveDir);
-    
-    btnRecordResetDir = new QPushButton(TranslationManager::instance()->get("record.resetDir", "Reset"), saveGroup);
-    btnRecordResetDir->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnRecordResetDir, &QPushButton::clicked, this, &SettingsWindow::onResetRecordSaveDir);
-
-    saveLayout->addWidget(lblCaptureSaveDir, 0, 0);
-    saveLayout->addWidget(editCaptureSaveDir, 0, 1);
-    saveLayout->addWidget(btnCaptureChooseDir, 0, 2);
-    saveLayout->addWidget(btnCaptureResetDir, 0, 3);
-
-    saveLayout->addWidget(lblRecordSaveDir, 1, 0);
-    saveLayout->addWidget(editRecordSaveDir, 1, 1);
-    saveLayout->addWidget(btnRecordChooseDir, 1, 2);
-    saveLayout->addWidget(btnRecordResetDir, 1, 3);
-
-    // 调整元素高度，使其保持一致（使用 QLineEdit 的标准高度，与快捷键选项卡一致）
-    int inputHeight = editCaptureSaveDir->sizeHint().height();
-    lblLanguage->setFixedHeight(inputHeight);
-    langCombo->setFixedHeight(inputHeight);
-    autoStartCheck->setFixedHeight(inputHeight);
-    logPrintCheck->setFixedHeight(inputHeight);
-    lblOcrLanguage->setFixedHeight(inputHeight);
-    cmbOcrLanguage->setFixedHeight(inputHeight);
-    gpuAccelCheck->setFixedHeight(inputHeight);
-    lblCaptureSaveDir->setFixedHeight(inputHeight);
-    editCaptureSaveDir->setFixedHeight(inputHeight);
-    btnCaptureChooseDir->setFixedHeight(inputHeight);
-    btnCaptureResetDir->setFixedHeight(inputHeight);
-    lblRecordSaveDir->setFixedHeight(inputHeight);
-    editRecordSaveDir->setFixedHeight(inputHeight);
-    btnRecordChooseDir->setFixedHeight(inputHeight);
-    btnRecordResetDir->setFixedHeight(inputHeight);
-    btnOpenLogFile->setFixedHeight(inputHeight);
-    btnClearLogFile->setFixedHeight(inputHeight);
-
-    // 设置标签宽度一致，下拉框宽度一致（抽取到 updateGeneralControlWidths，
-    // 便于 DPI 变化时重新计算，避免文字被截断）
-    updateGeneralControlWidths();
-
-    layout->addWidget(saveGroup);
-
-    // Config File Management
-    configGroup = new QGroupBox(m_generalTab);
-    configGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    auto *configLayout = new QGridLayout(configGroup);
-    configLayout->setColumnStretch(1, 1);
-
-    // 标题标签
-    lblConfigTitle = new QLabel(TranslationManager::instance()->get("config.title", "Config File:"), m_generalTab);
-
-    // 路径显示文本框
-    lblConfigFileName = new QLineEdit(m_generalTab);
-    lblConfigFileName->setReadOnly(true);
-    lblConfigFileName->setStyleSheet(StyleManager::getPathEditStyle());
-
-    // 按钮
-    btnOpenConfigDir = new QPushButton(TranslationManager::instance()->get("config.openLocation", "Open"), m_generalTab);
-    btnOpenConfigDir->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnOpenConfigDir, &QPushButton::clicked, this, &SettingsWindow::onOpenConfigFileLocation);
-
-    btnChangeConfig = new QPushButton(TranslationManager::instance()->get("config.change", "Change"), m_generalTab);
-    btnChangeConfig->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnChangeConfig, &QPushButton::clicked, this, &SettingsWindow::onChangeConfigFile);
-
-    // 设置元素高度（在创建对象之后）
-    lblConfigTitle->setFixedHeight(inputHeight);
-    lblConfigFileName->setFixedHeight(inputHeight);
-    btnOpenConfigDir->setFixedHeight(inputHeight);
-    btnChangeConfig->setFixedHeight(inputHeight);
-
-    // 布局：第一行是标题+路径+按钮（同一行）
-    configLayout->addWidget(lblConfigTitle, 0, 0);
-    configLayout->addWidget(lblConfigFileName, 0, 1);
-    configLayout->addWidget(btnOpenConfigDir, 0, 2);
-    configLayout->addWidget(btnChangeConfig, 0, 3);
-    configLayout->setColumnStretch(0, 0);
-    configLayout->setColumnStretch(1, 1);
-    configLayout->setColumnStretch(2, 0);
-    configLayout->setColumnStretch(3, 0);
-
-    // 初始化 ConfigManager
-    m_configManager = ConfigManager::instance();
-
-    // 连接 ConfigManager 信号
-    connect(m_configManager, &ConfigManager::configLoaded, this, &SettingsWindow::onConfigChanged);
-    connect(m_configManager, &ConfigManager::configSaved, this, &SettingsWindow::onConfigChanged);
-    connect(m_configManager, &ConfigManager::configPathChanged, this, &SettingsWindow::onConfigPathChanged);
-
-    // 更新配置文件名称显示
-    if (m_configManager->isConfigFileExists()) {
-        lblConfigFileName->setText(m_configManager->currentConfigFilePath());
-    } else {
-        lblConfigFileName->setText("Config file not found");
-    }
-
-    layout->addWidget(configGroup);
-
-    layout->addStretch();
-    
-    tabWidget->addTab(m_generalTab, "General");
+    m_generalTabWidget = new SettingsGeneralTab(this);
+    // 语言切换：全窗口重翻译 + 转发给 main.cpp 订阅者
+    connect(m_generalTabWidget, &SettingsGeneralTab::languageChanged, this,
+            [this](const QString &code) {
+                retranslateUi();
+                emit languageChanged(code);
+            });
+    tabWidget->addTab(m_generalTabWidget, "General");
 }
+
 
 /**
  * @brief 设置快捷键选项卡
@@ -558,89 +329,16 @@ void SettingsWindow::setupAboutTab() {
  */
 void SettingsWindow::loadSettings() {
     LOG_INFO("SettingsWindow: loading settings");
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    
-    // Language
-    QString lang = settings->value("language", "zh_CN").toString();
-    int index = langCombo->findData(lang);
-    if (index != -1) {
-        langCombo->blockSignals(true);
-        langCombo->setCurrentIndex(index);
-        langCombo->blockSignals(false);
-    }
-    
-    // 我们不在这里加载语言，而是让main.cpp统一处理
-    // TranslationManager::instance()->loadLanguage(lang);
-    
-    // Auto Start (Check Registry)
-#ifdef Q_OS_WIN
-    QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
-    bool isAutoStart = bootSettings.contains("QuickShot");
-    autoStartCheck->setChecked(isAutoStart);
-#endif
 
-    // Log Print
-    bool isLogPrintEnabled = settings->value("logPrintEnabled", true).toBool();
-    logPrintCheck->blockSignals(true);
-    logPrintCheck->setChecked(isLogPrintEnabled);
-    logPrintCheck->blockSignals(false);
-    Logger::instance()->setLogEnabled(isLogPrintEnabled);
+    // General 通用选项卡（语言 / 自启 / 日志 / OCR / 保存目录）
+    m_generalTabWidget->loadSettings();
 
-    // OCR Language
-    QString ocrLang = settings->value("ocr/language", "ch_en").toString();
-    int ocrIndex = cmbOcrLanguage->findData(ocrLang);
-    if (ocrIndex != -1) {
-        cmbOcrLanguage->blockSignals(true);
-        cmbOcrLanguage->setCurrentIndex(ocrIndex);
-        cmbOcrLanguage->blockSignals(false);
-    }
-
-    // GPU Acceleration
-    bool useGpu = settings->value("ocr/useGpu", false).toBool();
-    gpuAccelCheck->blockSignals(true);
-    gpuAccelCheck->setChecked(useGpu);
-    gpuAccelCheck->blockSignals(false);
-
-    // 快捷键配置由 SettingsShortcutsTab 在创建时从 ConfigManager 加载
-
-    const QString defaultCaptureDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    const QString captureDir = settings->value("capture/saveDir", defaultCaptureDir).toString();
-    editCaptureSaveDir->setText(captureDir);
-    editCaptureSaveDir->setToolTip(captureDir);
-
-    const QString defaultRecordDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
-    const QString recordDir = settings->value("record/saveDir", defaultRecordDir).toString();
-    editRecordSaveDir->setText(recordDir);
-    editRecordSaveDir->setToolTip(recordDir);
-    
     // Style
     loadStyleSettings();
-    
+
     retranslateUi();
 }
 
-/**
- * @brief 语言改变槽函数
- * @param index 语言下拉框索引
- * @author chiangyang
- */
-void SettingsWindow::onLanguageChanged(int index) {
-    QString langCode = langCombo->itemData(index).toString();
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    settings->setValue("language", langCode);
-    settings->sync();
-    
-    // 使用TranslationManager加载语言
-    bool success = TranslationManager::instance()->loadLanguage(langCode);
-    if (success) {
-        retranslateUi();
-    } else {
-        // 语言加载失败，显示错误消息
-        MessageBox::warning(this,
-            TranslationManager::instance()->get("error", "Error"),
-            TranslationManager::instance()->get("language.loadFailed", "Failed to load language file."));
-    }
-}
 
 /**
  * @brief 重新翻译UI
@@ -663,39 +361,9 @@ void SettingsWindow::retranslateUi() {
     // Translate 选项卡文案（引擎条目 / 官网链接 / 网络提示由选项卡自行翻译）
     m_translateTabWidget->retranslateUi();
     
-    lblLanguage->setText(tm->get("language", "Language:"));
-    autoStartCheck->setText(tm->get("autoStart", "Run on Startup"));
-    if (logPrintCheck) logPrintCheck->setText(tm->get("logPrint.checkbox", "Enable Log Printing"));
-    if (btnOpenLogFile) btnOpenLogFile->setText(tm->get("logPrint.openLogFile", "Open Log File"));
-    if (btnClearLogFile) btnClearLogFile->setText(tm->get("logPrint.clearLogFile", "Clear Logs"));
+    // General 通用选项卡文案（语言 / 自启 / 日志 / OCR / 保存目录 / 配置文件由选项卡自行翻译）
+    m_generalTabWidget->retranslateUi();
 
-    // OCR Language
-    if (lblOcrLanguage) lblOcrLanguage->setText(tm->get("ocr.language", "OCR Language:"));
-    if (gpuAccelCheck) gpuAccelCheck->setText(tm->get("ocr.gpuAccel", "GPU Acceleration"));
-    if (cmbOcrLanguage) {
-        int ocrCurrentIndex = cmbOcrLanguage->currentIndex();
-        cmbOcrLanguage->blockSignals(true);
-        cmbOcrLanguage->clear();
-        cmbOcrLanguage->addItem(tm->get("ocr.lang.ch_en", "Chinese + English"), "ch_en");
-        cmbOcrLanguage->addItem(tm->get("ocr.lang.en", "English"), "en");
-        cmbOcrLanguage->addItem(tm->get("ocr.lang.ja", "Japanese"), "ja");
-        cmbOcrLanguage->addItem(tm->get("ocr.lang.ko", "Korean"), "ko");
-        cmbOcrLanguage->addItem(tm->get("ocr.lang.multi", "Multilingual"), "multi");
-        cmbOcrLanguage->setCurrentIndex(ocrCurrentIndex);
-        cmbOcrLanguage->blockSignals(false);
-    }
-
-    // Config File
-    if (lblConfigTitle) lblConfigTitle->setText(tm->get("config.title", "Config File:"));
-    if (btnOpenConfigDir) btnOpenConfigDir->setText(tm->get("config.openLocation", "Open"));
-    if (btnChangeConfig) btnChangeConfig->setText(tm->get("config.change", "Change"));
-
-    if (lblCaptureSaveDir) lblCaptureSaveDir->setText(tm->get("capture.saveDir", "Screenshot Save:"));
-    if (btnCaptureChooseDir) btnCaptureChooseDir->setText(tm->get("capture.chooseDir", "Choose"));
-    if (btnCaptureResetDir) btnCaptureResetDir->setText(tm->get("capture.resetDir", "Reset"));
-    if (lblRecordSaveDir) lblRecordSaveDir->setText(tm->get("record.saveDir", "Save:"));
-    if (btnRecordChooseDir) btnRecordChooseDir->setText(tm->get("record.chooseDir", "Choose"));
-    if (btnRecordResetDir) btnRecordResetDir->setText(tm->get("record.resetDir", "Reset"));
 
     // Shortcuts 快捷键选项卡文案（行生成 / 分类标题 / 行文案由选项卡自行翻译）
     m_shortcutsTabWidget->retranslateUi();
@@ -737,277 +405,7 @@ void SettingsWindow::retranslateUi() {
     m_historyTabWidget->retranslateUi();
 }
 
-/**
- * @brief 选择截图保存目录
- * @author chiangyang
- */
-void SettingsWindow::onChooseCaptureSaveDir() {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    const QString currentDir = settings->value("capture/saveDir", defaultDir).toString();
-    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("capture.chooseDir", "Choose"), currentDir);
-    if (dir.isEmpty()) return;
-    settings->setValue("capture/saveDir", dir);
-    settings->sync();
-    editCaptureSaveDir->setText(dir);
-    editCaptureSaveDir->setToolTip(dir);
-}
 
-/**
- * @brief 选择录制保存目录
- * @author chiangyang
- */
-void SettingsWindow::onChooseRecordSaveDir() {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
-    const QString currentDir = settings->value("record/saveDir", defaultDir).toString();
-    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("record.chooseDir", "Choose"), currentDir);
-    if (dir.isEmpty()) return;
-    settings->setValue("record/saveDir", dir);
-    settings->sync();
-    editRecordSaveDir->setText(dir);
-    editRecordSaveDir->setToolTip(dir);
-}
-
-/**
- * @brief 恢复截屏保存目录为默认
- * @author chiangyang
- */
-void SettingsWindow::onResetCaptureSaveDir() {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
-    settings->setValue("capture/saveDir", defaultDir);
-    settings->sync();
-    editCaptureSaveDir->setText(defaultDir);
-    editCaptureSaveDir->setToolTip(defaultDir);
-}
-
-/**
- * @brief 恢复录屏保存目录为默认
- * @author chiangyang
- */
-void SettingsWindow::onResetRecordSaveDir() {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
-    settings->setValue("record/saveDir", defaultDir);
-    settings->sync();
-    editRecordSaveDir->setText(defaultDir);
-    editRecordSaveDir->setToolTip(defaultDir);
-}
-
-/**
- * @brief 打开配置文件所在文件夹
- * @author chiangyang
- */
-void SettingsWindow::onOpenConfigFileLocation() {
-    if (!m_configManager) {
-        return;
-    }
-
-    if (!m_configManager->isConfigFileExists()) {
-        MessageBox::warning(this,
-            TranslationManager::instance()->get("config.errorTitle", "Error"),
-            TranslationManager::instance()->get("config.fileNotFound", "Config file not found"));
-        return;
-    }
-
-    if (!m_configManager->openConfigFileLocation()) {
-        MessageBox::warning(this,
-            TranslationManager::instance()->get("config.errorTitle", "Error"),
-            TranslationManager::instance()->get("config.openFailed", "Failed to open config file location"));
-    }
-}
-
-/**
- * @brief 更改配置文件
- * @author chiangyang
- */
-void SettingsWindow::onChangeConfigFile() {
-    if (!m_configManager) {
-        return;
-    }
-
-    // 打开文件选择对话框
-    QString selectedFile = QFileDialog::getOpenFileName(
-        this,
-        TranslationManager::instance()->get("config.selectFile", "Select Config File"),
-        m_configManager->getConfigDirectory(),
-        "INI Files (*.ini);;All Files (*)"
-    );
-
-    if (selectedFile.isEmpty()) {
-        // 用户取消了选择
-        return;
-    }
-
-    // 尝试更改配置文件
-    if (m_configManager->changeConfigFile(selectedFile, this)) {
-        // 配置更改成功，UI 更新会在 onConfigPathChanged 槽函数中处理
-    }
-    // 错误处理会在信号中处理
-}
-
-/**
- * @brief 配置文件更改完成槽函数
- * @param success 是否成功
- * @param message 消息
- * @author chiangyang
- */
-void SettingsWindow::onConfigChanged(bool success, const QString &message) {
-    if (!success) {
-        MessageBox::warning(this,
-            TranslationManager::instance()->get("config.errorTitle", "Error"),
-            message);
-    }
-}
-
-/**
- * @brief 配置文件路径更改槽函数
- * @param newPath 新路径
- * @author chiangyang
- */
-void SettingsWindow::onConfigPathChanged(const QString &newPath) {
-    // 更新配置文件名称显示
-    if (lblConfigFileName) {
-        lblConfigFileName->setText(newPath);
-    }
-
-    // 显示成功消息
-    MessageBox::information(this,
-        TranslationManager::instance()->get("config.successTitle", "Success"),
-        TranslationManager::instance()->get("config.changeSuccess", "Config file changed successfully"));
-}
-
-/**
- * @brief 自动启动改变槽函数
- * @param state 复选框状态
- * @author chiangyang
- */
-void SettingsWindow::onAutoStartChanged(Qt::CheckState state) {
-#ifdef Q_OS_WIN
-    QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
-    QString appPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
-    if (state == Qt::Checked) {
-        bootSettings.setValue("QuickShot", appPath);
-    } else {
-        bootSettings.remove("QuickShot");
-    }
-#endif
-}
-
-/**
- * @brief 日志打印改变槽函数
- * @param state 复选框状态
- * @author chiangyang
- */
-void SettingsWindow::onLogPrintChanged(Qt::CheckState state) {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    bool enabled = (state == Qt::Checked);
-    settings->setValue("logPrintEnabled", enabled);
-    settings->sync();
-    Logger::instance()->setLogEnabled(enabled);
-}
-
-/**
- * @brief OCR 语言改变槽函数
- * @param index 下拉框索引
- * @author chiangyang
- */
-void SettingsWindow::onOcrLanguageChanged(int index) {
-    if (index < 0) return;
-    QString langKey = cmbOcrLanguage->itemData(index).toString();
-    if (langKey.isEmpty()) return;
-
-    ConfigManager::instance()->setValue("ocr/language", langKey);
-    ConfigManager::instance()->sync();
-
-#ifdef ENABLE_OCR
-    // 释放 OCR 引擎资源，下次识别时重新加载新语言模型
-    OcrEngine::instance()->release();
-#endif
-
-    LOG_INFO(QString("SettingsWindow: OCR language changed to %1").arg(langKey));
-}
-
-/**
- * @brief GPU 加速改变槽函数
- * @param state 复选框状态
- * @author chiangyang
- */
-void SettingsWindow::onGpuAccelChanged(Qt::CheckState state) {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    bool enabled = (state == Qt::Checked);
-    settings->setValue("ocr/useGpu", enabled);
-    settings->sync();
-
-#ifdef ENABLE_OCR
-    // 释放 OCR 引擎资源，下次识别时重新加载（应用新的 GPU 设置）
-    OcrEngine::instance()->release();
-#endif
-
-    LOG_INFO(QString("SettingsWindow: GPU acceleration %1").arg(enabled ? "enabled" : "disabled"));
-}
-
-/**
- * @brief 打开日志文件夹槽函数
- * @author chiangyang
- */
-void SettingsWindow::onOpenLogFile() {
-    QString logDirPath = Logger::instance()->getLogDirPath();
-    QDir logDir(logDirPath);
-    if (!logDir.exists()) {
-        MessageBox::information(this,
-            TranslationManager::instance()->get("info", "Info"),
-            TranslationManager::instance()->get("logPrint.dirNotExist", "Log directory does not exist."));
-        return;
-    }
-
-    QDesktopServices::openUrl(QUrl::fromLocalFile(logDirPath));
-}
-
-/**
- * @brief 清除日志文件槽函数
- * @author chiangyang
- */
-void SettingsWindow::onClearLogFile() {
-    QString logDirPath = Logger::instance()->getLogDirPath();
-    QDir logDir(logDirPath);
-    TranslationManager *tm = TranslationManager::instance();
-
-    if (!logDir.exists()) {
-        MessageBox::information(this,
-            tm->get("info", "Info"),
-            tm->get("logPrint.dirNotExist", "Log directory does not exist."));
-        return;
-    }
-
-    QFileInfoList fileList = logDir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-
-    if (MessageBox::question(this,
-            tm->get("logPrint.confirmClear", "Confirm Clear Logs"),
-            tm->get("logPrint.confirmClearMsg", "Are you sure you want to delete all log files?"))) {
-        // 先关闭日志文件，释放文件锁
-        Logger::instance()->closeLogFile();
-
-        int deletedCount = 0;
-        QFileInfoList filesToDelete = logDir.entryInfoList(QDir::Files | QDir::NoDotAndDotDot);
-        for (const QFileInfo &fileInfo : filesToDelete) {
-            if (logDir.remove(fileInfo.fileName())) {
-                deletedCount++;
-            }
-        }
-
-        if (deletedCount > 0) {
-            MessageBox::information(this,
-                tm->get("success", "Success"),
-                tm->get("logPrint.deletedLogs", "Deleted %1 log file(s).").arg(deletedCount));
-        } else {
-            MessageBox::information(this,
-                tm->get("info", "Info"),
-                tm->get("logPrint.noLogs", "No log files to delete."));
-        }
-    }
-}
 
 /**
  * @brief 设置样式选项卡
@@ -1723,9 +1121,8 @@ void SettingsWindow::setupHistoryTab() {
 void SettingsWindow::updateAllGroupBoxStyles() {
     const QString style = StyleManager::getGroupBoxStyle();
 
-    // General 通用选项卡
-    if (saveGroup) saveGroup->setStyleSheet(style);
-    if (configGroup) configGroup->setStyleSheet(style);
+    // General 通用选项卡（样式刷新内聚在 SettingsGeneralTab）
+    if (m_generalTabWidget) m_generalTabWidget->refreshStyles();
 
     // Translate 翻译选项卡（样式刷新内聚在 SettingsTranslateTab）
     if (m_translateTabWidget) m_translateTabWidget->refreshStyles();
@@ -1767,8 +1164,8 @@ void SettingsWindow::updateAllGroupBoxStyles() {
  */
 void SettingsWindow::updateAllTabsPalette(const QColor &color) {
     QString style = QString("background-color: %1;").arg(color.name());
-    if (m_generalTab) {
-        m_generalTab->setStyleSheet(QString("#generalTabBg { %1 }").arg(style));
+    if (m_generalTabWidget) {
+        m_generalTabWidget->applyTabBackground(color);
     }
     if (m_translateTabWidget) {
         m_translateTabWidget->applyTabBackground(color);

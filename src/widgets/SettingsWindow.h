@@ -31,8 +31,8 @@
 #include "settings/SettingsHistoryTab.h"
 #include "settings/SettingsTranslateTab.h"
 #include "settings/SettingsShortcutsTab.h"
+#include "settings/SettingsGeneralTab.h"
 
-class ConfigManager;
 class QGridLayout;
 
 /**
@@ -216,104 +216,6 @@ public slots:
 
 private slots:
     /**
-     * @brief 语言改变槽函数
-     * @param index 语言下拉框索引
-     * @author chiangyang
-     */
-    void onLanguageChanged(int index);
-
-    /**
-     * @brief 自动启动改变槽函数
-     * @param state 复选框状态
-     * @author chiangyang
-     */
-    void onAutoStartChanged(Qt::CheckState state);
-
-    /**
-     * @brief 日志打印改变槽函数
-     * @param state 复选框状态
-     * @author chiangyang
-     */
-    void onLogPrintChanged(Qt::CheckState state);
-
-    /**
-     * @brief OCR 语言改变槽函数
-     * @param index 下拉框索引
-     * @author chiangyang
-     */
-    void onOcrLanguageChanged(int index);
-
-    /**
-     * @brief GPU 加速改变槽函数
-     * @param state 复选框状态
-     * @author chiangyang
-     */
-    void onGpuAccelChanged(Qt::CheckState state);
-
-    /**
-     * @brief 打开日志文件槽函数
-     * @author chiangyang
-     */
-    void onOpenLogFile();
-
-    /**
-     * @brief 清除日志文件槽函数
-     * @author chiangyang
-     */
-    void onClearLogFile();
-
-    /**
-     * @brief 选择截图保存目录
-     * @author chiangyang
-     */
-    void onChooseCaptureSaveDir();
-
-    /**
-     * @brief 选择录制保存目录
-     * @author chiangyang
-     */
-    void onChooseRecordSaveDir();
-
-    /**
-     * @brief 恢复截屏保存目录为默认
-     * @author chiangyang
-     */
-    void onResetCaptureSaveDir();
-
-    /**
-     * @brief 恢复录屏保存目录为默认
-     * @author chiangyang
-     */
-    void onResetRecordSaveDir();
-
-    /**
-     * @brief 打开配置文件所在文件夹
-     * @author chiangyang
-     */
-    void onOpenConfigFileLocation();
-
-    /**
-     * @brief 更改配置文件
-     * @author chiangyang
-     */
-    void onChangeConfigFile();
-
-    /**
-     * @brief 配置文件更改完成槽函数
-     * @param success 是否成功
-     * @param message 消息
-     * @author chiangyang
-     */
-    void onConfigChanged(bool success, const QString &message);
-
-    /**
-     * @brief 配置文件路径更改槽函数
-     * @param newPath 新路径
-     * @author chiangyang
-     */
-    void onConfigPathChanged(const QString &newPath);
-
-    /**
      * @brief 按当前选项卡内容重新自适应窗口高度
      *
      * 与 onTabChanged 的高度适配逻辑一致：先让页面缩放回 sizeHint
@@ -385,36 +287,8 @@ private:
 
     QTabWidget *tabWidget;          ///< 选项卡控件
     QScrollArea *styleScrollArea;   ///< 样式选项卡滚动区域
-    QWidget *m_generalTab;          ///< 通用选项卡根容器
+    SettingsGeneralTab *m_generalTabWidget; ///< 通用选项卡
 
-    // General
-    QComboBox *langCombo;           ///< 语言下拉框
-    QCheckBox *autoStartCheck;      ///< 自动启动复选框
-    QCheckBox *logPrintCheck;       ///< 日志打印复选框
-    QLabel *lblLanguage;            ///< 语言标签
-    QLabel *lblAutoStart;           ///< 自动启动标签
-    QPushButton *btnOpenLogFile;    ///< 打开日志文件按钮
-    QPushButton *btnClearLogFile;   ///< 清除日志文件按钮
-    QLabel *lblOcrLanguage;         ///< OCR 语言标签
-    QComboBox *cmbOcrLanguage;      ///< OCR 语言下拉框
-    QCheckBox *gpuAccelCheck;       ///< GPU 加速复选框
-    QLabel *lblCaptureSaveDir;      ///< 截屏保存路径标签
-    QLineEdit *editCaptureSaveDir;  ///< 截屏保存路径
-    QPushButton *btnCaptureChooseDir; ///< 选择截屏保存路径按钮
-    QPushButton *btnCaptureResetDir; ///< 恢复截屏默认路径按钮
-    QLabel *lblRecordSaveDir;       ///< 录屏保存路径标签
-    QLineEdit *editRecordSaveDir;   ///< 录屏保存路径
-    QPushButton *btnRecordChooseDir; ///< 选择录屏保存路径按钮
-    QPushButton *btnRecordResetDir; ///< 恢复录屏默认路径按钮
-    QGroupBox *saveGroup;           ///< 通用选项卡保存路径设置组
-    QGroupBox *configGroup;         ///< 通用选项卡配置文件管理组
-
-    // Config File Management
-    QLabel *lblConfigTitle;       ///< 配置文件标题标签
-    QLineEdit *lblConfigFileName; ///< 配置文件路径文本框
-    QPushButton *btnOpenConfigDir; ///< 打开配置文件所在文件夹按钮
-    QPushButton *btnChangeConfig;   ///< 更改配置文件按钮
-    ConfigManager *m_configManager; ///< 配置文件管理器
 
     // Shortcuts
 
@@ -581,16 +455,6 @@ private:
      * @author chiangyang
      */
     int calculateDpiScaledWidth() const;
-
-    /**
-     * @brief 重新计算通用选项卡中控件的固定宽度
-     *
-     * 基于当前字体（随 DPI 缩放）重新计算标签固定宽度与下拉框最小宽度，
-     * 确保 DPI 变化后控件宽度能容纳放大后的文本，避免文字被截断。
-     * 在 setupGeneralTab 构造时与 DPI 变化时均会调用。
-     * @author chiangyang
-     */
-    void updateGeneralControlWidths();
 
     /**
      * @brief 重新计算所有需要固定宽度的控件
