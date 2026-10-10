@@ -290,7 +290,6 @@ bool OcrEngine::initialize(const QString &modelDir) {
 #else
     LOG_INFO(QString("OcrEngine: Initializing with model dir: %1").arg(modelDir));
 
-    m_modelDir = modelDir;
     QDir dir(modelDir + "/mobile");
     if (!dir.exists()) {
         LOG_ERROR(QString("OcrEngine: Mobile model directory does not exist: %1").arg(dir.path()));
@@ -421,102 +420,9 @@ bool OcrEngine::initialize(const QString &modelDir) {
 }
 
 /**
- * @brief 切换 OCR 识别语言
- * @param lang 目标语言
- * @return 是否切换成功
- * @author chiangyang
- */
-bool OcrEngine::switchLanguage(OcrLanguage lang) {
-#ifndef ENABLE_OCR
-    Q_UNUSED(lang);
-    LOG_WARNING("OcrEngine: ONNX Runtime not available, cannot switch language");
-    return false;
-#else
-    if (lang == m_language && m_ready) {
-        LOG_INFO(QString("OcrEngine: Language already set to %1, no switch needed").arg(languageToKey(lang)));
-        return true;
-    }
-
-    // 尚未初始化，只记录语言设置，等 initialize 时再加载
-    if (m_modelDir.isEmpty() || !m_sessionOptions) {
-        m_language = lang;
-        LOG_INFO(QString("OcrEngine: Engine not initialized, language set to %1 (deferred)").arg(languageToKey(lang)));
-        return true;
-    }
-
-    LOG_INFO(QString("OcrEngine: Switching language from %1 to %2")
-        .arg(languageToKey(m_language)).arg(languageToKey(lang)));
-
-    QDir dir(m_modelDir + "/mobile");
-    if (!dir.exists()) {
-        LOG_ERROR(QString("OcrEngine: Mobile model directory does not exist: %1").arg(dir.path()));
-        return false;
-    }
-
-    QString recModelPath = dir.filePath(recModelName(lang));
-    QString dictPath = dir.filePath(dictFileName(lang));
-
-    if (!QFile::exists(recModelPath)) {
-        LOG_ERROR(QString("OcrEngine: Recognition model not found: %1").arg(recModelPath));
-        return false;
-    }
-    if (!QFile::exists(dictPath)) {
-        LOG_ERROR(QString("OcrEngine: Dictionary file not found: %1").arg(dictPath));
-        return false;
-    }
-
-    try {
-        // 重新加载识别模型
-#ifdef Q_OS_WIN
-        m_recSession = std::make_unique<Ort::Session>(*m_env, recModelPath.toStdWString().c_str(), *m_sessionOptions);
-#else
-        m_recSession = std::make_unique<Ort::Session>(*m_env, recModelPath.toUtf8().constData(), *m_sessionOptions);
-#endif
-
-        // 重新加载字典
-        if (!loadDict(dictPath)) {
-            LOG_ERROR("OcrEngine: Failed to load character dictionary");
-            return false;
-        }
-
-        m_language = lang;
-        LOG_INFO(QString("OcrEngine: Language switched to %1, dict size=%2, GPU=%3")
-            .arg(languageToKey(m_language)).arg(m_charDict.size())
-            .arg(m_useGpu ? "enabled" : "disabled"));
-        return true;
-
-    } catch (const Ort::Exception &e) {
-        LOG_ERROR(QString("OcrEngine: ONNX Runtime error during language switch: %1").arg(e.what()));
-        return false;
-    } catch (const std::exception &e) {
-        LOG_ERROR(QString("OcrEngine: Language switch error: %1").arg(e.what()));
-        return false;
-    }
-#endif
-}
-
-/**
- * @brief 获取当前识别语言
- * @return 当前语言枚举值
- * @author chiangyang
- */
-OcrEngine::OcrLanguage OcrEngine::currentLanguage() const {
-    return m_language;
-}
-
-/**
- * @brief 检查引擎是否就绪
- * @return 是否已加载模型
- * @author chiangyang
- */
-bool OcrEngine::isReady() const {
-    return m_ready;
-}
-
-/**
  * @brief 释放 OCR 引擎资源
  *
- * 释放 ONNX Runtime 会话和模型资源，释放后 isReady() 返回 false。
+ * 释放 ONNX Runtime 会话和模型资源，释放后引擎回到未初始化状态。
  * 如果当前正在识别中，会延迟到识别结束后释放。
  * 下次调用 recognize() 时会自动重新初始化。
  * @author chiangyang
@@ -541,15 +447,6 @@ void OcrEngine::release() {
 
     m_ready = false;
     LOG_INFO("OcrEngine: Resources released");
-}
-
-/**
- * @brief 检查是否正在识别中
- * @return 是否正在执行 OCR 识别
- * @author chiangyang
- */
-bool OcrEngine::isRecognizing() const {
-    return m_isRecognizing;
 }
 
 /**
@@ -582,6 +479,27 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
 
     // 设置识别中状态
     m_isRecognizing = true;
+
+    // 统一收尾：复位识别状态并执行延迟释放
+    // （任何提前 return 都必须经过它，否则 m_isRecognizing 会永久卡在 true，
+    //   导致后续 release() 被无限期推迟）
+    auto finalizeRecognition = [this]() {
+        m_isRecognizing = false;
+
+        if (m_pendingRelease) {
+            m_pendingRelease = false;
+            // 调用实际的释放逻辑（避免递归调用 release()）
+#ifdef ENABLE_OCR
+            m_detSession.reset();
+            m_recSession.reset();
+            m_env.reset();
+            m_sessionOptions.reset();
+            releaseGpuProvider();
+#endif
+            m_ready = false;
+            LOG_INFO("OcrEngine: Pending release executed after recognition");
+        }
+    };
 
     try {
         // 1. 预处理：检测
@@ -635,6 +553,7 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
 
         if (boxes.isEmpty()) {
             LOG_INFO("OcrEngine: No text regions detected");
+            finalizeRecognition();
             return result;
         }
 
@@ -709,24 +628,7 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
         LOG_ERROR(QString("OcrEngine: Recognition error: %1").arg(e.what()));
     }
 
-    // 重置识别中状态
-    m_isRecognizing = false;
-
-    // 如果有待释放请求，现在执行释放
-    if (m_pendingRelease) {
-        m_pendingRelease = false;
-        // 调用实际的释放逻辑（避免递归调用 release()）
-#ifdef ENABLE_OCR
-        m_detSession.reset();
-        m_recSession.reset();
-        m_env.reset();
-        m_sessionOptions.reset();
-        releaseGpuProvider();
-#endif
-        m_ready = false;
-        LOG_INFO("OcrEngine: Pending release executed after recognition");
-    }
-
+    finalizeRecognition();
     return result;
 #endif
 }
@@ -749,16 +651,9 @@ bool OcrEngine::loadDict(const QString &dictPath) {
     QTextStream in(&file);
     // PP-OCR 字典格式：每行一个字符，最后可能有一个 blank 符号
     // index 0 通常是 blank（CTC blank）
+    // readLine() 本身不返回行尾换行符，无需再 chop
     while (!in.atEnd()) {
-        QString line = in.readLine();
-        // 去掉行尾换行符，但保留空格等空白字符
-        if (line.endsWith('\n') || line.endsWith('\r')) {
-            line.chop(1);
-        }
-        if (line.endsWith('\r')) {
-            line.chop(1);
-        }
-        m_charDict.append(line);
+        m_charDict.append(in.readLine());
     }
 
     // 确保字典不为空
@@ -770,42 +665,3 @@ bool OcrEngine::loadDict(const QString &dictPath) {
     return true;
 }
 #endif
-
-
-/**
- * @brief 异步对图像进行 OCR 识别
- *
- * 使用 QtConcurrent 在工作线程中执行识别，完成后通过
- * recognitionFinished 信号通知结果。
- *
- * @param image 输入图像
- * @author chiangyang
- */
-void OcrEngine::recognizeAsync(const QImage &image) {
-    // 如果正在识别中，跳过
-    if (m_isRecognizing) {
-        LOG_INFO("OcrEngine: Recognition already in progress, skipping async request");
-        return;
-    }
-
-    // 创建 QFutureWatcher（如果还没有）
-    if (!m_watcher) {
-        m_watcher = new QFutureWatcher<OcrResult>(this);
-        connect(m_watcher, &QFutureWatcher<OcrResult>::finished, this, [this]() {
-            m_lastResult = m_watcher->result();
-            m_isRecognizing = false;
-            LOG_INFO(QString("OcrEngine: Async recognition finished, found %1 text regions")
-                .arg(m_lastResult.texts.size()));
-            emit recognitionFinished(m_lastResult);
-        });
-    }
-
-    // 标记正在识别中
-    m_isRecognizing = true;
-
-    // 在工作线程中执行识别
-    QFuture<OcrResult> future = QtConcurrent::run([this, image]() {
-        return recognize(image);
-    });
-    m_watcher->setFuture(future);
-}
