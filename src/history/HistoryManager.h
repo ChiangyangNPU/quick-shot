@@ -80,13 +80,24 @@ public:
     QList<HistoryItem> getItems(HistoryType type, int page, int pageSize);
 
     /**
-     * @brief 搜索历史记录
+     * @brief 搜索历史记录（返回前 100 条）
      * @param keyword 搜索关键词
      * @param type 记录类型筛选
      * @return 匹配的历史记录列表
      * @author chiangyang
      */
     QList<HistoryItem> searchItems(const QString &keyword, HistoryType type);
+
+    /**
+     * @brief 分页搜索历史记录
+     * @param keyword 搜索关键词（LIKE 通配符会被转义为普通字符）
+     * @param type 记录类型筛选
+     * @param page 页码（从 0 开始）
+     * @param pageSize 每页条数
+     * @return 匹配的历史记录列表
+     * @author chiangyang
+     */
+    QList<HistoryItem> searchItems(const QString &keyword, HistoryType type, int page, int pageSize);
 
     /**
      * @brief 获取记录总数

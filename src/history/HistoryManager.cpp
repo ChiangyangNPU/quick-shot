@@ -372,23 +372,42 @@ QList<HistoryItem> HistoryManager::getItems(HistoryType type, int page, int page
 }
 
 /**
- * @brief 搜索历史记录
+ * @brief 搜索历史记录（返回前 100 条）
  * @author chiangyang
  */
 QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryType type)
+{
+    return searchItems(keyword, type, 0, 100);
+}
+
+/**
+ * @brief 分页搜索历史记录
+ *
+ * 关键词以绑定参数传入（防 SQL 注入），LIKE 通配符 %/_/\ 转义为普通字符。
+ * @author chiangyang
+ */
+QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryType type, int page, int pageSize)
 {
     QMutexLocker locker(&m_mutex);
 
     QList<HistoryItem> items;
 
-    QString sql = "SELECT * FROM history_items WHERE content LIKE '%" + keyword + "%'";
+    QString escaped = keyword;
+    escaped.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+
+    QString sql = "SELECT * FROM history_items WHERE content LIKE :kw ESCAPE '\\'";
     if (type != HistoryType::All) {
+        // type 为内部枚举转 int，非用户输入，可安全内联
         sql += QString(" AND type = %1").arg(typeToInt(type));
     }
-    sql += " ORDER BY timestamp DESC LIMIT 100";
+    sql += " ORDER BY timestamp DESC LIMIT :limit OFFSET :offset";
 
     QSqlQuery query(m_database);
-    if (!query.exec(sql)) {
+    query.prepare(sql);
+    query.bindValue(":kw", "%" + escaped + "%");
+    query.bindValue(":limit", pageSize);
+    query.bindValue(":offset", page * pageSize);
+    if (!query.exec()) {
         LOG_ERROR(QString("Failed to search history items: %1").arg(query.lastError().text()));
         return items;
     }

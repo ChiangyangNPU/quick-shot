@@ -47,6 +47,7 @@
   "pin": "고정",
   "copy": "복사",
   "save": "저장",
+  "dialog.saveImage": "이미지 저장",
   "trayCapture": "스크린샷",
   "trayRecord": "녹화",
   "tray.pin": "클립보드 고정",

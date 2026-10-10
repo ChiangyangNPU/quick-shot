@@ -482,7 +482,8 @@ void HistoryWindow::loadItems(HistoryType type, bool reset)
 
     QList<HistoryItem> items;
     if (!m_currentSearch.isEmpty()) {
-        items = manager->searchItems(m_currentSearch, type);
+        // 搜索模式同样分页加载，避免"加载更多"重复追加同一批结果
+        items = manager->searchItems(m_currentSearch, type, m_currentPage, m_pageSize);
     } else {
         items = manager->getItems(type, m_currentPage, m_pageSize);
     }
@@ -502,17 +503,23 @@ void HistoryWindow::loadItems(HistoryType type, bool reset)
     m_currentPage++;
 
     // 更新加载更多按钮状态：没有更多数据时隐藏按钮
-    int totalCount = manager->getItemCount(type);
-    int loadedCount = m_listWidget->count();
-    bool hasMore = loadedCount < totalCount;
+    bool hasMore = false;
+    if (!m_currentSearch.isEmpty()) {
+        // 搜索模式拿不到过滤后的总数，用"满一页则可能还有"启发式
+        hasMore = (items.size() == m_pageSize);
+    } else {
+        int totalCount = manager->getItemCount(type);
+        hasMore = m_listWidget->count() < totalCount;
+    }
     m_loadMoreBtn->setVisible(hasMore);
     m_loadMoreBtn->setEnabled(hasMore);
 
     updateItemCount();
     m_isLoading = false;
 
-    LOG_INFO(QString("History items loaded: type=%1, page=%2, loaded=%3, total=%4")
-             .arg(static_cast<int>(type)).arg(m_currentPage).arg(loadedCount).arg(totalCount));
+    LOG_INFO(QString("History items loaded: type=%1, page=%2, loaded=%3, total=%4, hasMore=%5")
+             .arg(static_cast<int>(type)).arg(m_currentPage).arg(items.size())
+             .arg(m_listWidget->count()).arg(hasMore));
 }
 
 /**

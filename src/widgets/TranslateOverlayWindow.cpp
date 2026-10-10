@@ -624,10 +624,11 @@ void TranslateOverlayWindow::saveAsImage() {
                                     .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
 
     TranslationManager *tm = TranslationManager::instance();
+    // 过滤器与 SnipScreen/HistoryWindow 的保存对话框保持一致
     Utils::savePixmapToFile(
         this, [result]() -> QPixmap { return result; }, defaultName,
         tm->get("translate.saveAsImage", "Save as Image"),
-        QStringLiteral("PNG图片 (*.png);;JPEG图片 (*.jpg);;所有文件 (*.*)"));
+        QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
 
-    LOG_INFO("TranslateOverlayWindow: image saved");
+    LOG_INFO("TranslateOverlayWindow: save dialog opened");
 }

@@ -47,6 +47,7 @@
   "pin": "Pin",
   "copy": "Copy",
   "save": "Save",
+  "dialog.saveImage": "Save Image",
   "trayCapture": "Capture Screen",
   "trayRecord": "Record Screen",
   "tray.pin": "Pin Clipboard",

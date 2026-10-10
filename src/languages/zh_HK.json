@@ -47,6 +47,7 @@
   "pin": "貼圖",
   "copy": "複製",
   "save": "儲存",
+  "dialog.saveImage": "儲存圖片",
   "trayCapture": "截圖",
   "trayRecord": "錄影",
   "tray.pin": "貼圖剪貼簿",

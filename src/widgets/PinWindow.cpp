@@ -588,10 +588,12 @@ void PinWindow::saveToFile() {
     // 生成默认文件名：QuickShot_Capture_yyyyMMdd_HHmmss.png
     QString defaultName = QString("QuickShot_Capture_%1.png").arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
 
+    TranslationManager *tm = TranslationManager::instance();
+    // 过滤器与 SnipScreen/HistoryWindow 的保存对话框保持一致
     Utils::savePixmapToFile(
         this, [this]() -> QPixmap { return compositePixmap(); }, defaultName,
-        QStringLiteral("保存图片"),
-        QStringLiteral("PNG图片 (*.png);;JPEG图片 (*.jpg);;所有文件 (*.*)"));
+        tm->get("dialog.saveImage", "Save Image"),
+        QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
 }
 
 /**
