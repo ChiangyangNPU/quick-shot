@@ -29,9 +29,7 @@
 #include <QScreen>
 #include <QGuiApplication>
 
-#include "../update/UpdateManager.h"
 #include <QProgressBar>
-#include <QProcess>
 
 #include "Logger.h"
 
@@ -40,7 +38,7 @@
  * @param parent 父对象
  * @author chiangyang
  */
-SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr), historyScrollArea(nullptr), m_configManager(nullptr), lblConfigTitle(nullptr), lblConfigFileName(nullptr), btnOpenConfigDir(nullptr), btnChangeConfig(nullptr), m_updateGroup(nullptr) {
+SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr), historyScrollArea(nullptr), m_configManager(nullptr), lblConfigTitle(nullptr), lblConfigFileName(nullptr), btnOpenConfigDir(nullptr), btnChangeConfig(nullptr) {
     LOG_INFO("SettingsWindow instance created");
     setWindowTitle("Settings");
     
@@ -1042,129 +1040,10 @@ void SettingsWindow::updateTranslateComboWidth() {
  * @author chiangyang
  */
 void SettingsWindow::setupAboutTab() {
-    QWidget *aboutTab = new QWidget();
-    QVBoxLayout *mainLayout = new QVBoxLayout(aboutTab);
-    mainLayout->setContentsMargins(10, 10, 10, 10);
-    mainLayout->setSpacing(10);
-    
-    // Top Row: Info Left, Qt Right
-    QHBoxLayout *topLayout = new QHBoxLayout();
-    
-    // Left Info
-    QVBoxLayout *infoLayout = new QVBoxLayout();
-    appNameLabel = new QLabel("QuickShot", aboutTab);
-    appNameLabel->setStyleSheet(StyleManager::getAppNameLabelStyle());
-    versionLabel = new QLabel(QString("Version %1").arg(qApp->applicationVersion()), aboutTab);
-    copyrightLabel = new QLabel("Copyright © 2026 QuickShot Inc.", aboutTab);
-    
-    infoLayout->addWidget(appNameLabel);
-    infoLayout->addWidget(versionLabel);
-    infoLayout->addWidget(copyrightLabel);
-    
-    // Right Link
-    qtLinkLabel = new QLabel("<a href='https://www.qt.io'>Build With QT</a>", aboutTab);
-    qtLinkLabel->setOpenExternalLinks(true);
-    qtLinkLabel->setAlignment(Qt::AlignRight | Qt::AlignTop);
-    
-    topLayout->addLayout(infoLayout);
-    topLayout->addStretch();
-    topLayout->addWidget(qtLinkLabel);
-    
-    // 仓库链接
-    githubLabel = new QLabel("<a href='https://github.com/ChiangyangNPU/quick-shot'>GitHub: github.com/ChiangyangNPU/quick-shot</a>", aboutTab);
-    githubLabel->setOpenExternalLinks(true);
-    giteeLabel = new QLabel("<a href='https://gitee.com/ChiangyangNPU/quick-shot'>Gitee: gitee.com/ChiangyangNPU/quick-shot</a>", aboutTab);
-    giteeLabel->setOpenExternalLinks(true);
-    emailLabel = new QLabel("Email: <a href='mailto:chiangyangnpu@163.com'>chiangyangnpu@163.com</a>", aboutTab);
-    emailLabel->setOpenExternalLinks(true);
-
-    mainLayout->addLayout(topLayout);
-    mainLayout->addSpacing(20);
-    mainLayout->addWidget(githubLabel);
-    mainLayout->addSpacing(5);
-    mainLayout->addWidget(giteeLabel);
-    mainLayout->addSpacing(5);
-    mainLayout->addWidget(emailLabel);
-    mainLayout->addSpacing(15);
-    
-    // Update Group
-    m_updateGroup = new QGroupBox(aboutTab);
-    m_updateGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    m_updateGroup->setTitle(TranslationManager::instance()->get("update.groupTitle", "Software Update"));
-    QVBoxLayout *updateLayout = new QVBoxLayout(m_updateGroup);
-    updateLayout->setSpacing(8);
-    
-    lblUpdateStatus = new ElidedLabel(aboutTab);
-    lblUpdateStatus->setWordWrap(false);
-    lblUpdateStatus->setAlignment(Qt::AlignCenter);
-    updateLayout->addWidget(lblUpdateStatus);
-    
-    btnCheckUpdate = new QPushButton(aboutTab);
-    btnCheckUpdate->setObjectName("primaryButton");
-    btnCheckUpdate->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    // 防止检查/下载过程中状态文字与渠道提示出现时把按钮高度压扁：
-    // 关于页高度固定，QSS height 只是首选高度（可被布局压缩），
-    // 以当前样式下的 sizeHint 作为硬性最小高度，布局便无法再压缩它。
-    btnCheckUpdate->setMinimumHeight(btnCheckUpdate->sizeHint().height());
-    updateLayout->addWidget(btnCheckUpdate);
-    
-    btnDownloadUpdate = new QPushButton(aboutTab);
-    btnDownloadUpdate->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    btnDownloadUpdate->setMinimumHeight(btnDownloadUpdate->sizeHint().height());
-    btnDownloadUpdate->hide();
-    updateLayout->addWidget(btnDownloadUpdate);
-    
-    m_updateProgressBar = new QProgressBar(aboutTab);
-    m_updateProgressBar->setRange(0, 100);
-    m_updateProgressBar->setValue(0);
-    m_updateProgressBar->setStyleSheet(StyleManager::getProgressBarStyle());
-    m_updateProgressBar->hide();
-    updateLayout->addWidget(m_updateProgressBar);
-    
-    btnCancelUpdate = new QPushButton(aboutTab);
-    btnCancelUpdate->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    btnCancelUpdate->setMinimumHeight(btnCancelUpdate->sizeHint().height());
-    btnCancelUpdate->hide();
-    updateLayout->addWidget(btnCancelUpdate);
-    
-    btnInstallUpdate = new QPushButton(aboutTab);
-    btnInstallUpdate->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    btnInstallUpdate->setMinimumHeight(btnInstallUpdate->sizeHint().height());
-    btnInstallUpdate->hide();
-    updateLayout->addWidget(btnInstallUpdate);
-    
-    lblUpdateChannel = new QLabel(aboutTab);
-    lblUpdateChannel->setAlignment(Qt::AlignCenter);
-    lblUpdateChannel->hide();
-    updateLayout->addWidget(lblUpdateChannel);
-    
-    mainLayout->addWidget(m_updateGroup);
-    mainLayout->addStretch();
-    
-    // Update manager
-    m_updateManager = new UpdateManager(this);
-    
-    connect(btnCheckUpdate, &QPushButton::clicked, this, &SettingsWindow::onCheckForUpdate);
-    connect(btnDownloadUpdate, &QPushButton::clicked, this, &SettingsWindow::onDownloadUpdate);
-    connect(btnInstallUpdate, &QPushButton::clicked, this, &SettingsWindow::onInstallUpdate);
-    connect(btnCancelUpdate, &QPushButton::clicked, this, &SettingsWindow::onCancelUpdate);
-    
-    connect(m_updateManager, &UpdateManager::checkFinished, this, &SettingsWindow::onUpdateCheckFinished);
-    connect(m_updateManager, &UpdateManager::downloadProgress, this, &SettingsWindow::onUpdateDownloadProgress);
-    connect(m_updateManager, &UpdateManager::downloadFinished, this, &SettingsWindow::onUpdateDownloadFinished);
-    connect(m_updateManager, &UpdateManager::installFinished, this, &SettingsWindow::onUpdateInstallFinished);
-    connect(m_updateManager, &UpdateManager::channelSwitched, this,
-        [this](UpdateManager::Channel, UpdateManager::Channel to, const QString &reason) {
-            TranslationManager *tm = TranslationManager::instance();
-            QString channelName = to == UpdateManager::Channel::GitHub ? "GitHub" :
-                to == UpdateManager::Channel::Gitee ? "Gitee" :
-                tm->get("update.channelOfficial", "Official Website");
-            lblUpdateChannel->setText(tm->get("update.channelSwitch", "Switched to %1 (%2)").arg(channelName, reason));
-            lblUpdateChannel->show();
-            fitWindowHeight();
-        });
-
-    tabWidget->addTab(aboutTab, TranslationManager::instance()->get("tabAbout", "About"));
+    m_aboutTab = new SettingsAboutTab(this);
+    connect(m_aboutTab, &SettingsAboutTab::contentHeightChanged,
+            this, &SettingsWindow::fitWindowHeight);
+    tabWidget->addTab(m_aboutTab, TranslationManager::instance()->get("tabAbout", "About"));
 }
 
 /**
@@ -1272,32 +1151,8 @@ void SettingsWindow::retranslateUi() {
     tabWidget->setTabText(4, tm->get("history.tabName", "History"));
     tabWidget->setTabText(5, tm->get("tabAbout", "About"));
 
-    // Update GroupBox title
-    if (m_updateGroup) {
-        m_updateGroup->setTitle(tm->get("update.groupTitle", "Software Update"));
-    }
-
-    // Update translations
-    if (btnCheckUpdate) {
-        btnCheckUpdate->setText(tm->get("update.check", "Check for Updates"));
-    }
-    if (btnDownloadUpdate) {
-#ifdef Q_OS_WIN
-        btnDownloadUpdate->setText(tm->get("update.download", "Download Update"));
-#else
-        // macOS：dmg 分发 + ad-hoc 签名，自动替换 .app 会被 Gatekeeper 拦截
-        // 改为引导用户到浏览器下载 dmg 手动安装；点击后退出程序避免覆盖正在运行的 .app
-        btnDownloadUpdate->setText(tm->get("update.exitAndDownload", "Exit and Download"));
-#endif
-    }
-    if (btnInstallUpdate) {
-        btnInstallUpdate->setText(tm->get("update.install", "Install and Restart"));
-    }
-    if (btnCancelUpdate) {
-        btnCancelUpdate->setText(tm->get("update.cancel", "Cancel"));
-    }
-    // 更新状态文字（检查中/失败/下载完成等）按当前缓存键重新渲染
-    renderUpdateStatusText();
+    // About 选项卡文案（应用信息为静态；更新组标题/按钮/状态文字由选项卡自行翻译）
+    m_aboutTab->retranslateUi();
 
     // Translate 选项卡文案
     if (m_translateOptionsGroup) {
@@ -1493,12 +1348,6 @@ void SettingsWindow::retranslateUi() {
     if (btnClearHistory) btnClearHistory->setText(tm->get("history.dataManagement.clearAll", "Clear All History"));
     if (historyStatsGroup) historyStatsGroup->setTitle(tm->get("history.stats.title", "Statistics"));
     updateHistoryStats();
-
-    // Update About info if needed (static mostly)
-    if (versionLabel) {
-        versionLabel->setText(tm->get("versionFormat", "Version %1")
-            .arg(qApp->applicationVersion()));
-    }
 }
 
 /**
@@ -2689,8 +2538,8 @@ void SettingsWindow::updateAllGroupBoxStyles() {
     if (historyDataGroup) historyDataGroup->setStyleSheet(style);
     if (historyStatsGroup) historyStatsGroup->setStyleSheet(style);
 
-    // About 关于选项卡
-    if (m_updateGroup) m_updateGroup->setStyleSheet(style);
+    // About 关于选项卡（GroupBox 样式刷新内聚在 SettingsAboutTab）
+    if (m_aboutTab) m_aboutTab->refreshStyles();
 }
 
 /**
@@ -2897,263 +2746,4 @@ void SettingsWindow::mouseReleaseEvent(QMouseEvent *event) {
 
 
 
-/**
- * @brief 检查更新按钮点击
- * @author chiangyang
- */
-void SettingsWindow::onCheckForUpdate() {
-    if (!m_updateManager) return;
-    
-    btnCheckUpdate->setEnabled(false);
-    setUpdateStatusText("update.checking", "Checking for updates...");
-    lblUpdateChannel->clear();
-    lblUpdateChannel->hide();
-    fitWindowHeight();
 
-    m_updateManager->checkForUpdate(qApp->applicationVersion());
-}
-
-/**
- * @brief 下载更新按钮点击
- *
- * 两平台均为应用内下载（带进度条），仅落盘目录不同：
- * Windows 下到临时目录（随后走应用内静默安装）；macOS 下到用户「下载」目录
- * （下载完成后弹窗引导打开 DMG，手动拖入「应用程序」完成更新）。
- * @author chiangyang
- */
-void SettingsWindow::onDownloadUpdate() {
-    if (!m_updateManager) return;
-
-    btnDownloadUpdate->hide();
-    btnCheckUpdate->hide();
-    m_updateProgressBar->show();
-    m_updateProgressBar->setValue(0);
-    btnCancelUpdate->show();
-    setUpdateStatusText("update.downloading", "Downloading update...");
-
-#ifdef Q_OS_WIN
-    QString downloadDir = QStandardPaths::writableLocation(QStandardPaths::TempLocation)
-        + "/QuickShot-update";
-#else
-    QString downloadDir = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation);
-#endif
-    m_updateManager->downloadUpdate(m_updateManager->latestVersion(), downloadDir);
-    fitWindowHeight();
-}
-
-/**
- * @brief 安装更新按钮点击
- * @author chiangyang
- */
-void SettingsWindow::onInstallUpdate() {
-    if (!m_updateManager) return;
-    
-    QString installDir = QCoreApplication::applicationDirPath();
-    QString zipPath = btnInstallUpdate->property("filePath").toString();
-    
-    if (zipPath.isEmpty()) {
-        setUpdateStatusText("update.installError", "Unable to get update file path");
-        fitWindowHeight();
-        return;
-    }
-
-    setUpdateStatusText("update.installing", "Installing update, the program will restart...");
-    fitWindowHeight();
-
-    m_updateManager->installUpdate(zipPath, installDir);
-}
-
-/**
- * @brief 取消更新按钮点击
- * @author chiangyang
- */
-void SettingsWindow::onCancelUpdate() {
-    if (!m_updateManager) return;
-    
-    m_updateManager->cancel();
-    resetUpdateUI();
-}
-
-/**
- * @brief 更新检查完成
- * @author chiangyang
- */
-void SettingsWindow::onUpdateCheckFinished(bool hasUpdate,
-                                           const UpdateManager::VersionInfo &info,
-                                           const UpdateManager::ErrorInfo &error) {
-    Q_UNUSED(error);
-    
-    if (hasUpdate) {
-        setUpdateStatusText("update.found", "New version v%1 found\n%2", {info.version, info.releaseNotes});
-        btnDownloadUpdate->show();
-    } else {
-        if (!info.version.isEmpty()) {
-            setUpdateStatusText("update.upToDate", "Already up to date v%1", {info.version});
-        } else {
-            setUpdateStatusText("update.checkFailed", "Check update failed, please try again later");
-        }
-        btnCheckUpdate->setEnabled(true);
-        btnCheckUpdate->show();
-        btnDownloadUpdate->hide();
-    }
-    fitWindowHeight();
-}
-
-/**
- * @brief 更新下载进度
- * @author chiangyang
- */
-void SettingsWindow::onUpdateDownloadProgress(qint64 received, qint64 total, int percent) {
-    Q_UNUSED(received);
-    Q_UNUSED(total);
-    if (m_updateProgressBar) {
-        m_updateProgressBar->setValue(percent);
-    }
-}
-
-#ifndef Q_OS_WIN
-/**
- * @brief 清除文件的 macOS quarantine 隔离标记（best effort）
- *
- * Qt Network 下载默认不打该标记，此处防御性清理：万一文件被加上标记，
- * 用户从 DMG 拖出的 app 会被 Gatekeeper 判「已损坏，无法打开」。
- * 文件本无标记时 xattr 返回非零，属正常情况，静默忽略。
- * @param filePath 下载的 DMG 路径
- * @author chiangyang
- */
-static void clearQuarantineAttribute(const QString &filePath) {
-    QProcess::execute(QStringLiteral("xattr"),
-                      {QStringLiteral("-d"), QStringLiteral("com.apple.quarantine"), filePath});
-}
-#endif
-
-/**
- * @brief 更新下载完成
- * @author chiangyang
- */
-void SettingsWindow::onUpdateDownloadFinished(bool success,
-                                               const QString &filePath,
-                                               const UpdateManager::ErrorInfo &error) {
-    Q_UNUSED(error);
-
-    if (success) {
-#ifdef Q_OS_WIN
-        setUpdateStatusText("update.downloaded", "Download complete, click to install update");
-        m_updateProgressBar->hide();
-        btnCancelUpdate->hide();
-        btnInstallUpdate->show();
-        btnInstallUpdate->setProperty("filePath", filePath);
-#else
-        // macOS：DMG 无法原地替换 .app（ad-hoc 签名分发），参照 tmd 的引导式安装——
-        // 下载完成后清隔离标记，弹窗引导「退出并打开安装包」→ Finder 挂载 DMG
-        // → 用户手动拖入「应用程序」。先 openUrl 再退出，避免退出后无响应的空窗
-        m_updateProgressBar->hide();
-        btnCancelUpdate->hide();
-        clearQuarantineAttribute(filePath);
-        setUpdateStatusText("update.downloaded", "Download complete, click to install update");
-
-        auto *tm = TranslationManager::instance();
-        MessageBox box(this);
-        box.setContent(tm->get("update.macInstallerReady", "Installer downloaded"),
-                       tm->get("update.macInstallGuide",
-                               "The installer has been saved to:\n%1\n\nClick \"Quit and open installer\" to quit and mount it, then drag QuickShot into Applications to finish updating.")
-                           .arg(filePath));
-        QPushButton *openBtn = box.addCustomButton(
-            tm->get("update.macExitAndOpen", "Quit and open installer"), QMessageBox::AcceptRole);
-        box.addCustomButton(tm->get("update.later", "Later"), QMessageBox::RejectRole);
-        box.centerOn(geometry());
-        box.exec();
-        if (box.clickedButton() == openBtn) {
-            QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
-            QCoreApplication::quit();
-        } else {
-            resetUpdateUI();
-        }
-#endif
-    } else {
-        setUpdateStatusText("update.downloadFailed", "Download failed: %1", {error.message});
-        m_updateProgressBar->hide();
-        btnCancelUpdate->hide();
-        btnCheckUpdate->setEnabled(true);
-        btnCheckUpdate->show();
-    }
-    fitWindowHeight();
-}
-
-/**
- * @brief 更新安装完成
- * @param success 是否成功
- * @param message 结果描述（成功/失败原因）
- * @author chiangyang
- */
-void SettingsWindow::onUpdateInstallFinished(bool success, const QString &message) {
-    setUpdateStatusText(QString(), message);
-
-    if (success) {
-        // 安装成功后程序即将退出并自动重启，界面提示即可
-        btnInstallUpdate->setEnabled(false);
-    } else {
-        // 安装失败：隐藏安装按钮，恢复“重新检查”入口
-        btnInstallUpdate->hide();
-        btnCheckUpdate->setEnabled(true);
-        btnCheckUpdate->show();
-    }
-    fitWindowHeight();
-}
-
-/**
- * @brief 重置更新相关UI
- * @author chiangyang
- */
-void SettingsWindow::resetUpdateUI() {
-    if (btnCheckUpdate) {
-        btnCheckUpdate->setEnabled(true);
-        btnCheckUpdate->show();
-    }
-    if (btnDownloadUpdate) btnDownloadUpdate->hide();
-    if (btnInstallUpdate) btnInstallUpdate->hide();
-    if (btnCancelUpdate) btnCancelUpdate->hide();
-    if (m_updateProgressBar) {
-        m_updateProgressBar->hide();
-        m_updateProgressBar->setValue(0);
-    }
-    if (lblUpdateStatus) {
-        lblUpdateStatus->clear();
-    }
-    if (lblUpdateChannel) {
-        lblUpdateChannel->clear();
-        lblUpdateChannel->hide();
-    }
-    // 重置状态文字缓存，避免语言切换时渲染出陈旧文案
-    m_updateStatusKey.clear();
-    m_updateStatusFallback.clear();
-    m_updateStatusArgs.clear();
-    fitWindowHeight();
-}
-
-/**
- * @brief 设置更新状态文字并缓存翻译键
- * @author chiangyang
- */
-void SettingsWindow::setUpdateStatusText(const QString &key, const QString &fallback, const QStringList &args) {
-    m_updateStatusKey = key;
-    m_updateStatusFallback = fallback;
-    m_updateStatusArgs = args;
-    renderUpdateStatusText();
-}
-
-/**
- * @brief 按缓存翻译键重新渲染更新状态文字
- * @author chiangyang
- */
-void SettingsWindow::renderUpdateStatusText() {
-    if (!lblUpdateStatus) return;
-    // 无翻译键（如安装结果消息）时文字不可重建，原样保留 fallback
-    QString text = m_updateStatusKey.isEmpty()
-        ? m_updateStatusFallback
-        : TranslationManager::instance()->get(m_updateStatusKey, m_updateStatusFallback);
-    for (int i = 0; i < m_updateStatusArgs.size(); ++i) {
-        text.replace("%" + QString::number(i + 1), m_updateStatusArgs.at(i));
-    }
-    lblUpdateStatus->setText(text);
-}

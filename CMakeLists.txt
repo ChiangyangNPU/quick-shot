@@ -220,6 +220,9 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/PinWindow.h
         src/widgets/SettingsWindow.cpp
         src/widgets/SettingsWindow.h
+        src/widgets/ElidedLabel.h
+        src/widgets/settings/SettingsAboutTab.cpp
+        src/widgets/settings/SettingsAboutTab.h
         src/widgets/PrecisionSlider.cpp
         src/widgets/PrecisionSlider.h
         src/widgets/MessageBox.cpp

@@ -26,44 +26,11 @@
 #include <array>
 #include "TranslationManager.h"
 #include "StyleManager.h"
-#include "../update/UpdateManager.h"
+#include "ElidedLabel.h"
+#include "settings/SettingsAboutTab.h"
 
 class ConfigManager;
 class QGridLayout;
-
-/**
- * @brief 单行省略号标签
- *
- * 文字超过可用宽度时右侧以省略号截断（配合 setWordWrap(false) 保持单行），
- * 并同步设置 tooltip，鼠标悬停可查看完整文字。
- * 用于固定宽度窗口下避免提示文字被直接裁掉且无迹可寻。
- * 注：Qt6 的 QLabel 没有 setTextElideMode，需在 paintEvent 中用 QFontMetrics 手动省略。
- * @author chiangyang
- */
-class ElidedLabel : public QLabel {
-public:
-    explicit ElidedLabel(QWidget *parent = nullptr) : QLabel(parent) {}
-
-    // QLabel::setText 非虚函数，此处以同名覆盖（hiding），
-    // 调用方通过 ElidedLabel* 访问即可命中本实现
-    void setText(const QString &text) {
-        m_fullText = text;
-        QLabel::setText(text);
-        setToolTip(text);
-    }
-
-protected:
-    void paintEvent(QPaintEvent *event) override {
-        Q_UNUSED(event);
-        QPainter painter(this);
-        // 以当前实际宽度省略，超出部分显示为 "…"，悬停 tooltip 查看全文
-        const QString elided = fontMetrics().elidedText(m_fullText, Qt::ElideRight, width());
-        painter.drawText(rect(), alignment(), elided);
-    }
-
-private:
-    QString m_fullText; ///< 完整文字（绘制时按宽度省略）
-};
 
 /**
  * @brief 设置窗口类
@@ -344,87 +311,6 @@ private slots:
     void onConfigPathChanged(const QString &newPath);
 
     /**
-     * @brief 检查更新槽函数
-     *
-     * 手动触发检查服务器上是否有新版本可用
-     * @author chiangyang
-     */
-    void onCheckForUpdate();
-
-    /**
-     * @brief 下载更新槽函数
-     *
-     * 下载远程更新包到本地临时目录
-     * @author chiangyang
-     */
-    void onDownloadUpdate();
-
-    /**
-     * @brief 安装更新槽函数
-     *
-     * 应用已下载的更新包并重启应用
-     * @author chiangyang
-     */
-    void onInstallUpdate();
-
-    /**
-     * @brief 取消更新槽函数
-     *
-     * 取消当前正在进行的检查、下载或安装操作
-     * @author chiangyang
-     */
-    void onCancelUpdate();
-
-    /**
-     * @brief 更新检查完成槽函数
-     *
-     * 服务器请求完成后触发，传递版本信息与错误信息
-     * @param success 检查是否成功
-     * @param versionInfo 远程版本信息
-     * @param errorInfo 错误信息（仅在失败时有效）
-     * @author chiangyang
-     */
-    void onUpdateCheckFinished(bool success, const UpdateManager::VersionInfo &versionInfo, const UpdateManager::ErrorInfo &errorInfo);
-
-    /**
-     * @brief 更新下载进度槽函数
-     *
-     * 下载过程中定期触发，报告当前进度
-     * @param bytesReceived 已接收字节数
-     * @param bytesTotal 总字节数
-     * @param percent 下载百分比（0-100）
-     * @author chiangyang
-     */
-    void onUpdateDownloadProgress(qint64 bytesReceived, qint64 bytesTotal, int percent);
-
-    /**
-     * @brief 更新下载完成槽函数
-     *
-     * 下载完成（成功或失败）后触发
-     * @param success 下载是否成功
-     * @param filePath 下载文件的本地路径
-     * @param errorInfo 错误信息（仅在失败时有效）
-     * @author chiangyang
-     */
-    void onUpdateDownloadFinished(bool success, const QString &filePath, const UpdateManager::ErrorInfo &errorInfo);
-
-    /**
-     * @brief 更新安装完成槽函数
-     *
-     * UpdateManager 安装流程结束（成功或失败）后触发，用于同步UI显示
-     * @param success 安装是否成功
-     * @param message 结果描述
-     * @author chiangyang
-     */
-    void onUpdateInstallFinished(bool success, const QString &message);
-
-    /**
-     * @brief 重置更新相关UI
-     * @author chiangyang
-     */
-    void resetUpdateUI();
-
-    /**
      * @brief 按当前选项卡内容重新自适应窗口高度
      *
      * 与 onTabChanged 的高度适配逻辑一致：先让页面缩放回 sizeHint
@@ -436,21 +322,6 @@ private slots:
     void fitWindowHeight();
 
 private:
-    /**
-     * @brief 设置更新状态文字并缓存翻译键，供语言切换时重新渲染
-     * @param key 翻译键（空表示文字不可重建，如安装结果消息，将原样保留 fallback）
-     * @param fallback 翻译缺失时的兜底文字
-     * @param args 格式化参数（替换 %1、%2...）
-     * @author chiangyang
-     */
-    void setUpdateStatusText(const QString &key, const QString &fallback, const QStringList &args = QStringList());
-
-    /**
-     * @brief 按缓存的翻译键重新渲染更新状态文字（语言切换时调用）
-     * @author chiangyang
-     */
-    void renderUpdateStatusText();
-
     /**
      * @brief 设置UI
      * @author chiangyang
@@ -660,26 +531,8 @@ private:
     QPushButton *btnCleanHistory;           ///< 清理历史按钮
     QPushButton *btnClearHistory;           ///< 清空历史按钮
 
-    // About
-    QLabel *appNameLabel;           ///< 应用名称标签
-    QLabel *versionLabel;           ///< 版本标签
-    QLabel *copyrightLabel;         ///< 版权标签
-    QLabel *qtLinkLabel;            ///< Qt链接标签
-    QLabel *githubLabel;            ///< GitHub仓库链接标签
-    QLabel *giteeLabel;             ///< Gitee仓库链接标签
-    QLabel *emailLabel;             ///< 联系邮箱标签
-    QGroupBox *m_updateGroup;       ///< 更新分组
-    UpdateManager *m_updateManager;        ///< 更新管理器
-    QPushButton *btnCheckUpdate;            ///< 检查更新按钮
-    ElidedLabel *lblUpdateStatus;           ///< 更新状态标签
-    QProgressBar *m_updateProgressBar;      ///< 更新进度条
-    QPushButton *btnDownloadUpdate;         ///< 下载更新按钮
-    QPushButton *btnInstallUpdate;          ///< 安装更新按钮
-    QPushButton *btnCancelUpdate;           ///< 取消更新按钮
-    QLabel *lblUpdateChannel;               ///< 更新渠道标签
-    QString m_updateStatusKey;      ///< 更新状态文字翻译键（空表示不可重建）
-    QString m_updateStatusFallback; ///< 更新状态文字兜底（翻译缺失/不可重建时原样使用）
-    QStringList m_updateStatusArgs; ///< 更新状态文字格式化参数
+    // About（选项卡内容内聚在 SettingsAboutTab：应用信息 + 软件更新）
+    SettingsAboutTab *m_aboutTab;   ///< 关于选项卡
 
     // Translate
     QGroupBox *m_translateEngineGroup;  ///< 翻译引擎组
