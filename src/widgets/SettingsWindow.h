@@ -29,6 +29,7 @@
 #include "ElidedLabel.h"
 #include "settings/SettingsAboutTab.h"
 #include "settings/SettingsHistoryTab.h"
+#include "settings/SettingsTranslateTab.h"
 
 class ConfigManager;
 class QGridLayout;
@@ -446,16 +447,6 @@ private:
     void updateAllTabsPalette(const QColor &color);
 
     /**
-     * @brief 更新翻译选项卡两个下拉框宽度
-     *
-     * 取翻译引擎下拉框与目标语言下拉框中所有条目文本最宽者，
-     * 统一设置二者的最小宽度，保证两框宽度一致（谁长选谁）。
-     * 在 setupTranslateTab 与 retranslateUi 中调用，确保语言切换后宽度自适应。
-     * @author chiangyang
-     */
-    void updateTranslateComboWidth();
-
-    /**
      * @brief 加载设置
      * @author chiangyang
      */
@@ -464,7 +455,6 @@ private:
     QTabWidget *tabWidget;          ///< 选项卡控件
     QScrollArea *styleScrollArea;   ///< 样式选项卡滚动区域
     QWidget *m_generalTab;          ///< 通用选项卡根容器
-    QWidget *m_translateTab;        ///< 翻译选项卡根容器
 
     // General
     QComboBox *langCombo;           ///< 语言下拉框
@@ -511,36 +501,8 @@ private:
     SettingsAboutTab *m_aboutTab;   ///< 关于选项卡
 
     // Translate
-    QGroupBox *m_translateEngineGroup;  ///< 翻译引擎组
-    QGroupBox *m_translateOptionsGroup; ///< 翻译选项组（目标语言+开关）
-    QComboBox *m_translateEngineCombo;  ///< 翻译引擎下拉框
-    QComboBox *m_translateLangCombo;    ///< 翻译语言下拉框
-    QLineEdit *m_mymemoryEmailEdit;     ///< MyMemory 邮箱输入框
-    QLineEdit *m_baiduAppIdEdit;        ///< 百度 AppID 输入框
-    QLineEdit *m_baiduKeyEdit;          ///< 百度密钥输入框
-    QLineEdit *m_deeplKeyEdit;          ///< DeepL Key 输入框
-    QLineEdit *m_libreUrlEdit;          ///< LibreTranslate 地址输入框
-    QCheckBox *m_translateEnabledCheck; ///< 启用翻译复选框
-    QCheckBox *m_translatePrivacyCheck; ///< 隐私提示复选框
-    QWidget *m_mymemoryConfigWidget;    ///< MyMemory 配置容器
-    QWidget *m_baiduConfigWidget;       ///< 百度配置容器
-    QWidget *m_deeplConfigWidget;       ///< DeepL 配置容器
-    QWidget *m_libreConfigWidget;       ///< LibreTranslate 配置容器
-    QLabel *lblTranslateEngine;         ///< 翻译引擎标签
-    QLabel *lblTranslateLang;           ///< 翻译语言标签
-    QLabel *lblMymemoryEmail;           ///< MyMemory 邮箱标签
-    QLabel *lblMymemoryWebsite;         ///< MyMemory 官网链接标签（点击跳转浏览器）
-    ElidedLabel *lblMymemoryNetworkHint; ///< MyMemory 网络访问说明标签
-    QLabel *lblBaiduAppId;              ///< 百度 AppID 标签
-    QLabel *lblBaiduKey;                ///< 百度密钥标签
-    QLabel *lblBaiduWebsite;            ///< 百度翻译官网链接标签（点击跳转浏览器）
-    ElidedLabel *lblBaiduNetworkHint;   ///< 百度翻译网络访问说明标签
-    QLabel *lblDeeplKey;                ///< DeepL Key 标签
-    QLabel *lblDeeplWebsite;             ///< DeepL 官网链接标签（点击跳转浏览器）
-    ElidedLabel *lblDeeplNetworkHint;   ///< DeepL 网络访问说明标签
-    QLabel *lblLibreUrl;                ///< LibreTranslate 地址标签
-    QLabel *lblLibreWebsite;            ///< LibreTranslate 官网链接标签（点击跳转浏览器）
-    ElidedLabel *lblLibreNetworkHint;   ///< LibreTranslate 网络访问说明标签
+    // Translate（选项卡内容内聚在 SettingsTranslateTab）
+    SettingsTranslateTab *m_translateTabWidget; ///< 翻译选项卡
 
     // Style
     QGroupBox *borderGroup;         ///< 边框颜色设置组
@@ -595,19 +557,6 @@ private slots:
      * @author chiangyang
      */
     void onDpiChanged();
-
-    /**
-     * @brief 翻译引擎切换槽函数，显隐对应引擎配置行
-     * @param index 引擎下拉框索引
-     * @author chiangyang
-     */
-    void onTranslateEngineChanged(int index);
-
-    /**
-     * @brief 翻译设置改变槽函数（保存配置并重载翻译引擎）
-     * @author chiangyang
-     */
-    void onTranslateSettingChanged();
 
     /**
      * @brief 带动画的高度设置
