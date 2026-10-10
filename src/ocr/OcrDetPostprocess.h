@@ -10,7 +10,7 @@
  * @brief OCR 检测后处理类
  *
  * 实现 PaddleOCR 的 DB (Differentiable Binarization) 后处理，
- * 包括阈值化、轮廓检测、多边形近似和 Clipper 膨胀。
+ * 包括阈值化、连通域检测、多边形近似和区域外扩。
  * 不依赖 OpenCV，使用纯 C++ 实现。
  * @author chiangyang
  */
@@ -59,10 +59,10 @@ private:
     static std::vector<uint8_t> binarize(const float *scoreMap, int h, int w, float thresh);
 
     /**
-     * @brief 查找轮廓（纯 C++ 实现，扫描线连通域）
+     * @brief 查找连通域外边界点（纯 C++ 实现，BFS 连通域）
      *
-     * 使用 Suzuki-Abe 轮廓追踪算法的简化版本。
-     * 扫描二值图像，找到外部轮廓点。
+     * 对二值图像做 BFS 连通域标记，记录每个连通域每行的最左/最右点，
+     * 按行拼接为轮廓点序列。
      * @param binary 二值化图像
      * @param h 高度
      * @param w 宽度
@@ -83,23 +83,16 @@ private:
     static QPolygonF approxPolyDP(const QVector<QPointF> &contour, double epsilon);
 
     /**
-     * @brief 使用 Clipper 库进行多边形膨胀
+     * @brief 多边形外扩（对应 DB 论文的 unclip）
      *
-     * 对多边形进行膨胀操作，扩大文本区域。
+     * 以多边形质心为中心，将各顶点沿质心方向径向外推 expandDist 距离，
+     * 扩大文本检测区域。
      * @param poly 输入多边形
-     * @param ratio 膨胀比例
-     * @return 膨胀后的多边形
+     * @param ratio 外扩比例
+     * @return 外扩后的多边形
      * @author chiangyang
      */
     static QPolygonF unclip(const QPolygonF &poly, float ratio);
-
-    /**
-     * @brief 计算多边形面积
-     * @param poly 多边形
-     * @return 面积
-     * @author chiangyang
-     */
-    static double polygonArea(const QPolygonF &poly);
 
     /**
      * @brief 计算两点间距离
@@ -109,40 +102,6 @@ private:
      * @author chiangyang
      */
     static double pointDistance(const QPointF &p1, const QPointF &p2);
-
-    /**
-     * @brief 从二值图像中提取轮廓（简化版 findContours）
-     *
-     * 使用基于边界的轮廓追踪方法：
-     * 1. 扫描图像找到轮廓起始点
-     * 2. 沿边界追踪轮廓
-     * 3. 标记已访问的边界点
-     * @param binary 二值化图像数据
-     * @param imgH 图像高度
-     * @param imgW 图像宽度
-     * @return 检测到的轮廓列表
-     * @author chiangyang
-     */
-    static QVector<QVector<QPointF>> extractContours(const std::vector<uint8_t> &binary, int imgH, int imgW);
-
-    /**
-     * @brief 轮廓追踪算法
-     *
-     * 从给定起始点追踪一个完整轮廓。
-     * 使用摩尔邻域跟踪法。
-     * @param binary 二值化图像
-     * @param imgH 图像高度
-     * @param imgW 图像宽度
-     * @param startX 起始点 X 坐标
-     * @param startY 起始点 Y 坐标
-     * @param visited 已访问标记数组
-     * @return 追踪到的轮廓点
-     * @author chiangyang
-     */
-    static QVector<QPointF> traceContour(const std::vector<uint8_t> &binary,
-                                          int imgH, int imgW,
-                                          int startX, int startY,
-                                          std::vector<bool> &visited);
 
     /**
      * @brief 合并同一行的碎片检测框

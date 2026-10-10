@@ -2,10 +2,8 @@
 #include "Logger.h"
 #include <cmath>
 #include <algorithm>
-#include <numeric>
-#include <stack>
 #include <queue>
-#include <set>
+#include <map>
 
 /**
  * @brief 处理检测模型输出
@@ -510,25 +508,6 @@ QPolygonF OcrDetPostprocess::unclip(const QPolygonF &poly, float ratio) {
 }
 
 /**
- * @brief 计算多边形面积
- * @param poly 多边形
- * @return 面积
- * @author chiangyang
- */
-double OcrDetPostprocess::polygonArea(const QPolygonF &poly) {
-    if (poly.size() < 3) return 0;
-
-    double area = 0;
-    int n = poly.size();
-    for (int i = 0; i < n; ++i) {
-        int j = (i + 1) % n;
-        area += poly[i].x() * poly[j].y();
-        area -= poly[j].x() * poly[i].y();
-    }
-    return std::abs(area) / 2.0;
-}
-
-/**
  * @brief 计算两点间距离
  * @param p1 点1
  * @param p2 点2
@@ -539,101 +518,4 @@ double OcrDetPostprocess::pointDistance(const QPointF &p1, const QPointF &p2) {
     double dx = p1.x() - p2.x();
     double dy = p1.y() - p2.y();
     return std::sqrt(dx * dx + dy * dy);
-}
-
-/**
- * @brief 从二值图像中提取轮廓
- * @param binary 二值化图像数据
- * @param imgH 图像高度
- * @param imgW 图像宽度
- * @return 检测到的轮廓列表
- * @author chiangyang
- */
-QVector<QVector<QPointF>> OcrDetPostprocess::extractContours(const std::vector<uint8_t> &binary, int imgH, int imgW) {
-    QVector<QVector<QPointF>> contours;
-    std::vector<bool> visited(imgH * imgW, false);
-
-    for (int y = 1; y < imgH - 1; ++y) {
-        for (int x = 1; x < imgW - 1; ++x) {
-            int idx = y * imgW + x;
-            if (binary[idx] == 1 && !visited[idx]) {
-                // 检查是否为边界起始点（左侧是背景）
-                if (x > 0 && binary[y * imgW + (x - 1)] == 0) {
-                    auto contour = traceContour(binary, imgH, imgW, x, y, visited);
-                    if (contour.size() >= 4) {
-                        contours.append(contour);
-                    }
-                }
-            }
-        }
-    }
-
-    return contours;
-}
-
-/**
- * @brief 轮廓追踪算法
- *
- * 使用摩尔邻域跟踪法追踪一个完整轮廓。
- * @param binary 二值化图像
- * @param imgH 图像高度
- * @param imgW 图像宽度
- * @param startX 起始点 X 坐标
- * @param startY 起始点 Y 坐标
- * @param visited 已访问标记数组
- * @return 追踪到的轮廓点
- * @author chiangyang
- */
-QVector<QPointF> OcrDetPostprocess::traceContour(const std::vector<uint8_t> &binary,
-                                                   int imgH, int imgW,
-                                                   int startX, int startY,
-                                                   std::vector<bool> &visited) {
-    QVector<QPointF> contour;
-
-    // 摩尔邻域：8 个方向，从右侧开始顺时针
-    const int dx[] = {1, 1, 0, -1, -1, -1, 0, 1};
-    const int dy[] = {0, 1, 1, 1, 0, -1, -1, -1};
-
-    int x = startX;
-    int y = startY;
-    int startDir = 0; // 起始搜索方向
-
-    // 最多追踪 maxSteps 步防止无限循环
-    int maxSteps = imgH * imgW;
-    int steps = 0;
-
-    do {
-        contour.append(QPointF(x, y));
-        visited[y * imgW + x] = true;
-
-        // 从 startDir 开始搜索下一个边界点
-        bool found = false;
-        for (int i = 0; i < 8; ++i) {
-            int dir = (startDir + i) % 8;
-            int nx = x + dx[dir];
-            int ny = y + dy[dir];
-
-            if (nx >= 0 && nx < imgW && ny >= 0 && ny < imgH) {
-                if (binary[ny * imgW + nx] == 1) {
-                    // 找到下一个边界点
-                    x = nx;
-                    y = ny;
-                    // 更新搜索方向：从当前方向的反方向开始
-                    startDir = (dir + 4) % 8;
-                    // 微调：从反方向的下一个方向开始
-                    startDir = (startDir + 1) % 8;
-                    found = true;
-                    break;
-                }
-            }
-        }
-
-        if (!found) break;
-
-        steps++;
-        if (steps > maxSteps) break;
-
-    } while (x != startX || y != startY || contour.size() < 3);
-
-    return contour;
 }
