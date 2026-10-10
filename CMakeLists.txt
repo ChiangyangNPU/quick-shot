@@ -227,6 +227,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/settings/SettingsHistoryTab.h
         src/widgets/settings/SettingsTranslateTab.cpp
         src/widgets/settings/SettingsTranslateTab.h
+        src/widgets/settings/SettingsShortcutsTab.cpp
+        src/widgets/settings/SettingsShortcutsTab.h
         src/widgets/PrecisionSlider.cpp
         src/widgets/PrecisionSlider.h
         src/widgets/MessageBox.cpp

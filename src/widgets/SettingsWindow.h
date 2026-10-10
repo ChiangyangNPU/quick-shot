@@ -30,6 +30,7 @@
 #include "settings/SettingsAboutTab.h"
 #include "settings/SettingsHistoryTab.h"
 #include "settings/SettingsTranslateTab.h"
+#include "settings/SettingsShortcutsTab.h"
 
 class ConfigManager;
 class QGridLayout;
@@ -343,76 +344,6 @@ private:
     void setupShortcutsTab();
 
     /**
-     * @brief 快捷键行数据
-     *
-     * 描述一行可配置快捷键的全部信息与控件指针，供 addShortcutRow 创建、
-     * retranslateUi 更新文案、信号槽读写配置使用。
-     * @author chiangyang
-     */
-    struct ShortcutRow {
-        QString action;       ///< 动作标识（如 "pin"），用于 shortcutChanged 信号
-        QString configKey;    ///< QSettings 键（如 "shortcut_pin"）
-        QString defaultKey;   ///< 默认快捷键（如 "Alt+P"）
-        QString trKey;        ///< 翻译键（如 "shortcut.pin.label"）
-        QString fallback;     ///< 翻译缺失时的回退文案（如 "Pin Clipboard"）
-        QKeySequenceEdit *edit = nullptr;   ///< 快捷键输入框
-        QLabel *label = nullptr;            ///< 行标签
-        QPushButton *btnOk = nullptr;       ///< 确定按钮
-        QPushButton *btnCancel = nullptr;   ///< 取消按钮
-        QPushButton *btnReset = nullptr;    ///< 恢复默认按钮
-    };
-
-    /**
-     * @brief 固定快捷键行数据
-     *
-     * 描述一行不可配置（固定约定）的快捷键信息，供 addFixedShortcutRow 创建、
-     * retranslateUi 更新功能名文案使用。键位文本 keys 硬编码无需翻译。
-     * @author chiangyang
-     */
-    struct FixedShortcutRow {
-        QString trKey;      ///< 功能名翻译键（如 "shortcut.fixed.save"）
-        QString fallback;   ///< 翻译缺失时的回退文案（如 "Save to File"）
-        QString keys;       ///< 键位文本（硬编码，如 "Ctrl+S" / "1" / "Ctrl+Y / Ctrl+Shift+Z"）
-        QLabel *label = nullptr;        ///< 功能名标签
-        QLineEdit *edit = nullptr;      ///< 只读禁用的键位展示框
-    };
-
-    /**
-     * @brief 数据驱动地添加一行快捷键配置
-     *
-     * 创建 Label + QKeySequenceEdit + 确定/取消/恢复 三按钮，套用与现有 snip/record 行
-     * 一致的样式与固定高度，连接 OK/Cancel/Reset 信号槽读写配置并发射 shortcutChanged。
-     * 创建的行信息存入 m_extraShortcutRows，供 retranslateUi 更新文案。
-     * @param layout 快捷键选项卡的网格布局
-     * @param row 该行在网格中的行号
-     * @param action 动作标识
-     * @param configKey QSettings 键
-     * @param defaultKey 默认快捷键
-     * @param trKey 翻译键
-     * @param fallback 翻译回退文案
-     * @author chiangyang
-     */
-    void addShortcutRow(QGridLayout *layout, int row, const QString &action,
-                        const QString &configKey, const QString &defaultKey,
-                        const QString &trKey, const QString &fallback);
-
-    /**
-     * @brief 数据驱动地添加一行固定快捷键展示
-     *
-     * 创建 Label（功能名）+ QLineEdit（只读禁用，展示键位文本），套用与可配置行
-     * 一致的输入框样式与固定高度。键位输入框置灰（setEnabled(false)）明确传达不可编辑。
-     * 创建的行信息存入 m_fixedShortcutRows，供 retranslateUi 更新功能名文案。
-     * @param layout 所属分组的网格布局
-     * @param row 该行在网格中的行号
-     * @param trKey 功能名翻译键
-     * @param fallback 翻译回退文案
-     * @param keys 键位文本（硬编码，如 "Ctrl+S"）
-     * @author chiangyang
-     */
-    void addFixedShortcutRow(QGridLayout *layout, int row, const QString &trKey,
-                             const QString &fallback, const QString &keys);
-
-    /**
      * @brief 设置关于选项卡
      * @author chiangyang
      */
@@ -486,16 +417,10 @@ private:
     ConfigManager *m_configManager; ///< 配置文件管理器
 
     // Shortcuts
-    QList<ShortcutRow> m_extraShortcutRows; ///< 可配置全局热键行（截图/录屏/历史/贴图/全屏/活动窗口/录屏暂停/录屏停止/隐藏贴图）
-    QList<FixedShortcutRow> m_fixedShortcutRows; ///< 固定快捷键展示行（截图标注/PinWindow，只读禁用）
-    QGroupBox *m_shortcutGroupGlobal = nullptr;     ///< 快捷键选项卡-全局热键分组（可配置）
-    QGroupBox *m_shortcutGroupTools = nullptr;      ///< 快捷键选项卡-标注工具分组（1-8 切换工具）
-    QGroupBox *m_shortcutGroupAnnotation = nullptr; ///< 快捷键选项卡-标注操作分组（复制/撤销/保存/约束等）
-    QGroupBox *m_shortcutGroupPinWindow = nullptr;  ///< 快捷键选项卡-PinWindow 快捷键分组（固定）
-    QScrollArea *m_shortcutsScrollArea = nullptr;   ///< 快捷键选项卡滚动区域
 
     // History（选项卡内容内聚在 SettingsHistoryTab）
     SettingsHistoryTab *m_historyTabWidget; ///< 历史记录选项卡
+    SettingsShortcutsTab *m_shortcutsTabWidget; ///< 快捷键选项卡
 
     // About（选项卡内容内聚在 SettingsAboutTab：应用信息 + 软件更新）
     SettingsAboutTab *m_aboutTab;   ///< 关于选项卡
