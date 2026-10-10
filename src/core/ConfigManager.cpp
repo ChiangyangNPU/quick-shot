@@ -121,104 +121,84 @@ void ConfigManager::initDefaultConfigPath() {
  * @brief 确保配置文件包含所有默认值
  * @author chiangyang
  */
-void ConfigManager::ensureDefaultValues() {
-    QSettings *settings = new QSettings(m_defaultConfigPath, QSettings::IniFormat);
-    
-    // 检查并补充缺失的配置项
-    if (!settings->contains("General/version")) {
-        settings->setValue("General/version", ConfigManager::DEFAULT_VERSION);
+
+/**
+ * @brief 标量默认配置清单（运行时构造，含 QStandardPaths 等动态值）
+ * @author chiangyang
+ */
+QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
+    return {
+        // General
+        { "General/version", ConfigManager::DEFAULT_VERSION },
+        { "language", ConfigManager::DEFAULT_LANGUAGE },
+        { "logPrintEnabled", ConfigManager::DEFAULT_LOG_PRINT_ENABLED },
+
+        // Capture / Record
+        { "capture/saveDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation) },
+        { "record/saveDir", QStandardPaths::writableLocation(QStandardPaths::MoviesLocation) },
+        { "record/systemAudio", false },
+        { "record/microphone", false },
+
+        // History
+        { "history/thumbnailSize", 200 },
+
+        // OCR（空串表示使用内置 models/ocr 目录）
+        { "ocr/modelPath", "" },
+
+        // Style 标量项（颜色键由颜色表驱动）
+        { "style/toolbarButtonStyle", StyleManager::DEFAULT_TOOLBAR_BUTTON_STYLE },
+        { "style/defaultPenWidth", StyleManager::DEFAULT_PEN_WIDTH },
+        { "style/defaultFontSize", StyleManager::DEFAULT_FONT_SIZE },
+        { "style/defaultEraserWidth", StyleManager::DEFAULT_ERASER_WIDTH },
+        { "style/defaultMosaicSize", StyleManager::DEFAULT_MOSAIC_SIZE },
+
+        // Translate
+        { "translate/enabled", true },
+        { "translate/engine", "mymemory" },
+        { "translate/sourceLang", "auto" },
+        { "translate/targetLang", "en" },
+        { "translate/mymemoryEmail", "" },
+        { "translate/baiduAppId", "" },
+        { "translate/baiduKey", "" },
+        { "translate/deeplKey", "" },
+        { "translate/libreUrl", "" },
+        { "translate/showPrivacyWarning", true },
+    };
+}
+
+/**
+ * @brief 将全部默认值写入配置（标量/快捷键/颜色三类来源统一于此）
+ * @param settings 目标配置对象
+ * @param onlyIfMissing true=缺键才补（ensureDefaultValues）；false=强制覆盖（createDefaultConfig）
+ * @author chiangyang
+ */
+void ConfigManager::writeDefaults(QSettings *settings, bool onlyIfMissing) {
+    auto setValueIf = [&](const QString &key, const QVariant &value) {
+        if (!onlyIfMissing || !settings->contains(key)) {
+            settings->setValue(key, value);
+        }
+    };
+
+    for (const auto &entry : scalarDefaults()) {
+        setValueIf(entry.first, entry.second);
     }
-    if (!settings->contains("language")) {
-        settings->setValue("language", ConfigManager::DEFAULT_LANGUAGE);
-    }
-    if (!settings->contains("logPrintEnabled")) {
-        settings->setValue("logPrintEnabled", ConfigManager::DEFAULT_LOG_PRINT_ENABLED);
-    }
-    // 快捷键默认值：遍历数据表补全所有快捷键（含 history，共 9 项）
+    // 快捷键默认值：遍历数据表（含 history，共 9 项）
     for (int i = 0; i < kShortcutConfigCount; ++i) {
         const ShortcutConfigItem &item = kShortcutConfigs[i];
-        if (!settings->contains(item.configKey)) {
-            settings->setValue(item.configKey, item.defaultValue);
-        }
+        setValueIf(item.configKey, item.defaultValue);
     }
-    if (!settings->contains("capture/saveDir")) {
-        settings->setValue("capture/saveDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation));
+    // 颜色默认值：遍历颜色配置表（单一数据源）
+    for (const auto &s : StyleManager::colorSettingTable()) {
+        setValueIf(QString("style/%1").arg(s.settingsKey), s.defaultColor.name());
     }
-    if (!settings->contains("record/saveDir")) {
-        settings->setValue("record/saveDir", QStandardPaths::writableLocation(QStandardPaths::MoviesLocation));
-    }
-    if (!settings->contains("record/systemAudio")) {
-        settings->setValue("record/systemAudio", false);
-    }
-    if (!settings->contains("record/microphone")) {
-        settings->setValue("record/microphone", false);
-    }
+}
 
-    // History - 历史记录默认配置
-    if (!settings->contains("history/thumbnailSize")) {
-        settings->setValue("history/thumbnailSize", 200);
-    }
+void ConfigManager::ensureDefaultValues() {
+    QSettings *settings = new QSettings(m_defaultConfigPath, QSettings::IniFormat);
 
-    // OCR - OCR 默认配置（空串表示使用内置 models/ocr 目录）
-    if (!settings->contains("ocr/modelPath")) {
-        settings->setValue("ocr/modelPath", "");
-    }
+    // 检查并补充缺失的配置项
+    writeDefaults(settings, /*onlyIfMissing=*/true);
 
-    // Style - 遍历颜色配置表补全所有颜色键（单一数据源，缺键才补）
-    for (const auto& s : StyleManager::colorSettingTable()) {
-        QString key = QString("style/%1").arg(s.settingsKey);
-        if (!settings->contains(key)) {
-            settings->setValue(key, s.defaultColor.name());
-        }
-    }
-    if (!settings->contains("style/toolbarButtonStyle")) {
-        settings->setValue("style/toolbarButtonStyle", StyleManager::DEFAULT_TOOLBAR_BUTTON_STYLE);
-    }
-    if (!settings->contains("style/defaultPenWidth")) {
-        settings->setValue("style/defaultPenWidth", StyleManager::DEFAULT_PEN_WIDTH);
-    }
-    if (!settings->contains("style/defaultFontSize")) {
-        settings->setValue("style/defaultFontSize", StyleManager::DEFAULT_FONT_SIZE);
-    }
-    if (!settings->contains("style/defaultEraserWidth")) {
-        settings->setValue("style/defaultEraserWidth", StyleManager::DEFAULT_ERASER_WIDTH);
-    }
-    if (!settings->contains("style/defaultMosaicSize")) {
-        settings->setValue("style/defaultMosaicSize", StyleManager::DEFAULT_MOSAIC_SIZE);
-    }
-
-    // Translate - 翻译功能默认配置
-    if (!settings->contains("translate/enabled")) {
-        settings->setValue("translate/enabled", true);
-    }
-    if (!settings->contains("translate/engine")) {
-        settings->setValue("translate/engine", "mymemory");
-    }
-    if (!settings->contains("translate/sourceLang")) {
-        settings->setValue("translate/sourceLang", "auto");
-    }
-    if (!settings->contains("translate/targetLang")) {
-        settings->setValue("translate/targetLang", "en");
-    }
-    if (!settings->contains("translate/mymemoryEmail")) {
-        settings->setValue("translate/mymemoryEmail", "");
-    }
-    if (!settings->contains("translate/baiduAppId")) {
-        settings->setValue("translate/baiduAppId", "");
-    }
-    if (!settings->contains("translate/baiduKey")) {
-        settings->setValue("translate/baiduKey", "");
-    }
-    if (!settings->contains("translate/deeplKey")) {
-        settings->setValue("translate/deeplKey", "");
-    }
-    if (!settings->contains("translate/libreUrl")) {
-        settings->setValue("translate/libreUrl", "");
-    }
-    if (!settings->contains("translate/showPrivacyWarning")) {
-        settings->setValue("translate/showPrivacyWarning", true);
-    }
-    
     settings->sync();
     delete settings;
 }
@@ -231,56 +211,12 @@ void ConfigManager::ensureDefaultValues() {
 bool ConfigManager::createDefaultConfig() {
     // 使用 QSettings 创建包含所有默认值的配置文件
     QSettings *settings = new QSettings(m_defaultConfigPath, QSettings::IniFormat);
-    
-    // General
-    settings->setValue("General/version", ConfigManager::DEFAULT_VERSION);
-    settings->setValue("language", ConfigManager::DEFAULT_LANGUAGE);
-    settings->setValue("logPrintEnabled", ConfigManager::DEFAULT_LOG_PRINT_ENABLED);
-    
-    // Shortcuts: 遍历数据表写入所有快捷键默认值（含 history，共 9 项）
-    for (int i = 0; i < kShortcutConfigCount; ++i) {
-        settings->setValue(kShortcutConfigs[i].configKey, kShortcutConfigs[i].defaultValue);
-    }
-    
-    // Capture
-    settings->setValue("capture/saveDir", QStandardPaths::writableLocation(QStandardPaths::PicturesLocation));
-    
-    // Record
-    settings->setValue("record/saveDir", QStandardPaths::writableLocation(QStandardPaths::MoviesLocation));
-    settings->setValue("record/systemAudio", false);
-    settings->setValue("record/microphone", false);
 
-    // History - 历史记录默认配置
-    settings->setValue("history/thumbnailSize", 200);
+    writeDefaults(settings, /*onlyIfMissing=*/false);
 
-    // OCR - OCR 默认配置（空串表示使用内置 models/ocr 目录）
-    settings->setValue("ocr/modelPath", "");
-
-    // Style - 遍历颜色配置表写入所有颜色默认值（单一数据源）
-    for (const auto& s : StyleManager::colorSettingTable()) {
-        settings->setValue(QString("style/%1").arg(s.settingsKey), s.defaultColor.name());
-    }
-    settings->setValue("style/toolbarButtonStyle", StyleManager::DEFAULT_TOOLBAR_BUTTON_STYLE);
-    settings->setValue("style/defaultPenWidth", StyleManager::DEFAULT_PEN_WIDTH);
-    settings->setValue("style/defaultFontSize", StyleManager::DEFAULT_FONT_SIZE);
-    settings->setValue("style/defaultEraserWidth", StyleManager::DEFAULT_ERASER_WIDTH);
-    settings->setValue("style/defaultMosaicSize", StyleManager::DEFAULT_MOSAIC_SIZE);
-
-    // Translate - 翻译功能默认配置
-    settings->setValue("translate/enabled", true);
-    settings->setValue("translate/engine", "mymemory");
-    settings->setValue("translate/sourceLang", "auto");
-    settings->setValue("translate/targetLang", "en");
-    settings->setValue("translate/mymemoryEmail", "");
-    settings->setValue("translate/baiduAppId", "");
-    settings->setValue("translate/baiduKey", "");
-    settings->setValue("translate/deeplKey", "");
-    settings->setValue("translate/libreUrl", "");
-    settings->setValue("translate/showPrivacyWarning", true);
-    
     settings->sync();
     delete settings;
-    
+
     LOG_INFO(QString("Created default config file: %1").arg(m_defaultConfigPath));
     return true;
 }

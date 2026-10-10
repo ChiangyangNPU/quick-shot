@@ -181,11 +181,6 @@ private:
      * @brief 初始化默认配置路径
      * @author chiangyang
      */
-
-    /**
-     * @brief 初始化默认配置路径
-     * @author chiangyang
-     */
     void initDefaultConfigPath();
 
     /**
@@ -193,6 +188,22 @@ private:
      * @author chiangyang
      */
     void ensureDefaultValues();
+
+    /**
+     * @brief 标量默认配置清单（运行时构造，含 QStandardPaths 等动态值；
+     *        不含快捷键/颜色两类已表驱动的键）
+     * @author chiangyang
+     */
+    static QList<QPair<QString, QVariant>> scalarDefaults();
+
+    /**
+     * @brief 将全部默认值写入配置（标量/快捷键/颜色三类来源统一于此）
+     * @param settings 目标配置对象
+     * @param onlyIfMissing true=缺键才补（ensureDefaultValues）；
+     *                      false=强制覆盖（createDefaultConfig）
+     * @author chiangyang
+     */
+    static void writeDefaults(QSettings *settings, bool onlyIfMissing);
 
     /**
      * @brief 保存配置路径到注册表/配置文件
