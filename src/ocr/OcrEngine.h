@@ -77,6 +77,13 @@ public:
     bool initialize(const QString &modelDir);
 
     /**
+     * @brief 检查引擎是否就绪
+     * @return 是否已加载模型
+     * @author chiangyang
+     */
+    bool isReady() const;
+
+    /**
      * @brief 释放 OCR 引擎资源
      *
      * 释放 ONNX Runtime 会话和模型资源，释放后引擎回到未初始化状态。
@@ -87,12 +94,34 @@ public:
     void release();
 
     /**
+     * @brief 检查是否正在识别中
+     * @return 是否正在执行 OCR 识别
+     * @author chiangyang
+     */
+    bool isRecognizing() const;
+
+    /**
      * @brief 对图像进行 OCR 识别（同步方法）
      * @param image 输入图像
      * @return OCR 识别结果
      * @author chiangyang
      */
     OcrResult recognize(const QImage &image);
+
+    /**
+     * @brief 切换 OCR 识别语言
+     * @param lang 目标语言
+     * @return 是否切换成功
+     * @author chiangyang
+     */
+    bool switchLanguage(OcrLanguage lang);
+
+    /**
+     * @brief 获取当前识别语言
+     * @return 当前语言枚举值
+     * @author chiangyang
+     */
+    OcrLanguage currentLanguage() const;
 
     /**
      * @brief 从配置字符串获取语言枚举
@@ -109,6 +138,13 @@ public:
      * @author chiangyang
      */
     static QString languageToKey(OcrLanguage lang);
+
+    /**
+     * @brief 判断当前是否使用 GPU 推理
+     * @return 是否正在使用 GPU 加速
+     * @author chiangyang
+     */
+    bool isUsingGpu() const { return m_useGpu; }
 
 private:
     /**
@@ -197,6 +233,7 @@ private:
     bool m_isRecognizing = false;               ///< 是否正在识别中
     bool m_pendingRelease = false;              ///< 是否有待释放（识别中时设置）
     OcrLanguage m_language = OcrLanguage::ChineseEnglish; ///< 当前语言
+    QString m_modelDir;                         ///< 模型目录路径
     mutable QMutex m_mutex;                    ///< 互斥锁，保护线程安全
 };
 

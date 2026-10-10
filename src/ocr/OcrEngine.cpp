@@ -290,6 +290,7 @@ bool OcrEngine::initialize(const QString &modelDir) {
 #else
     LOG_INFO(QString("OcrEngine: Initializing with model dir: %1").arg(modelDir));
 
+    m_modelDir = modelDir;
     QDir dir(modelDir + "/mobile");
     if (!dir.exists()) {
         LOG_ERROR(QString("OcrEngine: Mobile model directory does not exist: %1").arg(dir.path()));
@@ -420,6 +421,99 @@ bool OcrEngine::initialize(const QString &modelDir) {
 }
 
 /**
+ * @brief 切换 OCR 识别语言
+ * @param lang 目标语言
+ * @return 是否切换成功
+ * @author chiangyang
+ */
+bool OcrEngine::switchLanguage(OcrLanguage lang) {
+#ifndef ENABLE_OCR
+    Q_UNUSED(lang);
+    LOG_WARNING("OcrEngine: ONNX Runtime not available, cannot switch language");
+    return false;
+#else
+    if (lang == m_language && m_ready) {
+        LOG_INFO(QString("OcrEngine: Language already set to %1, no switch needed").arg(languageToKey(lang)));
+        return true;
+    }
+
+    // 尚未初始化，只记录语言设置，等 initialize 时再加载
+    if (m_modelDir.isEmpty() || !m_sessionOptions) {
+        m_language = lang;
+        LOG_INFO(QString("OcrEngine: Engine not initialized, language set to %1 (deferred)").arg(languageToKey(lang)));
+        return true;
+    }
+
+    LOG_INFO(QString("OcrEngine: Switching language from %1 to %2")
+        .arg(languageToKey(m_language)).arg(languageToKey(lang)));
+
+    QDir dir(m_modelDir + "/mobile");
+    if (!dir.exists()) {
+        LOG_ERROR(QString("OcrEngine: Mobile model directory does not exist: %1").arg(dir.path()));
+        return false;
+    }
+
+    QString recModelPath = dir.filePath(recModelName(lang));
+    QString dictPath = dir.filePath(dictFileName(lang));
+
+    if (!QFile::exists(recModelPath)) {
+        LOG_ERROR(QString("OcrEngine: Recognition model not found: %1").arg(recModelPath));
+        return false;
+    }
+    if (!QFile::exists(dictPath)) {
+        LOG_ERROR(QString("OcrEngine: Dictionary file not found: %1").arg(dictPath));
+        return false;
+    }
+
+    try {
+        // 重新加载识别模型
+#ifdef Q_OS_WIN
+        m_recSession = std::make_unique<Ort::Session>(*m_env, recModelPath.toStdWString().c_str(), *m_sessionOptions);
+#else
+        m_recSession = std::make_unique<Ort::Session>(*m_env, recModelPath.toUtf8().constData(), *m_sessionOptions);
+#endif
+
+        // 重新加载字典
+        if (!loadDict(dictPath)) {
+            LOG_ERROR("OcrEngine: Failed to load character dictionary");
+            return false;
+        }
+
+        m_language = lang;
+        LOG_INFO(QString("OcrEngine: Language switched to %1, dict size=%2, GPU=%3")
+            .arg(languageToKey(m_language)).arg(m_charDict.size())
+            .arg(m_useGpu ? "enabled" : "disabled"));
+        return true;
+
+    } catch (const Ort::Exception &e) {
+        LOG_ERROR(QString("OcrEngine: ONNX Runtime error during language switch: %1").arg(e.what()));
+        return false;
+    } catch (const std::exception &e) {
+        LOG_ERROR(QString("OcrEngine: Language switch error: %1").arg(e.what()));
+        return false;
+    }
+#endif
+}
+
+/**
+ * @brief 获取当前识别语言
+ * @return 当前语言枚举值
+ * @author chiangyang
+ */
+OcrEngine::OcrLanguage OcrEngine::currentLanguage() const {
+    return m_language;
+}
+
+/**
+ * @brief 检查引擎是否就绪
+ * @return 是否已加载模型
+ * @author chiangyang
+ */
+bool OcrEngine::isReady() const {
+    return m_ready;
+}
+
+/**
  * @brief 释放 OCR 引擎资源
  *
  * 释放 ONNX Runtime 会话和模型资源，释放后引擎回到未初始化状态。
@@ -447,6 +541,15 @@ void OcrEngine::release() {
 
     m_ready = false;
     LOG_INFO("OcrEngine: Resources released");
+}
+
+/**
+ * @brief 检查是否正在识别中
+ * @return 是否正在执行 OCR 识别
+ * @author chiangyang
+ */
+bool OcrEngine::isRecognizing() const {
+    return m_isRecognizing;
 }
 
 /**
