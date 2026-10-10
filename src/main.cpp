@@ -189,7 +189,8 @@ int main(int argc, char *argv[]) {
         quitAction->setText(tm->get("trayQuit"));
         QString sKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString();
         QString rKey = ShortcutManager::instance()->getSequence(ShortcutType::Record).toString();
-        trayIcon->setToolTip(tm->get("runningInBackground", {sKey, rKey}));
+        QString hKey = ShortcutManager::instance()->getSequence(ShortcutType::History).toString();
+        trayIcon->setToolTip(tm->get("runningInBackground", {sKey, rKey, hKey}));
     };
     updateStaticText();
 
