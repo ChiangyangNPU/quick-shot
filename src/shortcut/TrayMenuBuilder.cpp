@@ -91,89 +91,35 @@ void TrayMenuBuilder::build(QMenu* menu, SnipScreen* snipScreen,
     TranslationManager* tm = TranslationManager::instance();
 
     // 与原 main.cpp 顺序保持一致：
-    // 先历史记录 → 分隔线 → 截图/录屏/贴图/全屏/活动窗口/录屏暂停/停止/TogglePins → 分隔线（外部追加设置/退出）
+    // 先历史记录 → 分隔线 → 其余按数据表顺序 → 分隔线（外部追加设置/退出）
+    // 动作统一走 dispatchShortcutAction（与全局热键共用实现）
 
-    // 1. 历史记录
+    // 1. 历史记录（固定在菜单首位）
     {
         const ShortcutConfigItem* cfg = getShortcutConfig(ShortcutType::History);
         if (cfg) {
             QAction* act = menu->addAction(buildActionText(*cfg));
             m_actions.insert(ShortcutType::History, act);
-            QObject::connect(act, &QAction::triggered, [this, historyWindow]() {
-                if (historyWindow) {
-                    historyWindow->show();
-                    historyWindow->raise();
-                    historyWindow->activateWindow();
-                }
+            QObject::connect(act, &QAction::triggered, [this]() {
+                dispatchShortcutAction(ShortcutType::History, m_snipScreen, m_historyWindow);
             });
         }
     }
 
     menu->addSeparator();
 
-    // 2. 按数据表顺序逐个创建菜单项（跳过 History，已单独处理）
-    const ShortcutType orderedTypes[] = {
-        ShortcutType::Snip,
-        ShortcutType::Record,
-        ShortcutType::Pin,
-        ShortcutType::Fullscreen,
-        ShortcutType::ActiveWindow,
-        ShortcutType::RecordPause,
-        ShortcutType::RecordStop,
-        ShortcutType::TogglePins,
-    };
+    // 2. 按数据表顺序逐个创建菜单项（跳过 History，已单独处理；无托盘文案的类型跳过）
+    for (int i = 0; i < kShortcutConfigCount; ++i) {
+        const ShortcutConfigItem& cfg = kShortcutConfigs[i];
+        if (cfg.type == ShortcutType::History || !cfg.trayTextKey) continue;
 
-    for (ShortcutType t : orderedTypes) {
-        const ShortcutConfigItem* cfg = getShortcutConfig(t);
-        if (!cfg || !cfg->trayTextKey) continue;
+        QAction* act = menu->addAction(buildActionText(cfg));
+        m_actions.insert(cfg.type, act);
 
-        QAction* act = menu->addAction(buildActionText(*cfg));
-        m_actions.insert(t, act);
-
-        switch (t) {
-            case ShortcutType::Snip:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->start();
-                });
-                break;
-            case ShortcutType::Record:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->startRecording();
-                });
-                break;
-            case ShortcutType::Pin:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->pinClipboard();
-                });
-                break;
-            case ShortcutType::Fullscreen:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->grabFullscreen();
-                });
-                break;
-            case ShortcutType::ActiveWindow:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->grabActiveWindow();
-                });
-                break;
-            case ShortcutType::RecordPause:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->togglePauseRecording();
-                });
-                break;
-            case ShortcutType::RecordStop:
-                QObject::connect(act, &QAction::triggered, [this]() {
-                    if (m_snipScreen) m_snipScreen->stopRecording();
-                });
-                break;
-            case ShortcutType::TogglePins:
-                QObject::connect(act, &QAction::triggered, []() {
-                    PinWindow::toggleAll();
-                });
-                break;
-            default:
-                break;
-        }
+        const ShortcutType type = cfg.type;
+        QObject::connect(act, &QAction::triggered, [this, type]() {
+            dispatchShortcutAction(type, m_snipScreen, m_historyWindow);
+        });
     }
 
     menu->addSeparator();

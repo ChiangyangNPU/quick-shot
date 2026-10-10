@@ -170,6 +170,24 @@ inline QList<const ShortcutConfigItem*> getAllShortcutConfigs() {
     return result;
 }
 
+class SnipScreen;
+class HistoryWindow;
+
+/**
+ * @brief 执行快捷键对应的动作（单一实现）
+ *
+ * 全局热键注册（ShortcutManager::registerAll 的回调）与托盘菜单点击
+ * （TrayMenuBuilder::build 的 action）共用本分发函数，保证两条触发路径
+ * 行为一致；新增快捷键只需在此 switch 增加一个分支。
+ * @param type 快捷键类型
+ * @param snipScreen 截图主界面（可为 nullptr，相关动作静默跳过）
+ * @param historyWindow 历史记录窗口（可为 nullptr）
+ * @author chiangyang
+ */
+void dispatchShortcutAction(ShortcutType type,
+                            SnipScreen *snipScreen,
+                            HistoryWindow *historyWindow);
+
 Q_DECLARE_METATYPE(ShortcutType)
 
 #endif // SHORTCUTTYPES_H

@@ -104,54 +104,15 @@ int ShortcutManager::registerAll() {
     }
     int registered = 0;
 
-    // 1. 截图
-    if (m_registry.registerShortcut(ShortcutType::Snip, [this]() {
-        if (m_snipScreen) m_snipScreen->start();
-    })) registered++;
-
-    // 2. 录屏
-    if (m_registry.registerShortcut(ShortcutType::Record, [this]() {
-        if (m_snipScreen) m_snipScreen->startRecording();
-    })) registered++;
-
-    // 3. 历史记录
-    if (m_registry.registerShortcut(ShortcutType::History, [this]() {
-        if (m_historyWindow) {
-            m_historyWindow->show();
-            m_historyWindow->raise();
-            m_historyWindow->activateWindow();
+    // 遍历数据表逐一注册：动作统一走 dispatchShortcutAction（与托盘菜单共用实现）
+    for (int i = 0; i < kShortcutConfigCount; ++i) {
+        const ShortcutType type = kShortcutConfigs[i].type;
+        if (m_registry.registerShortcut(type, [this, type]() {
+            dispatchShortcutAction(type, m_snipScreen, m_historyWindow);
+        })) {
+            registered++;
         }
-    })) registered++;
-
-    // 4. 贴图剪贴板（Alt+P 历史截图翻页）
-    if (m_registry.registerShortcut(ShortcutType::Pin, [this]() {
-        if (m_snipScreen) m_snipScreen->pinClipboard();
-    })) registered++;
-
-    // 5. 全屏截图
-    if (m_registry.registerShortcut(ShortcutType::Fullscreen, [this]() {
-        if (m_snipScreen) m_snipScreen->grabFullscreen();
-    })) registered++;
-
-    // 6. 活动窗口截图
-    if (m_registry.registerShortcut(ShortcutType::ActiveWindow, [this]() {
-        if (m_snipScreen) m_snipScreen->grabActiveWindow();
-    })) registered++;
-
-    // 7. 录屏暂停/恢复
-    if (m_registry.registerShortcut(ShortcutType::RecordPause, [this]() {
-        if (m_snipScreen) m_snipScreen->togglePauseRecording();
-    })) registered++;
-
-    // 8. 录屏停止
-    if (m_registry.registerShortcut(ShortcutType::RecordStop, [this]() {
-        if (m_snipScreen) m_snipScreen->stopRecording();
-    })) registered++;
-
-    // 9. 隐藏/显示所有贴图
-    if (m_registry.registerShortcut(ShortcutType::TogglePins, []() {
-        PinWindow::toggleAll();
-    })) registered++;
+    }
 
     LOG_INFO(QString("[ShortcutManager] registerAll: %1/%2 registered")
                  .arg(registered).arg(kShortcutConfigCount));

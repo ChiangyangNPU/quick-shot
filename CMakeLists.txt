@@ -169,6 +169,7 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/shortcut/GlobalShortcut.cpp
         src/shortcut/GlobalShortcut.h
         src/shortcut/ShortcutTypes.h
+        src/shortcut/ShortcutTypes.cpp
         src/shortcut/ShortcutRegistry.cpp
         src/shortcut/ShortcutRegistry.h
         src/shortcut/ShortcutManager.cpp
