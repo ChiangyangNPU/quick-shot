@@ -483,3 +483,12 @@ if (WIN32 AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     endforeach ()
 
     endif ()
+
+# ============================================================
+# 单元测试（Qt Test；QUICKSHOT_BUILD_TESTS=OFF 可整体关闭）
+# ============================================================
+option(QUICKSHOT_BUILD_TESTS "Build unit tests" ON)
+if (QUICKSHOT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

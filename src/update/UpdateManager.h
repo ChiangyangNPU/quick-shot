@@ -322,6 +322,7 @@ private:
      */
     QString getDownloadUrl(Channel channel, const QString &version) const;
 
+public:
     /**
      * @brief 解析 Gitee/GitHub release API 响应为 VersionInfo
      *
@@ -337,7 +338,7 @@ private:
      * @return true 解析成功且版本号非空；false 版本号为空（仓库未发布 release）
      * @author chiangyang
      */
-    bool parseReleaseApi(const QJsonObject &obj, VersionInfo &out);
+    static bool parseReleaseApi(const QJsonObject &obj, VersionInfo &out);
 
     /**
      * @brief 判断是否为新版本
@@ -346,7 +347,7 @@ private:
      * @return true表示有更新
      * @author chiangyang
      */
-    bool isNewerVersion(const QString &latest, const QString &current) const;
+    static bool isNewerVersion(const QString &latest, const QString &current);
 
     /**
      * @brief 按当前平台从附件列表中挑选安装包
@@ -368,6 +369,7 @@ private:
      */
     static int compareVersion(const QString &a, const QString &b);
 
+private:
     QNetworkAccessManager *m_networkManager;
 
     Status m_status;

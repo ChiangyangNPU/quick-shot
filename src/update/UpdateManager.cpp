@@ -911,7 +911,7 @@ const UpdateManager::VersionInfo::Asset *UpdateManager::pickPlatformAsset(const 
  * @return true表示有更新
  * @author chiangyang
  */
-bool UpdateManager::isNewerVersion(const QString &latest, const QString &current) const {
+bool UpdateManager::isNewerVersion(const QString &latest, const QString &current) {
     return compareVersion(latest, current) > 0;
 }
 
