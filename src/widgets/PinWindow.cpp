@@ -1,4 +1,5 @@
 #include "PinWindow.h"
+#include "../capture/CaptureSession.h"
 #include "PinAnnotationToolBar.h"
 #include "SettingsWindow.h"
 #include "OverlayTextEdit.h"
@@ -529,14 +530,10 @@ void PinWindow::closeEvent(QCloseEvent *event) {
  */
 void PinWindow::copyToClipboard() {
     QPixmap pix = compositePixmap();
-    QClipboard *clipboard = QGuiApplication::clipboard();
-    clipboard->setPixmap(pix);
-    
-    // 记录截图到历史（供 Alt+P 翻页）
-    if (HistoryManager::instance()->isScreenshotEnabled() && !pix.isNull()) {
-        HistoryManager::instance()->addScreenshotPixmap(pix, QApplication::applicationName());
-    }
-    
+
+    // 剪贴板 + 历史记录统一分发
+    CaptureSession::publish(pix);
+
     LOG_INFO("Image copied to clipboard");
 }
 

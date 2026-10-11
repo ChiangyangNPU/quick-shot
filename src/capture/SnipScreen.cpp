@@ -1,4 +1,5 @@
 #include "SnipScreen.h"
+#include "CaptureSession.h"
 #include "PinWindow.h"
 #include "AnnotationInteractionHandler.h"
 #include "Logger.h"
@@ -457,15 +458,7 @@ void SnipScreen::connectRecordingToolbarSignals()
         // 快照：复制当前选区画面（含标注）到剪贴板，不影响录屏状态
         QPixmap pixmap = captureSelectionForOcr();
         if (!pixmap.isNull()) {
-            QClipboard *clipboard = QGuiApplication::clipboard();
-            clipboard->setPixmap(pixmap);
-
-            // 记录录屏快照到历史（供 Alt+P 翻页）
-            if (HistoryManager::instance()->isScreenshotEnabled()) {
-                HistoryManager::instance()->addScreenshotPixmap(
-                    pixmap, QApplication::applicationName());
-            }
-
+            CaptureSession::publish(pixmap);
             LOG_INFO("[SnipScreen] Snapshot copied to clipboard");
         }
     });
@@ -722,17 +715,8 @@ void SnipScreen::exit() {
 void SnipScreen::copy() {
     auto [pixmap, _] = snip();
 
-    // 将图片放入剪贴板
-    QClipboard *clipboard = QGuiApplication::clipboard();
-    clipboard->setPixmap(pixmap);
-
-    // 记录截图到历史（复制操作时将 pixmap 保存到缓存目录）
-    if (HistoryManager::instance()->isScreenshotEnabled() && !pixmap.isNull()) {
-        QString windowTitle = this->windowTitle().isEmpty()
-                                  ? QApplication::applicationName()
-                                  : this->windowTitle();
-        HistoryManager::instance()->addScreenshotPixmap(pixmap, windowTitle);
-    }
+    // 剪贴板 + 历史记录统一分发
+    CaptureSession::publish(pixmap, windowTitle());
 
     exit();
 }
@@ -809,16 +793,8 @@ void SnipScreen::pin() {
     if (safePos.x() > maxX && maxX >= virtualGeo.left()) safePos.setX(maxX);
     if (safePos.y() > maxY && maxY >= virtualGeo.top()) safePos.setY(maxY);
 
-    // 将截图写入剪贴板，便于 Alt+P 重复贴图
-    QGuiApplication::clipboard()->setPixmap(pixmap);
-
-    // 记录截图到历史（贴图操作时将 pixmap 保存到缓存目录，供 Alt+P 翻页）
-    if (HistoryManager::instance()->isScreenshotEnabled()) {
-        QString windowTitle = this->windowTitle().isEmpty()
-                                  ? QApplication::applicationName()
-                                  : this->windowTitle();
-        HistoryManager::instance()->addScreenshotPixmap(pixmap, windowTitle);
-    }
+    // 剪贴板 + 历史记录统一分发（便于 Alt+P 重复贴图）
+    CaptureSession::publish(pixmap, windowTitle());
 
     // 创建贴图窗口，延迟设置几何和显示
     PinWindow *pinWindow = new PinWindow(pixmap);
@@ -942,12 +918,8 @@ void SnipScreen::grabFullscreen() {
         LOG_INFO("[SnipScreen] grabFullscreen: grabbed empty pixmap, ignored");
         return;
     }
-    QGuiApplication::clipboard()->setPixmap(pix);
-
-    // 记录全屏截图到历史（供 Alt+P 翻页）
-    if (HistoryManager::instance()->isScreenshotEnabled()) {
-        HistoryManager::instance()->addScreenshotPixmap(pix, QApplication::applicationName());
-    }
+    // 剪贴板 + 历史记录统一分发（供 Alt+P 翻页）
+    CaptureSession::publish(pix);
 
     LOG_INFO(QString("[SnipScreen] Fullscreen captured %1x%2 copied to clipboard")
         .arg(pix.width()).arg(pix.height()));
@@ -965,12 +937,8 @@ void SnipScreen::grabActiveWindow() {
         LOG_INFO("[SnipScreen] grabActiveWindow: grabbed empty pixmap, ignored");
         return;
     }
-    QGuiApplication::clipboard()->setPixmap(pix);
-
-    // 记录活动窗口截图到历史（供 Alt+P 翻页）
-    if (HistoryManager::instance()->isScreenshotEnabled()) {
-        HistoryManager::instance()->addScreenshotPixmap(pix, QApplication::applicationName());
-    }
+    // 剪贴板 + 历史记录统一分发（供 Alt+P 翻页）
+    CaptureSession::publish(pix);
 
     LOG_INFO(QString("[SnipScreen] Active window captured %1x%2 copied to clipboard")
         .arg(pix.width()).arg(pix.height()));
