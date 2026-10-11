@@ -502,7 +502,6 @@ protected:
     QVBoxLayout *m_mainLayout = nullptr;
     QHBoxLayout *m_primaryLayout = nullptr;
     QList<QPair<QPushButton *, ActionBtnSpec>> m_actionButtons; ///< makeActionButton 注册的操作按钮（样式/翻译统一遍历）
-    QPointer<QComboBox> m_shapeCombo; ///< 形状下拉框（弹窗定位修正用）
     QWidget *subToolbarWindow = nullptr;       ///< 当前激活子工具栏窗口（作为外部 getSubToolbarWindow 的别名）
 
 

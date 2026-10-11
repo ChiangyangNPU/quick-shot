@@ -75,6 +75,7 @@ void SettingsHistoryTab::setupUi() {
 
     lblRetentionDays = new QLabel(tm->get("history.storage.retentionDays", "Retention Period") + ":", historyStorageGroup);
     cmbRetentionDays = new QComboBox(historyStorageGroup);
+    StyleManager::useHighlightOnlyPopup(cmbRetentionDays);
     cmbRetentionDays->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     cmbRetentionDays->addItem(tm->get("history.storage.days7", "7 days"), 7);
     cmbRetentionDays->addItem(tm->get("history.storage.days30", "30 days"), 30);
@@ -90,6 +91,7 @@ void SettingsHistoryTab::setupUi() {
 
     lblMaxItems = new QLabel(tm->get("history.storage.maxItems", "Max Records") + ":", historyStorageGroup);
     cmbMaxItems = new QComboBox(historyStorageGroup);
+    StyleManager::useHighlightOnlyPopup(cmbMaxItems);
     cmbMaxItems->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     cmbMaxItems->addItem("500", 500);
     cmbMaxItems->addItem("1000", 1000);

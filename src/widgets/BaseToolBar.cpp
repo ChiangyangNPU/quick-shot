@@ -441,9 +441,6 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
             data.shapeCombo->setStyleSheet(StyleManager::getComboBoxStyle());
             adjustShapeComboPopupWidth(data.shapeCombo);
             StyleManager::useHighlightOnlyPopup(data.shapeCombo);
-            m_shapeCombo = data.shapeCombo;
-            // 弹窗显示时修正定位（见 eventFilter 的 QEvent::Show 分支）
-            data.shapeCombo->view()->window()->installEventFilter(this);
             connect(data.shapeCombo, &QComboBox::currentIndexChanged, [this, &data]() {
                 int shapeType = data.shapeCombo->currentData().toInt();
                 LOG_INFO(QString("Shape type changed: %1").arg(shapeType));
@@ -1100,22 +1097,6 @@ bool BaseToolBar::eventFilter(QObject *watched, QEvent *event) {
             p.setBrush(StyleManager::getSubToolbarBgColor());
             p.drawRoundedRect(w->rect(), radius, radius);
         }
-        return false;
-    }
-
-    // 形状下拉弹窗：Qt 在子工具栏为顶层 Tool 窗口的场景下会把弹窗锚在
-    // combo 顶部（正好盖住本体），这里在弹窗显示后强制移到 combo 正下方
-    if (m_shapeCombo && watched == m_shapeCombo->view()->window()
-        && event->type() == QEvent::Show) {
-        QPointer<QComboBox> combo = m_shapeCombo;
-        QTimer::singleShot(0, this, [combo]() {
-            if (!combo || !combo->view()) return;
-            QWidget *popupWin = combo->view()->window();
-            const QPoint below = combo->mapToGlobal(QPoint(0, combo->height()));
-            if (popupWin->pos() != below) {
-                popupWin->move(below);
-            }
-        });
         return false;
     }
 

@@ -1,4 +1,5 @@
 #include "SettingsStyleTab.h"
+#include "../../core/StyleManager.h"
 #include "../MessageBox.h"
 #include "../../core/ConfigManager.h"
 #include "../../log/Logger.h"
@@ -84,6 +85,7 @@ void SettingsStyleTab::setupUi() {
     QHBoxLayout *toolbarButtonStyleLayout = new QHBoxLayout();
     lblToolbarButtonStyle = new QLabel(TranslationManager::instance()->get("style.toolbarButtonStyle", "Button Style:"), toolbarGroup);
     cmbToolbarButtonStyle = new QComboBox(toolbarGroup);
+    StyleManager::useHighlightOnlyPopup(cmbToolbarButtonStyle);
     cmbToolbarButtonStyle->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     cmbToolbarButtonStyle->addItem(TranslationManager::instance()->get("style.buttonStyle.text", "Text"), "text");
     cmbToolbarButtonStyle->addItem(TranslationManager::instance()->get("style.buttonStyle.icon", "Icon"), "icon");

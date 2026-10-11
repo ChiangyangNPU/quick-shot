@@ -96,6 +96,7 @@ void OcrResultDialog::setupUi() {
 
     // 视图模式切换下拉框（原文/译文/对照）
     m_viewModeCombo = new QComboBox(this);
+    StyleManager::useHighlightOnlyPopup(m_viewModeCombo);
     m_viewModeCombo->setStyleSheet(StyleManager::getSettingsButtonStyle());
     m_viewModeCombo->installEventFilter(this);
     connect(m_viewModeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),

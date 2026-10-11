@@ -10,7 +10,10 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStyle>
+#include <QAbstractItemView>
 #include <QStyledItemDelegate>
+#include <QTimer>
+#include <QPointer>
 #include <QSvgRenderer>
 #include <QTabWidget>
 #include <QLineEdit>
@@ -262,6 +265,9 @@ namespace {
 
 /**
  * @brief 不绘制勾选指示器的条目代理（配合 QSS :selected 高亮表达选中）
+ *
+ * 同时修正弹窗锚定：macOS 菜单式弹窗会把弹窗锚在 combo 顶部（正好盖住
+ * 本体），本代理监听弹窗显示事件，将其强制定位到 combo 正下方。
  * @author chiangyang
  */
 class HighlightOnlyPopupDelegate final : public QStyledItemDelegate {
@@ -273,6 +279,26 @@ public:
         // 去掉 ✓ 勾选指示器（macOS 菜单式弹窗会给当前项设置勾选列，挤压文字宽度）
         option->features &= ~QStyleOptionViewItem::HasCheckIndicator;
     }
+
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (event->type() == QEvent::Show) {
+            if (auto *combo = qobject_cast<QComboBox *>(parent())) {
+                if (combo->view() && combo->view()->window() == watched) {
+                    QPointer<QComboBox> comboGuard(combo);
+                    QPointer<QWidget> popupGuard(combo->view()->window());
+                    // Qt 完成自身定位后再修正（单发延迟到下一轮事件循环）
+                    QTimer::singleShot(0, this, [comboGuard, popupGuard]() {
+                        if (!comboGuard || !popupGuard) return;
+                        const QPoint below = comboGuard->mapToGlobal(QPoint(0, comboGuard->height()));
+                        if (popupGuard->pos() != below) {
+                            popupGuard->move(below);
+                        }
+                    });
+                }
+            }
+        }
+        return QStyledItemDelegate::eventFilter(watched, event);
+    }
 };
 
 } // namespace
@@ -283,7 +309,12 @@ public:
  */
 void StyleManager::useHighlightOnlyPopup(QComboBox *combo) {
     if (!combo) return;
-    combo->setItemDelegate(new HighlightOnlyPopupDelegate(combo));
+    auto *delegate = new HighlightOnlyPopupDelegate(combo);
+    combo->setItemDelegate(delegate);
+    // 监听弹窗窗口的显示事件（delegate 自身做过滤器）
+    if (QWidget *popupWin = combo->view()->window()) {
+        popupWin->installEventFilter(delegate);
+    }
 }
 
 /**

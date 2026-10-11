@@ -258,6 +258,7 @@ void HistoryWindow::setupUi()
 
     // 时间筛选
     m_filterCombo = new QComboBox(m_toolbarContainer);
+    StyleManager::useHighlightOnlyPopup(m_filterCombo);
     m_filterCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     m_filterCombo->addItem(tm->get("history.window.timeRanges.all", "All Time"), 0);
     m_filterCombo->addItem(tm->get("history.window.timeRanges.today", "Today"), 1);

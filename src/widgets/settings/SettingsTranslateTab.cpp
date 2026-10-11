@@ -42,6 +42,7 @@ void SettingsTranslateTab::setupUi() {
     QHBoxLayout *engineRow = new QHBoxLayout();
     lblTranslateEngine = new QLabel(tm->get("translate.engine", "Translation Engine") + ":", engineGroup);
     m_translateEngineCombo = new QComboBox(engineGroup);
+    StyleManager::useHighlightOnlyPopup(m_translateEngineCombo);
     m_translateEngineCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     m_translateEngineCombo->addItem(tm->get("translate.engineMyMemory", "MyMemory (No Key)"), "mymemory");
     m_translateEngineCombo->addItem(tm->get("translate.engineBaidu", "Baidu Translate"), "baidu");
@@ -171,6 +172,7 @@ void SettingsTranslateTab::setupUi() {
     QHBoxLayout *langRow = new QHBoxLayout();
     lblTranslateLang = new QLabel(tm->get("translate.targetLang", "Target Language") + ":", m_translateOptionsGroup);
     m_translateLangCombo = new QComboBox(m_translateOptionsGroup);
+    StyleManager::useHighlightOnlyPopup(m_translateLangCombo);
     m_translateLangCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     // 语言名称使用本地名称，无需额外翻译
     m_translateLangCombo->addItem("English", "en");

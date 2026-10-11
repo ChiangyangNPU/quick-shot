@@ -44,6 +44,7 @@ void SettingsGeneralTab::setupUi() {
     QHBoxLayout *langLayout = new QHBoxLayout();
     lblLanguage = new QLabel(TranslationManager::instance()->get("language", "Language:"), this);
     langCombo = new QComboBox(this);
+    StyleManager::useHighlightOnlyPopup(langCombo);
     langCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     langCombo->addItem("简体中文", "zh_CN");
     langCombo->addItem("繁體中文（香港）", "zh_HK");
@@ -89,6 +90,7 @@ void SettingsGeneralTab::setupUi() {
     QHBoxLayout *ocrLayout = new QHBoxLayout();
     lblOcrLanguage = new QLabel(TranslationManager::instance()->get("ocr.language", "OCR Language:"), this);
     cmbOcrLanguage = new QComboBox(this);
+    StyleManager::useHighlightOnlyPopup(cmbOcrLanguage);
     cmbOcrLanguage->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.ch_en", "Chinese + English"), "ch_en");
     cmbOcrLanguage->addItem(TranslationManager::instance()->get("ocr.lang.en", "English"), "en");
