@@ -440,6 +440,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
             data.shapeCombo->setCurrentIndex(0);
             data.shapeCombo->setStyleSheet(StyleManager::getComboBoxStyle());
             adjustShapeComboPopupWidth(data.shapeCombo);
+            StyleManager::useHighlightOnlyPopup(data.shapeCombo);
             m_shapeCombo = data.shapeCombo;
             // 弹窗显示时修正定位（见 eventFilter 的 QEvent::Show 分支）
             data.shapeCombo->view()->window()->installEventFilter(this);

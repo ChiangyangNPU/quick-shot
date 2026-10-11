@@ -479,6 +479,18 @@ public:
     static int toolbarCornerRadius(const QWidget *widget);
 
     /**
+     * @brief 下拉框弹窗统一为"高亮选中"风格（去 ✓ 勾选指示器）
+     *
+     * 平台差异：macOS 风格的弹窗是菜单式的——当前项前绘制 ✓ 且弹窗锚在
+     * combo 顶部；Windows 风格是列表式的——当前项用高亮背景、弹窗在下方。
+     * 全应用的 QSS 已用 item:selected 高亮表达选中，安装本代理后各平台
+     * 行为一致（✓ 列不再挤压文字宽度）。
+     * @param combo 目标下拉框
+     * @author chiangyang
+     */
+    static void useHighlightOnlyPopup(QComboBox *combo);
+
+    /**
      * @brief 重新应用全局样式表
      *
      * 全局 qss（app.qss）只在 setStyleSheet() 调用时解析一次，DPI 变化后

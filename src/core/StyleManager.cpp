@@ -10,6 +10,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStyle>
+#include <QStyledItemDelegate>
 #include <QSvgRenderer>
 #include <QTabWidget>
 #include <QLineEdit>
@@ -255,6 +256,34 @@ void StyleManager::initFromConfig(ConfigManager* cm) {
 
     // 工具栏按钮样式
     setToolbarButtonStyle(cm->value("style/toolbarButtonStyle", DEFAULT_TOOLBAR_BUTTON_STYLE).toString());
+}
+
+namespace {
+
+/**
+ * @brief 不绘制勾选指示器的条目代理（配合 QSS :selected 高亮表达选中）
+ * @author chiangyang
+ */
+class HighlightOnlyPopupDelegate final : public QStyledItemDelegate {
+public:
+    explicit HighlightOnlyPopupDelegate(QObject *parent) : QStyledItemDelegate(parent) {}
+
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+        QStyledItemDelegate::initStyleOption(option, index);
+        // 去掉 ✓ 勾选指示器（macOS 菜单式弹窗会给当前项设置勾选列，挤压文字宽度）
+        option->features &= ~QStyleOptionViewItem::HasCheckIndicator;
+    }
+};
+
+} // namespace
+
+/**
+ * @brief 下拉框弹窗统一为"高亮选中"风格
+ * @author chiangyang
+ */
+void StyleManager::useHighlightOnlyPopup(QComboBox *combo) {
+    if (!combo) return;
+    combo->setItemDelegate(new HighlightOnlyPopupDelegate(combo));
 }
 
 /**
