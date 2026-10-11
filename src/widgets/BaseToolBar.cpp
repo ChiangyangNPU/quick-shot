@@ -93,7 +93,7 @@ void BaseToolBar::paintEvent(QPaintEvent *event) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
     painter.setBrush(StyleManager::getToolbarBgColor());
-    int radius = qRound(fontMetrics().height() * 0.3);
+    const int radius = StyleManager::toolbarCornerRadius(this);
     painter.drawRoundedRect(rect(), radius, radius);
 }
 
@@ -997,8 +997,8 @@ bool BaseToolBar::eventFilter(QObject *watched, QEvent *event) {
         if (w) {
             QPainter p(w);
             p.setRenderHint(QPainter::Antialiasing);
-            // 圆角半径与 QSS border-radius: 0.3em 保持一致
-            const qreal radius = 0.3 * w->fontMetrics().horizontalAdvance(QLatin1Char('M'));
+            // 圆角半径与 QSS border-radius: 0.3em 保持一致（统一走 StyleManager）
+            const qreal radius = StyleManager::toolbarCornerRadius(w);
             p.setPen(Qt::NoPen);
             p.setBrush(StyleManager::getSubToolbarBgColor());
             p.drawRoundedRect(w->rect(), radius, radius);

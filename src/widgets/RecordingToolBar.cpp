@@ -210,6 +210,15 @@ void RecordingToolBar::positionNearSelection(const QRect &selectionRect) {
         y = selectionRect.bottom() - toolbarHeight - 5;
     }
 
+    // 确保工具栏不超出屏幕左右边界（与 ScreenshotToolBar 的定位规则一致；
+    // 选区贴屏幕边缘时无此钳制工具栏会溢出）
+    if (x < screenGeometry.left()) {
+        x = screenGeometry.left() + 5;
+    }
+    if (x + toolbarWidth > screenGeometry.right()) {
+        x = screenGeometry.right() - toolbarWidth - 5;
+    }
+
     // 转换为父控件（SnipScreen）相对坐标
     QPoint parentPos = parentWidget() ? parentWidget()->mapToGlobal(QPoint(0, 0)) : QPoint(0, 0);
     move(x - parentPos.x(), y - parentPos.y());

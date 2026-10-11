@@ -236,6 +236,7 @@
   "history.window.noData": "기록이 없습니다",
   "history.window.actions.copy": "복사",
   "history.window.actions.save": "스크린샷 저장",
+  "overlay.rotate": "회전",
   "history.window.actions.delete": "선택 삭제",
   "history.window.actions.clear": "기록 지우기",
   "history.window.timeRanges.all": "전체 기간",

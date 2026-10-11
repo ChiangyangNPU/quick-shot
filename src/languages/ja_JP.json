@@ -236,6 +236,7 @@
   "history.window.noData": "履歴記録がありません",
   "history.window.actions.copy": "コピー",
   "history.window.actions.save": "スクリーンショットを保存",
+  "overlay.rotate": "回転",
   "history.window.actions.delete": "選択項目を削除",
   "history.window.actions.clear": "履歴をクリア",
   "history.window.timeRanges.all": "すべての期間",

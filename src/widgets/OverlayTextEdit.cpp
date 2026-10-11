@@ -5,6 +5,7 @@
 #include <QStyle>
 #include <QtMath>
 #include "../core/StyleManager.h"
+#include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 
 namespace {
@@ -178,7 +179,7 @@ OverlayTextEdit::OverlayTextEdit(QWidget *parent)
     rotateButton->setIconSize(QSize(14, 14));
     rotateButton->setFixedSize(QSize(18, 18));
     rotateButton->setAutoRaise(true);
-    rotateButton->setToolTip("旋转");
+    rotateButton->setToolTip(TranslationManager::instance()->get("overlay.rotate", "Rotate"));
     LOG_INFO("OverlayTextEdit initialized");
     rotateButton->installEventFilter(this);
     rotateButton->hide();

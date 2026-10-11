@@ -668,6 +668,17 @@ public:
     static QIcon loadAppIcon();
 
     /**
+     * @brief 工具栏圆角半径（对齐 QSS border-radius: 0.3em 的视觉意图）
+     *
+     * 以控件字体的 'M' 字符宽度近似 em。主工具栏/子工具栏/贴图工具栏
+     * 三处绘制共用此实现，避免公式各自漂移。
+     * @param widget 目标控件（取其字体度量）
+     * @return 圆角半径（像素）
+     * @author chiangyang
+     */
+    static int toolbarCornerRadius(const QWidget *widget);
+
+    /**
      * @brief 重新应用全局样式表
      *
      * 全局 qss（app.qss）只在 setStyleSheet() 调用时解析一次，DPI 变化后

@@ -96,15 +96,6 @@ protected:
      */
     void moveEvent(QMoveEvent *event) override;
 
-    /**
-     * @brief 绘制事件，主动绘制圆角矩形背景
-     *
-     * 透明顶层窗口下 QSS 的 background-color 不绘制，需用 QPainter
-     * 主动绘制圆角矩形背景，圆角外区域保持透明。
-     * @param event 绘制事件
-     * @author chiangyang
-     */
-    void paintEvent(QPaintEvent *event) override;
 
 private:
     /**

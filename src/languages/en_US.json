@@ -236,6 +236,7 @@
   "history.window.noData": "No history records",
   "history.window.actions.copy": "Copy",
   "history.window.actions.save": "Save Screenshot",
+  "overlay.rotate": "Rotate",
   "history.window.actions.delete": "Delete Selected",
   "history.window.actions.clear": "Clear History",
   "history.window.timeRanges.all": "All Time",

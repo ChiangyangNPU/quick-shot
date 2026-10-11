@@ -236,6 +236,7 @@
   "history.window.noData": "暂无历史记录",
   "history.window.actions.copy": "复制",
   "history.window.actions.save": "保存截图",
+  "overlay.rotate": "旋转",
   "history.window.actions.delete": "删除选中",
   "history.window.actions.clear": "清空历史",
   "history.window.timeRanges.all": "全部时间",

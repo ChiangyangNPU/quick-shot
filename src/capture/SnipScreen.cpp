@@ -258,12 +258,9 @@ void SnipScreen::connectRecordingSignals()
         m_recordingToolbar->resumeTimer();
     });
     connect(m_recordingControl, &RecordingControlWindow::stopRequested, [this]() {
-        m_recordingToolbar->stopTimer();
-        m_recordingToolbar->resetRecordBtn();
-        m_selector->hideTimerLabel();
-        m_recordingControl->setRecording(false);
-        m_recordingControl->setPaused(false);
-        m_recordingControl->hide();
+        // 不 clearMask：录制收尾（Finalize）期间保持输入遮罩与工具栏可见，
+        // 等待 stopped 信号触发 exit() 统一清理
+        resetRecordingUi();
         m_screenRecorder->stop();
         // 不在此处 exit()，等待 ScreenRecorder::stopped 信号（Finalize 完成后）
     });
@@ -423,13 +420,7 @@ void SnipScreen::connectRecordingToolbarSignals()
             LOG_INFO("[SnipScreen] Cancel button pressed during recording, canceling...");
             // 设置取消标志，stopped 信号处理时不退出截图
             m_isRecordingCanceled = true;
-            // 重置录制状态和UI
-            m_recordingToolbar->stopTimer();
-            m_recordingToolbar->resetRecordBtn();
-            m_selector->hideTimerLabel();
-            m_recordingControl->setRecording(false);
-            m_recordingControl->setPaused(false);
-            m_recordingControl->hide();
+            resetRecordingUi();
             clearMask();
             m_screenRecorder->cancel();
         } else {
@@ -965,6 +956,23 @@ void SnipScreen::togglePauseRecording() {
 }
 
 /**
+ * @brief 复位录制相关 UI 状态（停止/取消路径的公共 7 步）
+ *
+ * stopTimer/resetRecordBtn/hideTimerLabel/setRecording/setPaused/hide。
+ * 不含 clearMask() 与 stop()/cancel() 收尾——停止路径（控制栏按钮）有意
+ * 保持输入遮罩直到 stopped 信号触发 exit()，取消/热键停止路径自行清遮罩。
+ * @author chiangyang
+ */
+void SnipScreen::resetRecordingUi() {
+    m_recordingToolbar->stopTimer();
+    m_recordingToolbar->resetRecordBtn();
+    m_selector->hideTimerLabel();
+    m_recordingControl->setRecording(false);
+    m_recordingControl->setPaused(false);
+    m_recordingControl->hide();
+}
+
+/**
  * @brief 停止录屏（全局热键入口）
  *
  * 仅在录制中生效，停止录制并保留视频文件（区别于取消录制）。
@@ -978,12 +986,7 @@ void SnipScreen::stopRecording() {
     }
     // 走正常停止路径（保留文件），区别于 ESC 的 cancel 路径（删除文件）
     m_isRecordingCanceled = false;
-    m_recordingToolbar->stopTimer();
-    m_recordingToolbar->resetRecordBtn();
-    m_selector->hideTimerLabel();
-    m_recordingControl->setRecording(false);
-    m_recordingControl->setPaused(false);
-    m_recordingControl->hide();
+    resetRecordingUi();
     clearMask();
     m_screenRecorder->stop();
     LOG_INFO("[SnipScreen] Recording stopped by global hotkey");
@@ -1741,13 +1744,7 @@ void SnipScreen::onCancel() {
         LOG_INFO("[SnipScreen] ESC pressed during recording, canceling...");
         // 设置取消标志，stopped 信号处理时不退出截图
         m_isRecordingCanceled = true;
-        // 重置录制状态和UI
-        m_recordingToolbar->stopTimer();
-        m_recordingToolbar->resetRecordBtn();
-        m_selector->hideTimerLabel();
-        m_recordingControl->setRecording(false);
-        m_recordingControl->setPaused(false);
-        m_recordingControl->hide();
+        resetRecordingUi();
         clearMask();
         m_screenRecorder->cancel();
     } else {

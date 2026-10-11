@@ -250,6 +250,14 @@ void StyleManager::initFromConfig(ConfigManager* cm) {
 }
 
 /**
+ * @brief 工具栏圆角半径（对齐 QSS border-radius: 0.3em 的视觉意图）
+ * @author chiangyang
+ */
+int StyleManager::toolbarCornerRadius(const QWidget *widget) {
+    return qRound(0.3 * widget->fontMetrics().horizontalAdvance(QLatin1Char('M')));
+}
+
+/**
  * @brief 加载SVG图标
  * @param iconPath SVG图标路径
  * @param size 图标大小

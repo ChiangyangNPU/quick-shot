@@ -143,6 +143,16 @@ public slots:
     void togglePauseRecording();
 
     /**
+     * @brief 复位录制相关 UI 状态（停止/取消路径的公共 7 步）
+     *
+     * stopTimer/resetRecordBtn/hideTimerLabel/setRecording/setPaused/hide。
+     * 不含 clearMask() 与 stop()/cancel() 收尾——停止路径（控制栏按钮）有意
+     * 保持输入遮罩直到 stopped 信号触发 exit()，取消/热键停止路径自行清遮罩。
+     * @author chiangyang
+     */
+    void resetRecordingUi();
+
+    /**
      * @brief 停止录屏（全局热键入口）
      *
      * 仅在录制中生效，停止录制并保留视频文件（区别于取消录制）。

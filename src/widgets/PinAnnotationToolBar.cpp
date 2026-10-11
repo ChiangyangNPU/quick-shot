@@ -200,26 +200,6 @@ void PinAnnotationToolBar::moveEvent(QMoveEvent *event) {
 }
 
 /**
- * @brief 绘制事件，主动绘制圆角矩形背景
- *
- * 透明顶层窗口下 QSS 的 background-color 不被绘制，需用 QPainter
- * 主动绘制圆角矩形背景；圆角外区域保持透明，从而显示圆角效果。
- * 圆角半径与 QSS border-radius: 0.3em 保持一致。
- * @param event 绘制事件
- * @author chiangyang
- */
-void PinAnnotationToolBar::paintEvent(QPaintEvent *event) {
-    Q_UNUSED(event);
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
-    // 圆角半径与 QSS border-radius: 0.3em 保持一致
-    const qreal radius = 0.3 * fontMetrics().horizontalAdvance(QLatin1Char('M'));
-    p.setPen(Qt::NoPen);
-    p.setBrush(StyleManager::getToolbarBgColor());
-    p.drawRoundedRect(rect(), radius, radius);
-}
-
-/**
  * @brief 更新按钮样式（文字/图标模式切换）
  * @author chiangyang
  */
