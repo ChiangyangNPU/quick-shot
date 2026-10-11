@@ -28,24 +28,9 @@ PinAnnotationToolBar::PinAnnotationToolBar(QWidget *parent)
 void PinAnnotationToolBar::setupUi() {
     LOG_INFO("PinAnnotationToolBar: Setting up UI");
 
-    // 独立顶层窗口：工具类型、无边框、置顶，与 PinWindow 同级显示
-    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
-    // 开启窗口透明背景：顶层窗口默认矩形裁剪，圆角外的四角会被系统背景色填充，
-    // 导致 QSS 的 border-radius 视觉上失效。开启后圆角外区域真正透明，圆角可见。
-    setAttribute(Qt::WA_TranslucentBackground, true);
-    setAttribute(Qt::WA_StyledBackground, true);
-    setStyleSheet(StyleManager::getToolbarBackgroundStyle());
-    setCursor(Qt::ArrowCursor);
-
-    // 创建主布局
-    m_mainLayout = new QVBoxLayout(this);
-    m_mainLayout->setContentsMargins(0, 0, 0, 0);
-    m_mainLayout->setSpacing(0);
-
-    // 创建一级工具栏布局
-    m_primaryLayout = new QHBoxLayout();
-    m_primaryLayout->setContentsMargins(8, 4, 8, 4);
-    m_primaryLayout->setSpacing(4);
+    // 独立顶层窗口：工具类型、无边框、置顶，与 PinWindow 同级显示。
+    // 窗口属性与两级布局（三个工具栏子类共用的外壳）
+    initShell(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
 
     // 标注工具按钮（基类统一创建：矩形/椭圆/箭头/画笔/直线/文本/马赛克/橡皮擦）
     createAnnotationTools();

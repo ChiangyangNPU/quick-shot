@@ -32,11 +32,6 @@ struct ToolSettings {
  * 统一的标注工具元数据，用于创建和更新标注按钮
  * @author chiangyang
  */
-struct AnnotationToolDef {
-    int toolId;
-    QString iconPath;
-};
-
 /**
  * @brief 基础工具栏类
  *
@@ -148,22 +143,6 @@ public:
      * @author chiangyang
      */
     void refreshDefaultValues();
-
-    /**
-     * @brief 获取指定工具的当前画笔粗细
-     * @param toolId 工具ID
-     * @return 画笔粗细值
-     * @author chiangyang
-     */
-    int getToolPenWidth(int toolId) const;
-
-    /**
-     * @brief 获取指定工具的当前字号
-     * @param toolId 工具ID
-     * @return 字号值
-     * @author chiangyang
-     */
-    int getToolFontSize(int toolId) const;
 
 signals:
     // --- 工具信号 ---
@@ -292,6 +271,46 @@ signals:
     void translateRequested();
 
 protected:
+    /**
+     * @brief 将工具栏定位于锚点矩形旁边（优先下方，空间不足翻转上方，含屏幕边界钳制）
+     *
+     * ScreenshotToolBar/RecordingToolBar 两份约 45 行的定位实现逐行同源
+     * （仅水平对齐不同），收拢于此；钳制规则两处强制一致。
+     * @param anchor 锚点矩形（全局坐标，通常为选区）
+     * @param alignRight true=工具栏右边界对齐锚点右边界（截图工具栏）；
+     *                   false=左边界对齐锚点左边界（录屏工具栏）
+     * @return 相对父控件的推荐位置（直接 move() 即可）
+     * @author chiangyang
+     */
+    QPoint positionNearRect(const QRect &anchor, bool alignRight) const;
+
+    /**
+     * @brief 构建带统一配置的横向滑块（range/步长/tick/tracking/事件过滤器）
+     *
+     * buildSubVariant 的四个变体原先各写一份 ~19 行的构建样板，仅
+     * range/默认值/值变更处理不同。
+     * @param min 最小值
+     * @param max 最大值
+     * @param defaultValue 初始值
+     * @param parent 父控件
+     * @param onValueChanged 值变更处理（lambda 捕获 this 可用全部成员）
+     * @return 已连接信号并安装事件过滤器的滑块
+     * @author chiangyang
+     */
+    QSlider *makeSlider(int min, int max, int defaultValue, QWidget *parent,
+                        const std::function<void(int)> &onValueChanged);
+
+    /**
+     * @brief 构建子类窗口外壳（windowFlags/透明背景/样式/光标/两级布局）
+     *
+     * 三个子类 setupUi 开头的 17 行外壳配置逐行相同（仅 windowFlags 不同），
+     * 收拢于此。
+     * @param flags 窗口标志（贴图工具栏为 Tool|Frameless|StaysOnTop）
+     * @return 一级工具栏布局（已配置边距与间距），子类继续向其中添加控件
+     * @author chiangyang
+     */
+    QHBoxLayout *initShell(Qt::WindowFlags flags);
+
     /**
      * @brief 设置UI布局（子类实现）
      * @author chiangyang
@@ -445,9 +464,7 @@ protected:
     QVBoxLayout *m_mainLayout = nullptr;
     QHBoxLayout *m_primaryLayout = nullptr;
     QWidget *subToolbarWindow = nullptr;       ///< 当前激活子工具栏窗口（作为外部 getSubToolbarWindow 的别名）
-    QHBoxLayout *subToolbarLayout = nullptr;   ///< 当前激活子工具栏布局（同上）
 
-    bool m_isChinese = true;
 
     int m_currentToolId = -1;
     QMap<int, ToolSettings> m_toolSettings;

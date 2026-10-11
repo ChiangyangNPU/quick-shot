@@ -6,6 +6,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
+#include <functional>
 #include "StyleManager.h"
 #include "../core/ConfigManager.h"
 #include "../core/TranslationManager.h"
@@ -45,9 +46,80 @@ static constexpr int s_numToolDefs = sizeof(s_toolDefs) / sizeof(s_toolDefs[0]);
  * @param parent 父窗口
  * @author chiangyang
  */
+QPoint BaseToolBar::positionNearRect(const QRect &anchor, bool alignRight) const {
+    // 使用虚拟桌面几何作为边界，避免跨屏选区时被单一屏幕限制
+    const QRect screenGeometry = QApplication::primaryScreen()->virtualGeometry();
+
+    const int toolbarWidth = width();
+    const int toolbarHeight = height();
+
+    const int spaceBelow = screenGeometry.bottom() - anchor.bottom();
+    const int spaceAbove = anchor.top() - screenGeometry.top();
+
+    // 水平对齐：右对齐（截图工具栏）或左对齐（录屏工具栏）
+    int x = alignRight ? anchor.right() - toolbarWidth : anchor.left();
+    int y;
+
+    // 优先放在锚点下方，空间不足翻转上方，再不足则贴下边界内侧
+    if (spaceBelow >= toolbarHeight + 10) {
+        y = anchor.bottom() + 5;
+    } else if (spaceAbove >= toolbarHeight + 10) {
+        y = anchor.top() - toolbarHeight - 5;
+    } else {
+        y = anchor.bottom() - toolbarHeight - 5;
+    }
+
+    // 确保工具栏不超出屏幕左右边界
+    if (x < screenGeometry.left()) {
+        x = screenGeometry.left() + 5;
+    }
+    if (x + toolbarWidth > screenGeometry.right()) {
+        x = screenGeometry.right() - toolbarWidth - 5;
+    }
+
+    // 转换为父控件相对坐标
+    const QPoint parentPos = parentWidget()
+                                 ? parentWidget()->mapToGlobal(QPoint(0, 0))
+                                 : QPoint(0, 0);
+    return QPoint(x - parentPos.x(), y - parentPos.y());
+}
+
+QSlider *BaseToolBar::makeSlider(int min, int max, int defaultValue, QWidget *parent,
+                                 const std::function<void(int)> &onValueChanged) {
+    QSlider *slider = new QSlider(Qt::Horizontal, parent);
+    slider->setRange(min, max);
+    slider->setValue(defaultValue);
+    slider->setSingleStep(1);
+    slider->setPageStep(1);
+    slider->setTracking(true);
+    slider->setTickPosition(QSlider::NoTicks);
+    slider->setTickInterval(1);
+    connect(slider, &QSlider::valueChanged, this, onValueChanged);
+    slider->installEventFilter(this);
+    return slider;
+}
+
+QHBoxLayout *BaseToolBar::initShell(Qt::WindowFlags flags) {
+    setWindowFlags(flags);
+    // 圆角矩形需要透明背景，否则圆角外区域会被系统默认色填充成直角
+    setAttribute(Qt::WA_TranslucentBackground, true);
+    setAttribute(Qt::WA_StyledBackground, true);
+    setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+    setCursor(Qt::ArrowCursor);
+
+    m_mainLayout = new QVBoxLayout(this);
+    m_mainLayout->setContentsMargins(0, 0, 0, 0);
+    m_mainLayout->setSpacing(0);
+
+    m_primaryLayout = new QHBoxLayout();
+    m_primaryLayout->setContentsMargins(8, 4, 8, 4);
+    m_primaryLayout->setSpacing(4);
+
+    return m_primaryLayout;
+}
+
 BaseToolBar::BaseToolBar(QWidget *parent) : QWidget(parent) {
-    m_isChinese = QApplication::translate("BaseToolBar", "Chinese").contains("中文");
-    LOG_INFO(QString("BaseToolBar instance created, language: %1").arg(m_isChinese ? "Chinese" : "English"));
+    LOG_INFO("BaseToolBar instance created");
 
     // 标注默认值持久化：在信号源头上收拢，不依赖设置窗口是否存在。
     // 设置窗口是懒加载的（首次从托盘打开才创建），若持久化只挂在
@@ -193,7 +265,6 @@ void BaseToolBar::showSubTools(int toolId) {
     m_activeSubVariant = newVariant;
     // 更新对外别名（供 getSubToolbarWindow / SnipScreen::calculateToolbarPositions 等使用）
     subToolbarWindow = data.window;
-    subToolbarLayout = data.layout;
 
     // 8) 发射对应的信号，让控制器以当前工具设置为准
     const ToolSettings &ts = m_toolSettings[toolId];
@@ -319,15 +390,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
             data.layout->addWidget(data.shapeCombo);
 
             // --- 线宽滑块（lambda 用 m_currentToolId，不依赖构建时工具） ---
-            data.slider = new QSlider(Qt::Horizontal, data.window);
-            data.slider->setRange(1, 20);
-            data.slider->setValue(StyleManager::getDefaultPenWidth());
-            data.slider->setSingleStep(1);
-            data.slider->setPageStep(1);
-            data.slider->setTracking(true);
-            data.slider->setTickPosition(QSlider::NoTicks);
-            data.slider->setTickInterval(1);
-            connect(data.slider, &QSlider::valueChanged, this, [this](int width) {
+            data.slider = makeSlider(1, 20, StyleManager::getDefaultPenWidth(), data.window, [this](int width) {
                 if (m_currentToolId < 0) return;
                 LOG_INFO(QString("Line width changed: %1").arg(width));
                 m_toolSettings[m_currentToolId].penWidth = width;
@@ -335,7 +398,6 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
                 emit penWidthChanged(width);
                 emit toolPenWidthChanged(width);
             });
-            data.slider->installEventFilter(this);
             data.layout->addWidget(data.slider);
             m_penWidthSlider = data.slider;
 
@@ -346,15 +408,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
 
         case VariantColorPen: {
             // --- 线宽滑块 ---
-            data.slider = new QSlider(Qt::Horizontal, data.window);
-            data.slider->setRange(1, 20);
-            data.slider->setValue(StyleManager::getDefaultPenWidth());
-            data.slider->setSingleStep(1);
-            data.slider->setPageStep(1);
-            data.slider->setTracking(true);
-            data.slider->setTickPosition(QSlider::NoTicks);
-            data.slider->setTickInterval(1);
-            connect(data.slider, &QSlider::valueChanged, this, [this](int width) {
+            data.slider = makeSlider(1, 20, StyleManager::getDefaultPenWidth(), data.window, [this](int width) {
                 if (m_currentToolId < 0) return;
                 LOG_INFO(QString("Line width changed: %1").arg(width));
                 m_toolSettings[m_currentToolId].penWidth = width;
@@ -362,7 +416,6 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
                 emit penWidthChanged(width);
                 emit toolPenWidthChanged(width);
             });
-            data.slider->installEventFilter(this);
             data.layout->addWidget(data.slider);
             m_penWidthSlider = data.slider;
 
@@ -373,15 +426,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
 
         case VariantText: {
             // --- 字号滑块 ---
-            data.slider = new QSlider(Qt::Horizontal, data.window);
-            data.slider->setRange(8, 48);
-            data.slider->setValue(StyleManager::getDefaultFontSize());
-            data.slider->setSingleStep(1);
-            data.slider->setPageStep(1);
-            data.slider->setTracking(true);
-            data.slider->setTickPosition(QSlider::NoTicks);
-            data.slider->setTickInterval(1);
-            connect(data.slider, &QSlider::valueChanged, this, [this](int size) {
+            data.slider = makeSlider(8, 48, StyleManager::getDefaultFontSize(), data.window, [this](int size) {
                 if (m_currentToolId < 0) return;
                 LOG_INFO(QString("Font size changed: %1").arg(size));
                 m_toolSettings[m_currentToolId].fontSize = size;
@@ -389,7 +434,6 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
                 emit fontSizeChanged(size);
                 emit toolFontSizeChanged(size);
             });
-            data.slider->installEventFilter(this);
             data.layout->addWidget(data.slider);
             // 文本工具 slider 不作为 m_penWidthSlider 暴露（它是字号滑块，快捷键处理独立）
             // 但保存到 m_penWidthSlider 以便统一释放：这里仅用于同步 setCurrentPenWidth 不用于 TEXT
@@ -402,14 +446,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
 
         case VariantNoColor: {
             // --- 仅线宽滑块（马赛克 / 橡皮擦，无颜色） ---
-            data.slider = new QSlider(Qt::Horizontal, data.window);
-            data.slider->setRange(1, 20);
-            data.slider->setSingleStep(1);
-            data.slider->setPageStep(1);
-            data.slider->setTracking(true);
-            data.slider->setTickPosition(QSlider::NoTicks);
-            data.slider->setTickInterval(1);
-            connect(data.slider, &QSlider::valueChanged, this, [this](int width) {
+            data.slider = makeSlider(1, 20, StyleManager::getDefaultPenWidth(), data.window, [this](int width) {
                 if (m_currentToolId < 0) return;
                 LOG_INFO(QString("Line width changed: %1").arg(width));
                 m_toolSettings[m_currentToolId].penWidth = width;
@@ -424,7 +461,6 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
                     emit toolPenWidthChanged(width);
                 }
             });
-            data.slider->installEventFilter(this);
             data.layout->addWidget(data.slider);
             m_penWidthSlider = data.slider;
 
@@ -459,7 +495,6 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
 void BaseToolBar::bindVariantInternals(SubToolVariant v) {
     const SubToolVariantData &data = m_subVariants[v];
     subToolbarWindow       = data.window;
-    subToolbarLayout       = data.layout;
     m_penWidthSlider       = data.slider;
     m_colorBtns            = data.colorBtns;
     m_selectedColorBtn     = data.selectedColorBtn;
@@ -665,7 +700,6 @@ void BaseToolBar::createAnnotationTools() {
                     m_activeSubVariant = VariantCount;
                 }
                 subToolbarWindow = nullptr;
-                subToolbarLayout = nullptr;
                 emit annotationToolDeselected();
             }
         });
