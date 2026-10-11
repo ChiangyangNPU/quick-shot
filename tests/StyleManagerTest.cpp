@@ -44,7 +44,9 @@ private slots:
 
     // ---- resetToDefaults 恢复 ----
     void resetToDefaults_restoresAllColors() {
-        // 先把所有颜色改成测试色，再重置，逐项核对回到默认值
+        // 先把所有颜色改成测试色，再重置，逐项核对回到表内默认色。
+        // 注意必须比对 defaultColor：getter() 的实现就是 color(id)，
+        // 与左侧相同（恒真断言测不出任何回归）。
         const QColor testColor(1, 2, 3);
         const auto &table = StyleManager::colorSettingTable();
         for (size_t i = 0; i < table.size(); ++i) {
@@ -54,7 +56,7 @@ private slots:
 
         for (size_t i = 0; i < table.size(); ++i) {
             QCOMPARE(StyleManager::color(static_cast<StyleManager::StyleColorId>(i)),
-                     table[i].getter());
+                     table[i].defaultColor);
         }
     }
 };
