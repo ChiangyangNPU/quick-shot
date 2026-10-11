@@ -125,6 +125,12 @@ protected:
      */
     HitTarget hitTest(const QPoint &pos) const;
 
+    /**
+     * @brief 是否有拖拽/缩放交互进行中（子类可据此挂起内容自适应等副作用）
+     * @author chiangyang
+     */
+    bool isInteractionActive() const { return m_hitTarget != HitTarget::None || m_isMoving; }
+
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;

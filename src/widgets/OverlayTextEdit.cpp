@@ -118,7 +118,9 @@ OverlayTextEdit::OverlayTextEdit(QWidget *parent)
         if (m_rotationPreviewActive && !m_isRotating) {
             updateRotationPreview();
         }
-        adjustSizeToContent();
+        if (!isInteractionActive() && !m_isRotating) {
+            adjustSizeToContent();
+        }
     });
 }
 
