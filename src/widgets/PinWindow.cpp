@@ -785,9 +785,9 @@ void PinWindow::createTextEdit(const QPoint &pos) {
     m_textEdit->setFontSize(m_annotationHandler->fontSize());
     // 限制文本框移动和缩放范围在 PinWindow 内
     m_textEdit->setBoundaryRect(rect());
+    // X 关闭手柄 = 放弃文本（提交走点击别处/切换工具的 finalizeTextEdit 路径）
     connect(m_textEdit, &OverlayTextEdit::closeRequested, this, [this]() {
-        finalizeTextEdit();
-        update();
+        cancelTextEdit();
     });
     m_textEdit->show();
     m_textEdit->setFocus();
@@ -804,6 +804,27 @@ void PinWindow::createTextEdit(const QPoint &pos) {
  * 无需 + m_virtualGeometry.topLeft()）。若文本为空则不创建标注。
  * @author chiangyang
  */
+/**
+ * @brief 取消文本编辑（不提交标注）
+ *
+ * X 关闭手柄/ESC 触发：销毁编辑框并恢复快捷键，正在输入的文本被放弃。
+ * 与 finalizeTextEdit（点击别处/切换工具时的提交路径）相对。
+ * @author chiangyang
+ */
+void PinWindow::cancelTextEdit() {
+    if (!m_textEdit) {
+        return;
+    }
+    m_textEdit->hide();
+    m_textEdit->deleteLater();
+    m_textEdit = nullptr;
+    // 文本编辑框关闭：恢复标注快捷键
+    if (m_annotationController) {
+        m_annotationController->setBareKeysEnabled(true);
+    }
+    update();
+}
+
 void PinWindow::finalizeTextEdit() {
     if (!m_textEdit) {
         return;
@@ -990,8 +1011,7 @@ void PinWindow::onCycleColor() {
 void PinWindow::onCancel() {
     if (m_textEdit) {
         // 取消文本编辑，不创建标注
-        finalizeTextEdit();
-        update();
+        cancelTextEdit();
     } else if (m_annotationMode) {
         // 标注模式：ESC 退出标注模式（窗口不关）
         exitAnnotationMode();

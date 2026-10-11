@@ -163,8 +163,9 @@ void SnipScreen::setupAnnotationHost()
         QRect selection = m_selector->selected();
         QRect boundary = selection.translated(-m_virtualGeometry.topLeft());
         m_textEdit->setBoundaryRect(boundary);
+        // X 关闭手柄 = 放弃文本（提交走点击别处/切换工具的 finalizeTextEdit 路径）
         connect(m_textEdit, &OverlayTextEdit::closeRequested,
-                this, &SnipScreen::finalizeTextEdit);
+                this, &SnipScreen::cancelTextEdit);
         m_textEdit->show();
         m_textEdit->setFocus();
         // 文本编辑框获得焦点：禁用与文本输入冲突的标注快捷键
@@ -1703,15 +1704,29 @@ void SnipScreen::onCycleColor() {
  * 优先级：取消文本编辑 → 取消录制 → 退出截图
  * @author chiangyang
  */
+/**
+ * @brief 取消文本编辑（不提交标注）
+ *
+ * X 关闭手柄/ESC 触发：销毁编辑框并恢复快捷键，正在输入的文本被放弃。
+ * 与 finalizeTextEdit（点击别处/切换工具时的提交路径）相对。
+ * @author chiangyang
+ */
+void SnipScreen::cancelTextEdit() {
+    if (!m_textEdit) {
+        return;
+    }
+    m_textEdit->hide();
+    m_textEdit->deleteLater();
+    m_textEdit = nullptr;
+    // 文本编辑框关闭：恢复标注快捷键
+    m_annotationController->setBareKeysEnabled(true);
+    update();
+}
+
 void SnipScreen::onCancel() {
     if (m_textEdit) {
         // 取消文本编辑，不创建标注
-        m_textEdit->hide();
-        m_textEdit->deleteLater();
-        m_textEdit = nullptr;
-        // 文本编辑框关闭：恢复标注快捷键
-        m_annotationController->setBareKeysEnabled(true);
-        update();
+        cancelTextEdit();
     } else if (m_screenRecorder && m_screenRecorder->isRecording()) {
         // 如果正在录制，取消录制（删除视频文件）
         LOG_INFO("[SnipScreen] ESC pressed during recording, canceling...");

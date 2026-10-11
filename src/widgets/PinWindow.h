@@ -262,6 +262,14 @@ private:
     void finalizeTextEdit();
 
     /**
+     * @brief 取消文本编辑（不提交标注）
+     *
+     * X 关闭手柄/ESC 触发：销毁编辑框并恢复快捷键，正在输入的文本被放弃。
+     * @author chiangyang
+     */
+    void cancelTextEdit();
+
+    /**
      * @brief 合成"所见即所得"图（窗口尺寸画拉伸原图 + 标注 + 马赛克）
      *
      * 无标注时返回原图（最高质量）；有标注时返回窗口尺寸的合成图，

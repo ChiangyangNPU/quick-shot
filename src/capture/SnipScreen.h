@@ -513,6 +513,14 @@ private:
     void finalizeTextEdit();
 
     /**
+     * @brief 取消文本编辑（不提交标注）
+     *
+     * X 关闭手柄/ESC 触发：销毁编辑框并恢复快捷键，正在输入的文本被放弃。
+     * @author chiangyang
+     */
+    void cancelTextEdit();
+
+    /**
      * @brief 渲染标注叠加图像（输出分辨率）
      *
      * 将标注管理器中的标注渲染到 outputSize 分辨率的透明图像上。
