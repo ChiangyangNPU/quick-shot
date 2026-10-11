@@ -272,6 +272,43 @@ signals:
 
 protected:
     /**
+     * @brief 操作按钮描述（创建/样式/翻译共用的单一事实来源）
+     * @author chiangyang
+     */
+    struct ActionBtnSpec {
+        QPushButton **slot;      ///< 子类成员按钮指针的地址（创建后回写）
+        const char *trKey;       ///< 文案翻译键
+        const char *icon;        ///< 图标资源路径
+        bool closeStyle = false; ///< true=关闭类按钮（cancelButton 对象名 + 红色样式）
+    };
+
+    /**
+     * @brief 按描述创建操作按钮并注册到统一管理表
+     *
+     * 创建 + 应用样式 + 连接点击回调 + 回写子类成员指针一步完成；
+     * 样式切换（updateActionButtons）与重翻译（retranslateActionButtons）
+     * 遍历同一张表，三个子类不再各写三份按钮清单。
+     * 按钮的初始禁用态与加入布局由调用方在创建后处理（各子类顺序不同）。
+     * @param spec 按钮描述
+     * @param onClicked 点击回调（子类在此发射具体信号并打日志）
+     * @return 创建的按钮
+     * @author chiangyang
+     */
+    QPushButton *makeActionButton(const ActionBtnSpec &spec, std::function<void()> onClicked);
+
+    /**
+     * @brief 按文字/图标模式刷新所有注册按钮的样式
+     * @author chiangyang
+     */
+    void updateActionButtons(bool isIcon);
+
+    /**
+     * @brief 重翻译所有注册按钮的文案
+     * @author chiangyang
+     */
+    void retranslateActionButtons();
+
+    /**
      * @brief 将工具栏定位于锚点矩形旁边（优先下方，空间不足翻转上方，含屏幕边界钳制）
      *
      * ScreenshotToolBar/RecordingToolBar 两份约 45 行的定位实现逐行同源
@@ -463,6 +500,7 @@ protected:
     // --- 子类共享的成员变量 ---
     QVBoxLayout *m_mainLayout = nullptr;
     QHBoxLayout *m_primaryLayout = nullptr;
+    QList<QPair<QPushButton *, ActionBtnSpec>> m_actionButtons; ///< makeActionButton 注册的操作按钮（样式/翻译统一遍历）
     QWidget *subToolbarWindow = nullptr;       ///< 当前激活子工具栏窗口（作为外部 getSubToolbarWindow 的别名）
 
 

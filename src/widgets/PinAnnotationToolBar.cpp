@@ -55,54 +55,39 @@ void PinAnnotationToolBar::setupUi() {
  */
 void PinAnnotationToolBar::createActionButtons() {
     LOG_INFO("PinAnnotationToolBar: Creating action buttons");
-    auto *tm = TranslationManager::instance();
 
-    // 撤销按钮
-    m_undoBtn = new QPushButton(tm->get("undo"), this);
-    StyleManager::applyActionButtonStyle(m_undoBtn);
-    m_undoBtn->setEnabled(false);
-    connect(m_undoBtn, &QPushButton::clicked, [this]() {
+    // 通用操作按钮：创建/样式/翻译走基类注册表（spec 表），信号在此显式发射
+    m_undoBtn = makeActionButton({&m_undoBtn, "undo", ":/icons/undo.svg"}, [this]() {
         LOG_INFO("PinAnnotationToolBar: Undo requested");
         emit undoRequested();
     });
+    m_undoBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_undoBtn);
 
-    // 重做按钮
-    m_redoBtn = new QPushButton(tm->get("redo"), this);
-    StyleManager::applyActionButtonStyle(m_redoBtn);
-    m_redoBtn->setEnabled(false);
-    connect(m_redoBtn, &QPushButton::clicked, [this]() {
+    m_redoBtn = makeActionButton({&m_redoBtn, "redo", ":/icons/redo.svg"}, [this]() {
         LOG_INFO("PinAnnotationToolBar: Redo requested");
         emit redoRequested();
     });
+    m_redoBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_redoBtn);
 
-    // 清除按钮
-    m_clearBtn = new QPushButton(tm->get("clear"), this);
-    StyleManager::applyActionButtonStyle(m_clearBtn);
-    m_clearBtn->setEnabled(false);
-    connect(m_clearBtn, &QPushButton::clicked, [this]() {
+    m_clearBtn = makeActionButton({&m_clearBtn, "clear", ":/icons/clear.svg"}, [this]() {
         LOG_INFO("PinAnnotationToolBar: Clear requested");
         emit clearRequested();
     });
+    m_clearBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_clearBtn);
 
     // 添加分隔符
     addSeparator(m_primaryLayout);
 
-    // 复制按钮
-    m_copyBtn = new QPushButton(tm->get("copy"), this);
-    StyleManager::applyActionButtonStyle(m_copyBtn);
-    connect(m_copyBtn, &QPushButton::clicked, [this]() {
+    m_copyBtn = makeActionButton({&m_copyBtn, "copy", ":/icons/copy.svg"}, [this]() {
         LOG_INFO("PinAnnotationToolBar: Copy requested");
         emit copyRequested();
     });
     m_primaryLayout->addWidget(m_copyBtn);
 
-    // 保存按钮
-    m_saveBtn = new QPushButton(tm->get("save"), this);
-    StyleManager::applyActionButtonStyle(m_saveBtn);
-    connect(m_saveBtn, &QPushButton::clicked, [this]() {
+    m_saveBtn = makeActionButton({&m_saveBtn, "save", ":/icons/save.svg"}, [this]() {
         LOG_INFO("PinAnnotationToolBar: Save requested");
         emit saveRequested();
     });
@@ -111,11 +96,8 @@ void PinAnnotationToolBar::createActionButtons() {
     // 添加分隔符
     addSeparator(m_primaryLayout);
 
-    // 取消按钮（退出标注模式，标注保留）。使用 cancelButton 对象名应用专属红色样式
-    m_cancelBtn = new QPushButton(tm->get("cancel"), this);
-    m_cancelBtn->setObjectName("cancelButton");
-    StyleManager::applyCloseButtonStyle(m_cancelBtn);
-    connect(m_cancelBtn, &QPushButton::clicked, [this]() {
+    // 取消按钮（退出标注模式，标注保留），closeStyle 应用专属红色样式
+    m_cancelBtn = makeActionButton({&m_cancelBtn, "cancel", ":/icons/close.svg", /*closeStyle=*/true}, [this]() {
         LOG_INFO("PinAnnotationToolBar: Cancel requested");
         emit cancelRequested();
     });
@@ -194,12 +176,8 @@ void PinAnnotationToolBar::updateButtonStyles() {
 
     updateAnnotationButtonStyles(isIcon);
 
-    applyButtonStyle(m_undoBtn,   ":/icons/undo.svg",  tm->get("undo"),   isIcon);
-    applyButtonStyle(m_redoBtn,   ":/icons/redo.svg",  tm->get("redo"),   isIcon);
-    applyButtonStyle(m_clearBtn,  ":/icons/clear.svg", tm->get("clear"),  isIcon);
-    applyButtonStyle(m_copyBtn,   ":/icons/copy.svg",  tm->get("copy"),   isIcon);
-    applyButtonStyle(m_saveBtn,   ":/icons/save.svg",  tm->get("save"),   isIcon);
-    applyButtonStyle(m_cancelBtn, ":/icons/close.svg", tm->get("cancel"), isIcon);
+    // 操作按钮样式统一遍历基类注册表
+    updateActionButtons(isIcon);
 
     layout()->activate();
     adjustSize();
@@ -214,12 +192,9 @@ void PinAnnotationToolBar::retranslateUi() {
 
     retranslateAnnotationButtons();
 
-    m_undoBtn->setText(tm->get("undo"));
-    m_redoBtn->setText(tm->get("redo"));
-    m_clearBtn->setText(tm->get("clear"));
-    m_copyBtn->setText(tm->get("copy"));
-    m_saveBtn->setText(tm->get("save"));
-    m_cancelBtn->setText(tm->get("cancel"));
+    // 操作按钮文案统一遍历基类注册表
+    retranslateActionButtons();
+
     updateButtonStyles();
     adjustSize();
 }

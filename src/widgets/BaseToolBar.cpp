@@ -46,6 +46,35 @@ static constexpr int s_numToolDefs = sizeof(s_toolDefs) / sizeof(s_toolDefs[0]);
  * @param parent 父窗口
  * @author chiangyang
  */
+QPushButton *BaseToolBar::makeActionButton(const ActionBtnSpec &spec, std::function<void()> onClicked) {
+    QPushButton *btn = new QPushButton(TranslationManager::instance()->get(spec.trKey), this);
+    if (spec.closeStyle) {
+        btn->setObjectName("cancelButton");
+        StyleManager::applyCloseButtonStyle(btn);
+    } else {
+        StyleManager::applyActionButtonStyle(btn);
+    }
+    connect(btn, &QPushButton::clicked, this, std::move(onClicked));
+    m_actionButtons.append({btn, spec});
+    *spec.slot = btn;
+    return btn;
+}
+
+void BaseToolBar::updateActionButtons(bool isIcon) {
+    auto *tm = TranslationManager::instance();
+    for (const auto &entry : std::as_const(m_actionButtons)) {
+        applyButtonStyle(entry.first, entry.second.icon,
+                         tm->get(entry.second.trKey), isIcon);
+    }
+}
+
+void BaseToolBar::retranslateActionButtons() {
+    auto *tm = TranslationManager::instance();
+    for (const auto &entry : std::as_const(m_actionButtons)) {
+        entry.first->setText(tm->get(entry.second.trKey));
+    }
+}
+
 QPoint BaseToolBar::positionNearRect(const QRect &anchor, bool alignRight) const {
     // 使用虚拟桌面几何作为边界，避免跨屏选区时被单一屏幕限制
     const QRect screenGeometry = QApplication::primaryScreen()->virtualGeometry();

@@ -93,49 +93,35 @@ void RecordingToolBar::createActionButtons() {
     LOG_INFO("RecordingToolBar: Creating action buttons");
     auto *tm = TranslationManager::instance();
 
-    // 撤销按钮
-    m_undoBtn = new QPushButton(tm->get("undo"), this);
-    StyleManager::applyActionButtonStyle(m_undoBtn);
-    m_undoBtn->setEnabled(false);
-    connect(m_undoBtn, &QPushButton::clicked, [this]() {
+    // 通用操作按钮：创建/样式/翻译走基类注册表（spec 表），信号在此显式发射
+    m_undoBtn = makeActionButton({&m_undoBtn, "undo", ":/icons/undo.svg"}, [this]() {
         LOG_INFO("RecordingToolBar: Undo requested");
         emit undoRequested();
     });
+    m_undoBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_undoBtn);
 
-    // 重做按钮
-    m_redoBtn = new QPushButton(tm->get("redo"), this);
-    StyleManager::applyActionButtonStyle(m_redoBtn);
-    m_redoBtn->setEnabled(false);
-    connect(m_redoBtn, &QPushButton::clicked, [this]() {
+    m_redoBtn = makeActionButton({&m_redoBtn, "redo", ":/icons/redo.svg"}, [this]() {
         LOG_INFO("RecordingToolBar: Redo requested");
         emit redoRequested();
     });
+    m_redoBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_redoBtn);
 
-    // 清除按钮
-    m_clearBtn = new QPushButton(tm->get("clear"), this);
-    StyleManager::applyActionButtonStyle(m_clearBtn);
-    m_clearBtn->setEnabled(false);
-    connect(m_clearBtn, &QPushButton::clicked, [this]() {
+    m_clearBtn = makeActionButton({&m_clearBtn, "clear", ":/icons/clear.svg"}, [this]() {
         LOG_INFO("RecordingToolBar: Clear requested");
         emit clearRequested();
     });
+    m_clearBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_clearBtn);
 
-    // OCR 按钮
-    m_ocrBtn = new QPushButton(tm->get("ocr.button"), this);
-    StyleManager::applyActionButtonStyle(m_ocrBtn);
-    connect(m_ocrBtn, &QPushButton::clicked, [this]() {
+    m_ocrBtn = makeActionButton({&m_ocrBtn, "ocr.button", ":/icons/ocr.svg"}, [this]() {
         LOG_INFO("RecordingToolBar: OCR requested");
         emit ocrRequested();
     });
     m_primaryLayout->addWidget(m_ocrBtn);
 
-    // 翻译按钮
-    m_translateBtn = new QPushButton(tm->get("translate.button"), this);
-    StyleManager::applyActionButtonStyle(m_translateBtn);
-    connect(m_translateBtn, &QPushButton::clicked, [this]() {
+    m_translateBtn = makeActionButton({&m_translateBtn, "translate.button", ":/icons/translate.svg"}, [this]() {
         LOG_INFO("RecordingToolBar: Translate requested");
         emit translateRequested();
     });
@@ -143,10 +129,7 @@ void RecordingToolBar::createActionButtons() {
 
     addSeparator(m_primaryLayout);
 
-    // 快照按钮
-    m_snapshotBtn = new QPushButton(tm->get("snapshot"), this);
-    StyleManager::applyActionButtonStyle(m_snapshotBtn);
-    connect(m_snapshotBtn, &QPushButton::clicked, [this]() {
+    m_snapshotBtn = makeActionButton({&m_snapshotBtn, "snapshot", ":/icons/capture.svg"}, [this]() {
         LOG_INFO("RecordingToolBar: Snapshot requested");
         emit snapshotRequested();
     });
@@ -154,11 +137,7 @@ void RecordingToolBar::createActionButtons() {
 
     addSeparator(m_primaryLayout);
 
-    // 取消按钮
-    m_cancelBtn = new QPushButton(tm->get("cancel"), this);
-    m_cancelBtn->setObjectName("cancelButton");
-    StyleManager::applyCloseButtonStyle(m_cancelBtn);
-    connect(m_cancelBtn, &QPushButton::clicked, [this]() {
+    m_cancelBtn = makeActionButton({&m_cancelBtn, "cancel", ":/icons/close.svg", /*closeStyle=*/true}, [this]() {
         LOG_INFO("RecordingToolBar: Cancel requested");
         emit cancelRecordRequested();
     });
@@ -191,13 +170,8 @@ void RecordingToolBar::updateButtonStyles() {
 
     updateAnnotationButtonStyles(isIcon);
 
-    applyButtonStyle(m_undoBtn,    ":/icons/undo.svg",   tm->get("undo"),     isIcon);
-    applyButtonStyle(m_redoBtn,    ":/icons/redo.svg",   tm->get("redo"),     isIcon);
-    applyButtonStyle(m_clearBtn,   ":/icons/clear.svg",  tm->get("clear"),    isIcon);
-    applyButtonStyle(m_ocrBtn,     ":/icons/ocr.svg",  tm->get("ocr.button"), isIcon);
-    applyButtonStyle(m_translateBtn, ":/icons/translate.svg", tm->get("translate.button"), isIcon);
-    applyButtonStyle(m_snapshotBtn,":/icons/capture.svg", tm->get("snapshot"), isIcon);
-    applyButtonStyle(m_cancelBtn,  ":/icons/close.svg",  tm->get("cancel"),   isIcon);
+    // 操作按钮样式统一遍历基类注册表
+    updateActionButtons(isIcon);
 
     layout()->activate();
     adjustSize();
@@ -214,13 +188,9 @@ void RecordingToolBar::retranslateUi() {
 
     retranslateAnnotationButtons();
 
-    m_undoBtn->setText(tm->get("undo"));
-    m_redoBtn->setText(tm->get("redo"));
-    m_clearBtn->setText(tm->get("clear"));
-    m_ocrBtn->setText(tm->get("ocr.button"));
-    m_translateBtn->setText(tm->get("translate.button"));
-    m_snapshotBtn->setText(tm->get("snapshot"));
-    m_cancelBtn->setText(tm->get("cancel"));
+    // 操作按钮文案统一遍历基类注册表
+    retranslateActionButtons();
+
     updateButtonStyles();
     adjustSize();
 }

@@ -78,39 +78,28 @@ void ScreenshotToolBar::createActionButtons() {
     });
     m_primaryLayout->addWidget(m_undoBtn);
 
-    // 重做按钮
-    m_redoBtn = new QPushButton(tm->get("redo"), this);
-    StyleManager::applyActionButtonStyle(m_redoBtn);
-    m_redoBtn->setEnabled(false);
-    connect(m_redoBtn, &QPushButton::clicked, [this]() {
+    // 通用操作按钮：创建/样式/翻译走基类注册表（spec 表），信号在此显式发射
+    m_redoBtn = makeActionButton({&m_redoBtn, "redo", ":/icons/redo.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Redo requested");
         emit redoRequested();
     });
+    m_redoBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_redoBtn);
 
-    // 清除按钮
-    m_clearBtn = new QPushButton(tm->get("clear"), this);
-    StyleManager::applyActionButtonStyle(m_clearBtn);
-    m_clearBtn->setEnabled(false);
-    connect(m_clearBtn, &QPushButton::clicked, [this]() {
+    m_clearBtn = makeActionButton({&m_clearBtn, "clear", ":/icons/clear.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Clear requested");
         emit clearRequested();
     });
+    m_clearBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_clearBtn);
 
-    // OCR 按钮
-    m_ocrBtn = new QPushButton(tm->get("ocr.button"), this);
-    StyleManager::applyActionButtonStyle(m_ocrBtn);
-    connect(m_ocrBtn, &QPushButton::clicked, [this]() {
+    m_ocrBtn = makeActionButton({&m_ocrBtn, "ocr.button", ":/icons/ocr.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: OCR requested");
         emit ocrRequested();
     });
     m_primaryLayout->addWidget(m_ocrBtn);
 
-    // 翻译按钮
-    m_translateBtn = new QPushButton(tm->get("translate.button"), this);
-    StyleManager::applyActionButtonStyle(m_translateBtn);
-    connect(m_translateBtn, &QPushButton::clicked, [this]() {
+    m_translateBtn = makeActionButton({&m_translateBtn, "translate.button", ":/icons/translate.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Translate requested");
         emit translateRequested();
     });
@@ -119,28 +108,19 @@ void ScreenshotToolBar::createActionButtons() {
     // 添加分隔符
     addSeparator(m_primaryLayout);
 
-    // 复制按钮
-    m_copyBtn = new QPushButton(tm->get("copy"), this);
-    StyleManager::applyActionButtonStyle(m_copyBtn);
-    connect(m_copyBtn, &QPushButton::clicked, [this]() {
+    m_copyBtn = makeActionButton({&m_copyBtn, "copy", ":/icons/copy.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Copy requested");
         emit copyRequested();
     });
     m_primaryLayout->addWidget(m_copyBtn);
 
-    // 保存按钮
-    m_saveBtn = new QPushButton(tm->get("save"), this);
-    StyleManager::applyActionButtonStyle(m_saveBtn);
-    connect(m_saveBtn, &QPushButton::clicked, [this]() {
+    m_saveBtn = makeActionButton({&m_saveBtn, "save", ":/icons/save.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Save requested");
         emit saveRequested();
     });
     m_primaryLayout->addWidget(m_saveBtn);
 
-    // 贴图按钮
-    m_pinBtn = new QPushButton(tm->get("pin"), this);
-    StyleManager::applyActionButtonStyle(m_pinBtn);
-    connect(m_pinBtn, &QPushButton::clicked, [this]() {
+    m_pinBtn = makeActionButton({&m_pinBtn, "pin", ":/icons/pin.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Pin requested");
         emit pinRequested();
     });
@@ -149,11 +129,7 @@ void ScreenshotToolBar::createActionButtons() {
     // 添加分隔符
     addSeparator(m_primaryLayout);
 
-    // 关闭按钮
-    m_closeBtn = new QPushButton(tm->get("cancel"), this);
-    m_closeBtn->setObjectName("cancelButton");
-    StyleManager::applyCloseButtonStyle(m_closeBtn);
-    connect(m_closeBtn, &QPushButton::clicked, [this]() {
+    m_closeBtn = makeActionButton({&m_closeBtn, "cancel", ":/icons/close.svg", /*closeStyle=*/true}, [this]() {
         LOG_INFO("ScreenshotToolBar: Close requested");
         emit closeRequested();
     });
@@ -185,15 +161,8 @@ void ScreenshotToolBar::updateButtonStyles() {
 
     updateAnnotationButtonStyles(isIcon);
 
-    applyButtonStyle(m_undoBtn,  ":/icons/undo.svg",  tm->get("undo"),  isIcon);
-    applyButtonStyle(m_redoBtn,  ":/icons/redo.svg",  tm->get("redo"),  isIcon);
-    applyButtonStyle(m_clearBtn, ":/icons/clear.svg", tm->get("clear"), isIcon);
-    applyButtonStyle(m_ocrBtn,   ":/icons/ocr.svg", tm->get("ocr.button"), isIcon);
-    applyButtonStyle(m_translateBtn, ":/icons/translate.svg", tm->get("translate.button"), isIcon);
-    applyButtonStyle(m_copyBtn,  ":/icons/copy.svg",  tm->get("copy"),  isIcon);
-    applyButtonStyle(m_saveBtn,  ":/icons/save.svg",  tm->get("save"),  isIcon);
-    applyButtonStyle(m_pinBtn,   ":/icons/pin.svg",   tm->get("pin"),   isIcon);
-    applyButtonStyle(m_closeBtn, ":/icons/close.svg", tm->get("cancel"), isIcon);
+    // 操作按钮样式统一遍历基类注册表
+    updateActionButtons(isIcon);
 
     layout()->activate();
     adjustSize();
@@ -209,15 +178,9 @@ void ScreenshotToolBar::retranslateUi() {
 
     retranslateAnnotationButtons();
 
-    m_undoBtn->setText(tm->get("undo"));
-    m_redoBtn->setText(tm->get("redo"));
-    m_clearBtn->setText(tm->get("clear"));
-    m_ocrBtn->setText(tm->get("ocr.button"));
-    m_translateBtn->setText(tm->get("translate.button"));
-    m_copyBtn->setText(tm->get("copy"));
-    m_saveBtn->setText(tm->get("save"));
-    m_pinBtn->setText(tm->get("pin"));
-    m_closeBtn->setText(tm->get("cancel"));
+    // 操作按钮文案统一遍历基类注册表
+    retranslateActionButtons();
+
     updateButtonStyles();
     adjustSize();
 }
