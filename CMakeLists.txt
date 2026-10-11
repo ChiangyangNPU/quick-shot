@@ -222,6 +222,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/PinAnnotationToolBar.h
         src/widgets/OverlayTextEdit.cpp
         src/widgets/OverlayTextEdit.h
+        src/widgets/FloatingWidget.cpp
+        src/widgets/FloatingWidget.h
         src/widgets/PinWindow.cpp
         src/widgets/PinWindow.h
         src/widgets/SettingsWindow.cpp
