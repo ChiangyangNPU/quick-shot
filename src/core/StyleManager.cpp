@@ -299,9 +299,11 @@ public:
                             maxItemWidth = qMax(maxItemWidth,
                                 fm.horizontalAdvance(comboGuard->itemText(i)));
                         }
+                        // 对齐基准用 combo 的实际宽度（布局可能把它拉伸得
+                        // 比最小宽度更宽，弹窗必须与之等宽）
                         const int minWidth = qMax(
                             maxItemWidth + qRound(fm.horizontalAdvance('M') * 2.0),
-                            comboGuard->minimumWidth());
+                            comboGuard->width());
                         if (QAbstractItemView *view = comboGuard->view()) {
                             view->setMinimumWidth(minWidth);
                             // 仅按需加宽容器（宽度 = 视图最小宽 + 容器边框），
