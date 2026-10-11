@@ -229,3 +229,40 @@ update.bat 脚本由 UpdateManager 动态生成，执行以下流程：
 - [ ] 应用能成功安装更新
 - [ ] 新版本应用自动启动
 - [ ] 新版本版本号显示正确（v1.1.0）
+
+## macOS 本地验证（server-mac）
+
+mac 侧使用 `server-mac/prepare-and-serve.sh` 一条命令完成清单生成与服务器启动。
+version.json 使用 **release-API 形状**（tag_name + assets），使「按平台挑选附件」
+逻辑（mac 取 .dmg）在第一渠道即被真实验证。
+
+### 步骤
+
+1. 打包两个版本的 DMG（版本号在 CMakeLists.txt 中调整后执行）：
+
+   ```bash
+   ./deploy/mac/deploy_mac.sh -r    # 当前版本，例如 0.1.0（被更新的"旧版"）
+   ```
+
+   再临时把版本号改为 0.1.1 打一个"新版"测试包（或直接使用已有的
+   `QuickShot-Release-v0.1.1.dmg`）。
+
+2. 启动本地服务器：
+
+   ```bash
+   cd update-test/server-mac
+   ./prepare-and-serve.sh ../../deploy/mac/QuickShot-Release-v0.1.1.dmg 0.1.1 8000
+   ```
+
+3. 安装并启动"旧版"（0.1.0），**必须带环境变量启动**（Finder 启动不继承
+   终端环境变量；或用 `launchctl setenv QUICKSHOT_UPDATE_URL ...` 全局注入）：
+
+   ```bash
+   hdiutil attach deploy/mac/QuickShot-Release-v0.1.0.dmg
+   QUICKSHOT_UPDATE_URL=http://127.0.0.1:8000/version.json \
+     "/Volumes/QuickShot Release v0.1.0/QuickShot-Release.app/Contents/MacOS/QuickShot" &
+   ```
+
+4. 应用内：托盘 → 设置 → 关于 → 检查更新（发现新版本）→ 下载更新
+   （进度条，DMG 流式落盘到 ~/Downloads）→ 「退出并打开安装包」
+   → 拖入 Applications 覆盖 → 重启应用确认版本号已更新。
