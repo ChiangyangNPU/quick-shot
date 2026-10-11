@@ -1,10 +1,18 @@
 #include "StyleManager.h"
 
 #include <QApplication>
+#include <QCheckBox>
+#include <QComboBox>
 #include <QFile>
+#include <QGroupBox>
 #include <QPainter>
+#include <QProgressBar>
+#include <QPushButton>
+#include <QSpinBox>
 #include <QStyle>
 #include <QSvgRenderer>
+#include <QTabWidget>
+#include <QLineEdit>
 
 #include "Logger.h"
 
@@ -367,3 +375,335 @@ bool StyleManager::reapplyGlobalStyleSheet() {
     LOG_INFO("Global stylesheet reapplied on DPI change");
     return true;
 }
+
+// ============ 样式串构造与存取实现（自 StyleManager.h 内联体迁入，改样式只重编译本文件） ============
+
+QString StyleManager::getToolbarBackgroundStyle() {
+        return QString("background-color: %1; border-radius: 0.3em;")
+            .arg(color(StyleColorId::ToolbarBg).name());
+}
+
+QString StyleManager::getSubToolbarStyle() {
+        return QString("background-color: %1; border-radius: 0.3em;")
+            .arg(color(StyleColorId::SubToolbarBg).name());
+}
+
+QString StyleManager::getToolButtonStyle() {
+        return QString(
+                    "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }"
+                    "QPushButton:hover { background-color: %3; transform: scale(1.05); }"
+                    "QPushButton::icon { color: %4; }"
+                ).arg(color(StyleColorId::ToolbarText).name())
+                .arg(color(StyleColorId::ToolbarBtn).name())
+                .arg(color(StyleColorId::ToolbarButtonHover).name())
+                .arg(color(StyleColorId::ToolbarBtn).name());
+}
+
+QString StyleManager::getActionButtonStyle() {
+        return QString(
+            "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }"
+            "QPushButton:checked { background-color: %3; }"
+            "QPushButton:hover { background-color: %4; transform: scale(1.05); }"
+            "QPushButton:disabled { color: %1; background-color: %5; }"
+            "QPushButton::icon { color: %1; }"
+        ).arg(color(StyleColorId::ToolbarText).name())
+         .arg(color(StyleColorId::ToolbarBtn).name())
+         .arg(color(StyleColorId::ToolbarButtonChecked).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name())
+         .arg(color(StyleColorId::ToolbarButtonDisabled).name());
+}
+
+QString StyleManager::getCloseButtonStyle() {
+        return QString(
+            "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }")
+            .arg(color(StyleColorId::ToolbarText).name())
+            .arg(color(StyleColorId::CloseButtonBg).name()) +
+            QString(
+            "QPushButton:hover { background-color: %1; transform: scale(1.05); }")
+            .arg(color(StyleColorId::CloseButtonHover).name()) +
+            QString("QPushButton::icon { color: %1; }")
+            .arg(color(StyleColorId::ToolbarText).name());
+}
+
+void StyleManager::applyToolButtonStyle(QPushButton *button) {
+        if (button) {
+            button->setStyleSheet(getToolButtonStyle());
+        }
+}
+
+void StyleManager::applyActionButtonStyle(QPushButton *button) {
+        if (button) {
+            button->setStyleSheet(getActionButtonStyle());
+        }
+}
+
+void StyleManager::applyCloseButtonStyle(QPushButton *button) {
+        if (button) {
+            button->setStyleSheet(getCloseButtonStyle());
+        }
+}
+
+void StyleManager::applyNormalButtonStyle(QPushButton *button) {
+        if (button) {
+            button->setStyleSheet(getActionButtonStyle());
+        }
+}
+
+QString StyleManager::getButtonCheckedStyle() {
+        return QString("color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em;")
+            .arg(color(StyleColorId::ToolbarText).name())
+            .arg(color(StyleColorId::ToolbarButtonChecked).name());
+}
+
+QString StyleManager::getComboBoxStyle() {
+        return QString(
+            "QComboBox { color: %1; background-color: %2; border: 1px solid %3; padding: 0.14em 0.19em; border-radius: 0.24em; }"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox::down-arrow { image: none; border-left: 0.24em solid transparent; border-right: 0.24em solid transparent; border-top: 0.29em solid %1; }"
+            "QComboBox QAbstractItemView { background-color: %2; color: %1; border: 1px solid %3; }"
+            "QComboBox QAbstractItemView::item { padding: 0.24em; }"
+            "QComboBox QAbstractItemView::item:hover { background-color: #444; }"
+            "QComboBox QAbstractItemView::item:selected { background-color: %4; color: %1; }"
+        ).arg(color(StyleColorId::ToolbarText).name())
+         .arg(color(StyleColorId::ToolbarBtn).name())
+         .arg("#333")
+         .arg(color(StyleColorId::ToolbarButtonChecked).name());
+}
+
+QString StyleManager::getCheckBoxStyle() {
+        return QString(
+            "QCheckBox { color: %1; spacing: 4px; }"
+            "QCheckBox::indicator { width: 0.67em; height: 0.67em; }"
+        ).arg(color(StyleColorId::ToolbarText).name());
+}
+
+QString StyleManager::getSettingsCheckBoxStyle() {
+        return QString(
+            "QCheckBox { color: #000; }"
+            "QCheckBox::indicator { width: 1.1em; height: 1.1em; }"
+        );
+}
+
+QString StyleManager::getColorButtonStyle(const QString &color, const bool isSelected) {
+        if (isSelected) {
+            return QString("background-color: %1; border: 2px solid #000;").arg(color);
+        }
+        return QString("background-color: %1; border: 1px solid #ccc;").arg(color);
+}
+
+QString StyleManager::getOverlayTextEditStyle(const QColor &color, int fontSize) {
+        return QString("QTextEdit { background-color: rgba(255, 255, 255, 200); "
+                       "border: 1px dashed %1; color: %1; font-size: %2px; }")
+            .arg(color.name())
+            .arg(fontSize);
+}
+
+QString StyleManager::getSnipInfoLabelStyle() {
+        return "background-color: rgba(0,0,0,150); color: white; "
+               "padding: 0.14em 0.38em; border-radius: 0.19em; font-size: 10pt;";
+}
+
+QString StyleManager::getRecordTimerLabelStyle() {
+        return "background-color: rgba(0,0,0,150); color: #ff4444; "
+               "font-size: 10pt; font-weight: bold; padding: 0.1em 0.38em; border-radius: 0.14em;";
+}
+
+QString StyleManager::getPinHintLabelStyle() {
+        return "background-color: rgba(0, 0, 0, 180); color: white; padding: 0.38em 0.57em; border-radius: 0.19em; font-size: 10pt;";
+}
+
+QString StyleManager::getOcrLoadingLabelStyle() {
+        return "background-color: rgba(0,0,0,180); color: white; padding: 0.57em 0.95em; border-radius: 0.29em; font-size: 10pt;";
+}
+
+QString StyleManager::getOcrResultTextStyle() {
+        return QString(
+            "QTextEdit {"
+            "    background-color: #ffffff;"
+            "    color: #333333;"
+            "    border: 1px solid #cccccc;"
+            "    border-radius: 0.3em;"
+            "    padding: 0.5em;"
+            "    font-size: 14pt;"
+            "}"
+        );
+}
+
+QString StyleManager::getOcrResultTitleStyle() {
+        return "font-size: 10pt; font-weight: bold;";
+}
+
+QString StyleManager::getAppNameLabelStyle() {
+        return "font-size: 9pt; font-weight: bold;";
+}
+
+QString StyleManager::getMenuStyle() {
+        return QString(
+            "QMenu { background-color: #ffffff; color: #000000; border: 1px solid #cccccc; border-radius: 0.29em; padding: 0.29em 0; font-size: 10pt; }"
+            "QMenu::item { padding: 0.48em 0.71em; margin: 0 0.29em; border-radius: 0.19em; }"
+            "QMenu::item:selected { background-color: #e0e0e0; }"
+            "QMenu::item:hover { background-color: #e0e0e0; }"
+            "QMenu::separator { height: 0.1em; background-color: #cccccc; margin: 0.3em 0.5em; }"
+        );
+}
+
+QString StyleManager::getWindowStyle() {
+        return QString("background-color: %1; border-radius: 0.24em; color: %2;")
+            .arg(color(StyleColorId::RecordControlBg).name())
+            .arg(color(StyleColorId::ToolbarText).name());
+}
+
+QString StyleManager::getPathEditStyle() {
+        return QString(
+            "QLineEdit {"
+            "    border: 1px solid #CCCCCC;"
+            "    border-bottom: 1px solid #848484;"
+            "    background-color: #fff;"
+            "    color: #000;"
+            "}"
+        );
+}
+
+QString StyleManager::getKeySequenceEditStyle() {
+        return QString(
+            "QKeySequenceEdit QLineEdit {"
+            "    border: 1px solid #CCCCCC;"
+            "    border-bottom: 1px solid #848484;"
+            "    background-color: #fff;"
+            "    color: #000;"
+            "}"
+
+            "QKeySequenceEdit QLineEdit:focus {"
+            "    border: 1px solid #CCCCCC;"
+            "    border-bottom: 2px solid #1E90FF; /* 蓝色下边框 */"
+            "}"
+        );
+}
+
+QString StyleManager::getGroupBoxStyle() {
+        return QString(
+            "QGroupBox { background-color: %1; color: #000; }"
+        ).arg(color(StyleColorId::TabWidgetBg).name());
+}
+
+QString StyleManager::getSettingsButtonStyle() {
+        return QString(
+            "QPushButton { color: %1; background-color: %2; border: none; }"
+            "QPushButton:hover { background-color: %4; }"
+            "QPushButton:disabled { color: %1; background-color: %3; }"
+        ).arg(color(StyleColorId::SettingButtonText).name())
+         .arg(color(StyleColorId::SettingButtonBg).name())
+         .arg(color(StyleColorId::ToolbarButtonDisabled).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name());
+}
+
+QString StyleManager::getSettingsComboBoxStyle() {
+        return QString(
+            "QComboBox { background-color: #fff; color: #000; }"
+            "QComboBox::drop-down { border: none; }"
+            "QComboBox::down-arrow { image: none; border-left: 0.24em solid transparent; border-right: 0.24em solid transparent; border-top: 0.29em solid #000; }"
+            "QComboBox QAbstractItemView { background-color: #fff; color: #000; border: 1px solid #848484; outline: none; }"
+            "QComboBox QAbstractItemView::item { padding: 0.24em; }"
+            "QComboBox QAbstractItemView::item:hover { background-color: #d0d0d0; }"
+            "QComboBox QAbstractItemView::item:selected { background-color: #d0d0d0; color: #000; }"
+            "QAbstractSpinBox { background-color: #fff; color: #000; border: 1px solid #848484; border-radius: 0.24em; padding: 0.14em 0.19em; }"
+            "QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { width: 1.2em; border: none; background: transparent; }"
+            "QAbstractSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; }"
+            "QAbstractSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; }"
+            "QAbstractSpinBox::up-arrow { image: url(:/icons/spinner-up.svg); width: 0.5em; height: 0.5em; }"
+            "QAbstractSpinBox::down-arrow { image: url(:/icons/spinner-down.svg); width: 0.5em; height: 0.5em; }"
+        );
+}
+
+QString StyleManager::getMessageBoxStyle() {
+        return QString(
+            "QMessageBox { background-color: %1; }"
+            "QMessageBox QLabel { color: #333333; }"
+            "QMessageBox QPushButton { color: %2; background-color: %3; border: none; }"
+            "QMessageBox QPushButton:hover { background-color: %4; }"
+            "QMessageBox QPushButton:pressed { background-color: %4; }"
+            "QMessageBox QPushButton:disabled { color: %2; background-color: %5; }"
+        ).arg(color(StyleColorId::TabWidgetBg).name())
+         .arg(color(StyleColorId::SettingButtonText).name())
+         .arg(color(StyleColorId::SettingButtonBg).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name())
+         .arg(color(StyleColorId::ToolbarButtonDisabled).name());
+}
+
+QString StyleManager::getProgressBarStyle() {
+        return QString(
+            "QProgressBar { border: none; background-color: %1; }"
+            "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
+        ).arg(color(StyleColorId::TabWidgetBg).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name());
+}
+
+QString StyleManager::getTabWidgetStyle() {
+        return QString(
+            "QTabWidget::pane { background-color: %1; }"
+            "QTabBar::tab { background-color: %2; color: %3; }"
+            "QTabBar::tab:selected { background-color: %4; color: %5; }"
+            "QTabBar::tab:hover { background-color: %6; }"
+        ).arg(color(StyleColorId::TabWidgetBg).name())
+         .arg(color(StyleColorId::TabButtonBg).name())
+         .arg(color(StyleColorId::TabButtonText).name())
+         .arg(color(StyleColorId::TabButtonSelectedBg).name())
+         .arg(color(StyleColorId::TabButtonSelectedText).name())
+         .arg(color(StyleColorId::ToolbarButtonHover).name());
+}
+
+QString StyleManager::getToolbarButtonStyle() {
+        return s_toolbarButtonStyle;
+}
+
+void StyleManager::setToolbarButtonStyle(const QString &style) {
+        s_toolbarButtonStyle = style;
+}
+
+int StyleManager::getDefaultPenWidth() {
+        return s_defaultPenWidth;
+}
+
+void StyleManager::setDefaultPenWidth(int width) {
+        s_defaultPenWidth = width;
+}
+
+int StyleManager::getDefaultFontSize() {
+        return s_defaultFontSize;
+}
+
+void StyleManager::setDefaultFontSize(int size) {
+        s_defaultFontSize = size;
+}
+
+int StyleManager::getDefaultEraserWidth() {
+        return s_defaultEraserWidth;
+}
+
+void StyleManager::setDefaultEraserWidth(int width) {
+        s_defaultEraserWidth = width;
+}
+
+int StyleManager::getDefaultMosaicSize() {
+        return s_defaultMosaicSize;
+}
+
+void StyleManager::setDefaultMosaicSize(int size) {
+        s_defaultMosaicSize = size;
+}
+
+void StyleManager::resetToDefaults() {
+        // 颜色：遍历颜色表逐项恢复默认色
+        for (const auto& s : colorSettingTable()) {
+            setColor(s.id, s.defaultColor);
+        }
+
+        // 标注工具默认值
+        s_defaultPenWidth = DEFAULT_PEN_WIDTH;
+        s_defaultFontSize = DEFAULT_FONT_SIZE;
+        s_defaultEraserWidth = DEFAULT_ERASER_WIDTH;
+        s_defaultMosaicSize = DEFAULT_MOSAIC_SIZE;
+
+        s_toolbarButtonStyle = DEFAULT_TOOLBAR_BUTTON_STYLE;
+}
+
