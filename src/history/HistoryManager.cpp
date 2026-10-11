@@ -147,6 +147,42 @@ void HistoryManager::initConfig()
              .arg(m_screenshotEnabled).arg(m_clipboardEnabled).arg(m_retentionDays).arg(m_maxItems));
 }
 
+HistoryItem HistoryManager::readItem(const QSqlQuery &query) {
+    HistoryItem item;
+    item.id = query.value("id").toLongLong();
+    item.type = intToType(query.value("type").toInt());
+    item.content = query.value("content").toString();
+    item.thumbnailPath = query.value("thumbnail_path").toString();
+    item.sourceApp = query.value("source_app").toString();
+    item.windowTitle = query.value("window_title").toString();
+    item.timestamp = QDateTime::fromString(query.value("timestamp").toString(), Qt::ISODate);
+    item.imageSize = QSize(query.value("image_width").toInt(), query.value("image_height").toInt());
+    return item;
+}
+
+qint64 HistoryManager::insertScreenshotRecord(const QString &filePath, const QString &thumbnailPath,
+                                              const QString &windowTitle, const QString &timestampStr,
+                                              const QSize &imageSize) {
+    QSqlQuery query(m_database);
+    query.prepare("INSERT INTO history_items (type, content, thumbnail_path, window_title, timestamp, image_width, image_height) "
+                  "VALUES (:type, :content, :thumbnail_path, :window_title, :timestamp, :image_width, :image_height)");
+
+    query.bindValue(":type", typeToInt(HistoryType::Screenshot));
+    query.bindValue(":content", filePath);
+    query.bindValue(":thumbnail_path", thumbnailPath);
+    query.bindValue(":window_title", windowTitle);
+    query.bindValue(":timestamp", timestampStr);
+    query.bindValue(":image_width", imageSize.width());
+    query.bindValue(":image_height", imageSize.height());
+
+    if (!query.exec()) {
+        LOG_ERROR(QString("Failed to insert screenshot record: %1").arg(query.lastError().text()));
+        return -1;
+    }
+
+    return query.lastInsertId().toLongLong();
+}
+
 /**
  * @brief 添加截图记录
  * @author chiangyang
@@ -168,24 +204,10 @@ qint64 HistoryManager::addScreenshot(const QString &filePath,
     // 创建缩略图
     createThumbnail(filePath, thumbnailPath);
 
-    QSqlQuery query(m_database);
-    query.prepare("INSERT INTO history_items (type, content, thumbnail_path, window_title, timestamp, image_width, image_height) "
-                  "VALUES (:type, :content, :thumbnail_path, :window_title, :timestamp, :image_width, :image_height)");
-
-    query.bindValue(":type", typeToInt(HistoryType::Screenshot));
-    query.bindValue(":content", filePath);
-    query.bindValue(":thumbnail_path", thumbnailPath);
-    query.bindValue(":window_title", windowTitle);
-    query.bindValue(":timestamp", timestampStr);
-    query.bindValue(":image_width", imageSize.width());
-    query.bindValue(":image_height", imageSize.height());
-
-    if (!query.exec()) {
-        LOG_ERROR(QString("Failed to insert screenshot record: %1").arg(query.lastError().text()));
+    const qint64 id = insertScreenshotRecord(filePath, thumbnailPath, windowTitle, timestampStr, imageSize);
+    if (id < 0) {
         return -1;
     }
-
-    qint64 id = query.lastInsertId().toLongLong();
 
     // 构建 HistoryItem 并发送信号
     HistoryItem item;
@@ -245,24 +267,10 @@ qint64 HistoryManager::addScreenshotPixmap(const QPixmap &pixmap,
     QSize imageSize = pixmap.size();
     QString dbTimestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
 
-    QSqlQuery query(m_database);
-    query.prepare("INSERT INTO history_items (type, content, thumbnail_path, window_title, timestamp, image_width, image_height) "
-                  "VALUES (:type, :content, :thumbnail_path, :window_title, :timestamp, :image_width, :image_height)");
-
-    query.bindValue(":type", typeToInt(HistoryType::Screenshot));
-    query.bindValue(":content", filePath);
-    query.bindValue(":thumbnail_path", thumbnailPath);
-    query.bindValue(":window_title", windowTitle);
-    query.bindValue(":timestamp", dbTimestamp);
-    query.bindValue(":image_width", imageSize.width());
-    query.bindValue(":image_height", imageSize.height());
-
-    if (!query.exec()) {
-        LOG_ERROR(QString("Failed to insert screenshot pixmap record: %1").arg(query.lastError().text()));
+    const qint64 id = insertScreenshotRecord(filePath, thumbnailPath, windowTitle, dbTimestamp, imageSize);
+    if (id < 0) {
         return -1;
     }
-
-    qint64 id = query.lastInsertId().toLongLong();
 
     // 构建 HistoryItem 并发送信号
     HistoryItem item;
@@ -356,16 +364,7 @@ QList<HistoryItem> HistoryManager::getItems(HistoryType type, int page, int page
     }
 
     while (query.next()) {
-        HistoryItem item;
-        item.id = query.value("id").toLongLong();
-        item.type = intToType(query.value("type").toInt());
-        item.content = query.value("content").toString();
-        item.thumbnailPath = query.value("thumbnail_path").toString();
-        item.sourceApp = query.value("source_app").toString();
-        item.windowTitle = query.value("window_title").toString();
-        item.timestamp = QDateTime::fromString(query.value("timestamp").toString(), Qt::ISODate);
-        item.imageSize = QSize(query.value("image_width").toInt(), query.value("image_height").toInt());
-        items.append(item);
+        items.append(readItem(query));
     }
 
     return items;
@@ -413,16 +412,7 @@ QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryTy
     }
 
     while (query.next()) {
-        HistoryItem item;
-        item.id = query.value("id").toLongLong();
-        item.type = intToType(query.value("type").toInt());
-        item.content = query.value("content").toString();
-        item.thumbnailPath = query.value("thumbnail_path").toString();
-        item.sourceApp = query.value("source_app").toString();
-        item.windowTitle = query.value("window_title").toString();
-        item.timestamp = QDateTime::fromString(query.value("timestamp").toString(), Qt::ISODate);
-        item.imageSize = QSize(query.value("image_width").toInt(), query.value("image_height").toInt());
-        items.append(item);
+        items.append(readItem(query));
     }
 
     return items;
@@ -475,14 +465,7 @@ HistoryItem HistoryManager::getItemById(qint64 id)
     }
 
     if (query.next()) {
-        item.id = query.value("id").toLongLong();
-        item.type = intToType(query.value("type").toInt());
-        item.content = query.value("content").toString();
-        item.thumbnailPath = query.value("thumbnail_path").toString();
-        item.sourceApp = query.value("source_app").toString();
-        item.windowTitle = query.value("window_title").toString();
-        item.timestamp = QDateTime::fromString(query.value("timestamp").toString(), Qt::ISODate);
-        item.imageSize = QSize(query.value("image_width").toInt(), query.value("image_height").toInt());
+        item = readItem(query);
     }
 
     return item;

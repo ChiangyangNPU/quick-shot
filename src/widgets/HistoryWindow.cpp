@@ -677,45 +677,24 @@ void HistoryWindow::onItemSelectionChanged()
  * 根据选中记录的类型，复制文本内容或截图到系统剪贴板。
  * @author chiangyang
  */
-void HistoryWindow::onCopyText()
-{
-    qint64 id = getSelectedItemId();
-    if (id <= 0) {
-        return;
-    }
-
-    HistoryItem item = HistoryManager::instance()->getItemById(id);
+void HistoryWindow::copyItemToClipboard(const HistoryItem &item) {
     QClipboard *clipboard = QApplication::clipboard();
 
     if (item.isClipboardText()) {
         clipboard->setText(item.content);
-        LOG_INFO(QString("Text copied to clipboard: id=%1").arg(id));
-    } else if (item.isScreenshot()) {
+        LOG_INFO(QString("Text copied to clipboard: id=%1").arg(item.id));
+    } else {
         QPixmap pixmap(item.content);
         if (!pixmap.isNull()) {
             clipboard->setPixmap(pixmap);
-            LOG_INFO(QString("Screenshot copied to clipboard: id=%1").arg(id));
+            LOG_INFO(QString("Screenshot copied to clipboard: id=%1").arg(item.id));
         } else {
-            LOG_WARNING(QString("Failed to load screenshot for copy: id=%1, path=%2").arg(id).arg(item.content));
+            LOG_WARNING(QString("Failed to load screenshot for copy: id=%1, path=%2").arg(item.id).arg(item.content));
         }
     }
 }
 
-/**
- * @brief 保存截图槽函数
- *
- * 将选中的截图记录另存到用户指定路径，复用主程序的 Utils::savePixmapToFile
- * 方法，保证保存路径、目录记忆等行为与主程序完全一致。
- * @author chiangyang
- */
-void HistoryWindow::onSaveScreenshot()
-{
-    qint64 id = getSelectedItemId();
-    if (id <= 0) {
-        return;
-    }
-
-    HistoryItem item = HistoryManager::instance()->getItemById(id);
+void HistoryWindow::saveScreenshotAs(const HistoryItem &item) {
     if (!item.isScreenshot()) {
         return;
     }
@@ -726,7 +705,7 @@ void HistoryWindow::onSaveScreenshot()
         MessageBox::warning(this,
             tm->get("history.window.error", "Error"),
             tm->get("history.window.fileNotFound", "Source file not found"));
-        LOG_WARNING(QString("Screenshot source file not found: id=%1, path=%2").arg(id).arg(sourcePath));
+        LOG_WARNING(QString("Screenshot source file not found: id=%1, path=%2").arg(item.id).arg(sourcePath));
         return;
     }
 
@@ -744,8 +723,35 @@ void HistoryWindow::onSaveScreenshot()
         QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
 
     if (!savedPath.isEmpty()) {
-        LOG_INFO(QString("Screenshot saved: id=%1, from=%2, to=%3").arg(id).arg(sourcePath).arg(savedPath));
+        LOG_INFO(QString("Screenshot saved: id=%1, from=%2, to=%3").arg(item.id).arg(sourcePath).arg(savedPath));
     }
+}
+
+void HistoryWindow::onCopyText()
+{
+    qint64 id = getSelectedItemId();
+    if (id <= 0) {
+        return;
+    }
+
+    copyItemToClipboard(HistoryManager::instance()->getItemById(id));
+}
+
+/**
+ * @brief 保存截图槽函数
+ *
+ * 将选中的截图记录另存到用户指定路径，复用主程序的 Utils::savePixmapToFile
+ * 方法，保证保存路径、目录记忆等行为与主程序完全一致。
+ * @author chiangyang
+ */
+void HistoryWindow::onSaveScreenshot()
+{
+    qint64 id = getSelectedItemId();
+    if (id <= 0) {
+        return;
+    }
+
+    saveScreenshotAs(HistoryManager::instance()->getItemById(id));
 }
 
 /**
@@ -871,25 +877,9 @@ void HistoryWindow::onCustomContextMenu(const QPoint &pos)
     QAction *selectedAction = menu.exec(m_listWidget->mapToGlobal(pos));
 
     if (selectedAction == copyAction) {
-        QClipboard *clipboard = QApplication::clipboard();
-        if (historyItem.isClipboardText()) {
-            clipboard->setText(historyItem.content);
-        } else {
-            QPixmap pixmap(historyItem.content);
-            if (!pixmap.isNull()) {
-                clipboard->setPixmap(pixmap);
-            }
-        }
+        copyItemToClipboard(historyItem);
     } else if (saveAction && selectedAction == saveAction) {
-        // 复用主程序的保存方法，保证保存路径、目录记忆等行为与主程序一致
-        QString sourcePath = historyItem.content;
-        QString defaultName = QFileInfo(sourcePath).fileName();
-        Utils::savePixmapToFile(
-            this,
-            [sourcePath]() { return QPixmap(sourcePath); },
-            defaultName,
-            tm->get("history.window.saveScreenshot", "Save Screenshot"),
-            QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
+        saveScreenshotAs(historyItem);
     } else if (selectedAction == deleteAction) {
         // 复用 onDeleteItem，支持单条和批量删除（含确认对话框）
         onDeleteItem();

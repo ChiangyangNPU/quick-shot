@@ -230,6 +230,20 @@ signals:
 
 private:
     /**
+     * @brief 从查询当前行读取一条 HistoryItem（字段映射单一实现）
+     * @author chiangyang
+     */
+    static HistoryItem readItem(const QSqlQuery &query);
+
+    /**
+     * @brief 插入截图记录并发射 itemAdded（INSERT 绑定/信号构建单一实现）
+     * @return 新记录 id，失败返回 -1
+     * @author chiangyang
+     */
+    qint64 insertScreenshotRecord(const QString &filePath, const QString &thumbnailPath,
+                                  const QString &windowTitle, const QString &timestampStr,
+                                  const QSize &imageSize);
+    /**
      * @brief 构造函数（私有，单例模式）
      * @param parent 父对象
      * @author chiangyang

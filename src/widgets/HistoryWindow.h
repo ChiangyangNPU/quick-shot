@@ -142,6 +142,25 @@ private slots:
 
 private:
     /**
+     * @brief 将历史条目复制到剪贴板（文本条目复制文本，截图条目复制图片）
+     *
+     * 按钮路径与右键菜单路径共用（原先两处各写一份，行为易漂移）。
+     * @param item 历史条目
+     * @author chiangyang
+     */
+    void copyItemToClipboard(const HistoryItem &item);
+
+    /**
+     * @brief 将截图条目另存为文件（含存在性检查与保存对话框）
+     *
+     * 按钮路径与右键菜单路径共用。右键菜单路径原先缺少存在性检查，
+     * 收拢后统一补齐。
+     * @param item 历史条目（必须为截图类型）
+     * @author chiangyang
+     */
+    void saveScreenshotAs(const HistoryItem &item);
+
+    /**
      * @brief 初始化 UI
      * @author chiangyang
      */
