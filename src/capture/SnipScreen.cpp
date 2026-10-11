@@ -731,7 +731,7 @@ void SnipScreen::save() {
         this, [this]() -> QPixmap {
             auto [pixmap, _] = snip();
             return pixmap;
-        }, defaultName, tr("Save Image"),
+        }, defaultName, TranslationManager::instance()->get("dialog.saveImage", "Save Image"),
         QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
 
     if (!filename.isEmpty()) {
