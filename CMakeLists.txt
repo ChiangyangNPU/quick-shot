@@ -195,7 +195,9 @@ add_executable(QuickShot ${WIN32_OPTION}
 
         # 截图/选区系统
         src/capture/Annotation.h
+        src/capture/Annotation.cpp
         src/capture/AnnotationManager.h
+        src/capture/AnnotationManager.cpp
         src/capture/CaptureComposer.cpp
         src/capture/CaptureComposer.h
         src/capture/AnnotationTextUtils.cpp
