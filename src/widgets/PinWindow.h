@@ -64,6 +64,16 @@ public:
      */
     static int instanceCount();
 
+    /**
+     * @brief 将设置窗口的标注默认值变更广播给所有存活的贴图窗口
+     *
+     * 连接 SettingsWindow::default*Changed 信号到此静态槽：
+     * 设置页修改默认值时，所有贴图窗口的标注工具栏同步刷新。
+     * 取代原先构造函数里失效的 qApp->findChild 查找（无父窗口永远找不到）。
+     * @author chiangyang
+     */
+    static void refreshAllToolDefaults();
+
 protected:
     /**
      * @brief 绘制事件处理

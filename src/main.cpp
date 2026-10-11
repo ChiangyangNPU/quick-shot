@@ -10,6 +10,7 @@
 #include "core/TranslationManager.h"
 #include "core/StyleManager.h"
 #include "capture/SnipScreen.h"
+#include "widgets/PinWindow.h"
 #include "widgets/SettingsWindow.h"
 #include "history/HistoryManager.h"
 #include "history/ClipboardMonitor.h"
@@ -155,6 +156,16 @@ int main(int argc, char *argv[]) {
                          snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
         QObject::connect(settingsWindow, &SettingsWindow::defaultMosaicSizeChanged,
                          snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
+
+        // 同步刷新所有存活的贴图窗口（取代 PinWindow 构造里失效的 findChild 接线）
+        QObject::connect(settingsWindow, &SettingsWindow::defaultPenWidthChanged,
+                         &PinWindow::refreshAllToolDefaults);
+        QObject::connect(settingsWindow, &SettingsWindow::defaultFontSizeChanged,
+                         &PinWindow::refreshAllToolDefaults);
+        QObject::connect(settingsWindow, &SettingsWindow::defaultEraserWidthChanged,
+                         &PinWindow::refreshAllToolDefaults);
+        QObject::connect(settingsWindow, &SettingsWindow::defaultMosaicSizeChanged,
+                         &PinWindow::refreshAllToolDefaults);
 
         // 工具栏信号连接到 SettingsWindow（工具栏调节时同步显示到设置页面）
         snipScreen->connectToolBarToSettingsWindow(settingsWindow);

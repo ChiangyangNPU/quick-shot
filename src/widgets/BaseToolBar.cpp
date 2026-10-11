@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include "StyleManager.h"
+#include "../core/ConfigManager.h"
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 #include "../capture/Annotation.h"
@@ -47,6 +48,28 @@ static constexpr int s_numToolDefs = sizeof(s_toolDefs) / sizeof(s_toolDefs[0]);
 BaseToolBar::BaseToolBar(QWidget *parent) : QWidget(parent) {
     m_isChinese = QApplication::translate("BaseToolBar", "Chinese").contains("中文");
     LOG_INFO(QString("BaseToolBar instance created, language: %1").arg(m_isChinese ? "Chinese" : "English"));
+
+    // 标注默认值持久化：在信号源头上收拢，不依赖设置窗口是否存在。
+    // 设置窗口是懒加载的（首次从托盘打开才创建），若持久化只挂在
+    // SettingsWindow::onTool*Changed 上，用户从未打开设置时调节
+    // 画笔/字号/橡皮擦/马赛克默认值将不落盘，重启后丢失。
+    // 设置窗口存在时其 onTool*Changed 仍会同步 SpinBox 显示并重复写同值，无害。
+    connect(this, &BaseToolBar::toolPenWidthChanged, this, [](int width) {
+        ConfigManager::instance()->setValue("style/defaultPenWidth", width);
+        StyleManager::setDefaultPenWidth(width);
+    });
+    connect(this, &BaseToolBar::toolFontSizeChanged, this, [](int size) {
+        ConfigManager::instance()->setValue("style/defaultFontSize", size);
+        StyleManager::setDefaultFontSize(size);
+    });
+    connect(this, &BaseToolBar::toolEraserWidthChanged, this, [](int width) {
+        ConfigManager::instance()->setValue("style/defaultEraserWidth", width);
+        StyleManager::setDefaultEraserWidth(width);
+    });
+    connect(this, &BaseToolBar::toolMosaicSizeChanged, this, [](int width) {
+        ConfigManager::instance()->setValue("style/defaultMosaicSize", width);
+        StyleManager::setDefaultMosaicSize(width);
+    });
 }
 
 // ============================================================

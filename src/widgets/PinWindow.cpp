@@ -91,6 +91,14 @@ int PinWindow::instanceCount() {
     return s_instances.size();
 }
 
+void PinWindow::refreshAllToolDefaults() {
+    for (PinWindow *w : std::as_const(s_instances)) {
+        if (w->m_toolBar) {
+            w->m_toolBar->refreshDefaultValues();
+        }
+    }
+}
+
 PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     : QWidget(parent), m_pixmap(pixmap), m_isMoving(false), m_isResizing(false) {
     s_instances.insert(this);  // 加入注册表，供 toggleAll 统一显隐
@@ -717,30 +725,10 @@ void PinWindow::connectToolBarSignals() {
         m_annotationHandler->setFontSize(size);
     });
 
-    // 连接 SettingsWindow 的默认值变更信号（设置窗口 -> 工具栏）
-    SettingsWindow *settingsWindow = qApp->findChild<SettingsWindow*>();
-    if (settingsWindow) {
-        connect(settingsWindow, &SettingsWindow::defaultPenWidthChanged,
-                m_toolBar, &BaseToolBar::refreshDefaultValues);
-        connect(settingsWindow, &SettingsWindow::defaultFontSizeChanged,
-                m_toolBar, &BaseToolBar::refreshDefaultValues);
-        connect(settingsWindow, &SettingsWindow::defaultEraserWidthChanged,
-                m_toolBar, &BaseToolBar::refreshDefaultValues);
-        connect(settingsWindow, &SettingsWindow::defaultMosaicSizeChanged,
-                m_toolBar, &BaseToolBar::refreshDefaultValues);
-
-        // 工具栏 -> 设置窗口：同步工具栏滑块变更到设置窗口显示
-        connect(m_toolBar, &PinAnnotationToolBar::toolPenWidthChanged,
-                settingsWindow, &SettingsWindow::onToolPenWidthChanged);
-        connect(m_toolBar, &PinAnnotationToolBar::toolFontSizeChanged,
-                settingsWindow, &SettingsWindow::onToolFontSizeChanged);
-        connect(m_toolBar, &PinAnnotationToolBar::toolEraserWidthChanged,
-                settingsWindow, &SettingsWindow::onToolEraserWidthChanged);
-        connect(m_toolBar, &PinAnnotationToolBar::toolMosaicSizeChanged,
-                settingsWindow, &SettingsWindow::onToolMosaicSizeChanged);
-
-        LOG_INFO("PinWindow: Connected to SettingsWindow default value signals");
-    }
+    // 设置窗口 → 贴图窗口的默认值下推，由 main.cpp 创建设置窗口时统一接线到
+    // PinWindow::refreshAllToolDefaults（静态分发到所有存活贴图窗口）。
+    // 原先此处用 qApp->findChild<SettingsWindow*>() 查找——无父顶层窗口不是
+    // qApp 的 QObject 子级，查找恒为 nullptr，连接从未建立过（历史死代码，已删）。
 
     // 撤销/重做/清除
     connect(m_toolBar, &PinAnnotationToolBar::undoRequested, this, [this]() {
