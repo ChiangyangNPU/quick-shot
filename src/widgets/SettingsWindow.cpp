@@ -368,38 +368,8 @@ void SettingsWindow::retranslateUi() {
     // Shortcuts 快捷键选项卡文案（行生成 / 分类标题 / 行文案由选项卡自行翻译）
     m_shortcutsTabWidget->retranslateUi();
 
-    // Style
-    if (borderGroup) borderGroup->setTitle(tm->get("style.borderColor", "Border Colors"));
-    if (toolbarGroup) toolbarGroup->setTitle(tm->get("style.toolbarStyle", "Toolbar Style"));
-    // Tab Style Group
-    QGroupBox *tabGroup = findChild<QGroupBox*>("tabGroup");
-    if (tabGroup) tabGroup->setTitle(tm->get("style.tabStyle", "Tab Style"));
-
-    // 通过数据驱动表循环更新所有颜色标签的翻译文本（表归 StyleManager 所有）
-    {
-        const auto& table = StyleManager::colorSettingTable();
-        for (size_t i = 0; i < table.size(); ++i) {
-            if (m_colorLabels[i] && table[i].defaultText[0] != '\0') {
-                m_colorLabels[i]->setText(tm->get(table[i].translationKey, table[i].defaultText));
-            }
-        }
-    }
-
-    if (btnResetStyle) btnResetStyle->setText(tm->get("style.resetStyle", "Reset to Default"));
-    // 标注工具默认值组
-    if (m_annotationDefaultsGroup) m_annotationDefaultsGroup->setTitle(tm->get("style.annotationDefaults", "Annotation Defaults"));
-    if (lblDefaultPenWidth) lblDefaultPenWidth->setText(tm->get("style.defaultPenWidth", "Default Pen Width:"));
-    if (lblDefaultFontSize) lblDefaultFontSize->setText(tm->get("style.defaultFontSize", "Default Font Size:"));
-    if (lblDefaultEraserWidth) lblDefaultEraserWidth->setText(tm->get("style.defaultEraserWidth", "Default Eraser Width:"));
-    if (lblDefaultMosaicSize) lblDefaultMosaicSize->setText(tm->get("style.defaultMosaicSize", "Default Mosaic Size:"));
-    if (lblToolbarButtonStyle) lblToolbarButtonStyle->setText(tm->get("style.toolbarButtonStyle", "Button Style:"));
-    if (cmbToolbarButtonStyle) {
-        int currentIndex = cmbToolbarButtonStyle->currentIndex();
-        cmbToolbarButtonStyle->clear();
-        cmbToolbarButtonStyle->addItem(tm->get("style.buttonStyle.text", "Text"), "text");
-        cmbToolbarButtonStyle->addItem(tm->get("style.buttonStyle.icon", "Icon"), "icon");
-        cmbToolbarButtonStyle->setCurrentIndex(currentIndex);
-    }
+    // Style 样式选项卡文案（颜色标签 / 默认值 / 按钮样式由选项卡自行翻译）
+    m_styleTabWidget->retranslateUi();
 
     // History 历史记录选项卡文案（含保留天数下拉框重建与统计刷新）
     m_historyTabWidget->retranslateUi();

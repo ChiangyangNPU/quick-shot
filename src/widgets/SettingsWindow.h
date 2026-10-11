@@ -32,6 +32,7 @@
 #include "settings/SettingsTranslateTab.h"
 #include "settings/SettingsShortcutsTab.h"
 #include "settings/SettingsGeneralTab.h"
+#include "settings/SettingsStyleTab.h"
 
 class QGridLayout;
 
@@ -288,6 +289,7 @@ private:
     QTabWidget *tabWidget;          ///< 选项卡控件
     QScrollArea *styleScrollArea;   ///< 样式选项卡滚动区域
     SettingsGeneralTab *m_generalTabWidget; ///< 通用选项卡
+    SettingsStyleTab *m_styleTabWidget;         ///< 样式选项卡
 
 
     // Shortcuts
