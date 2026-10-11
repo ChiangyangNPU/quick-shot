@@ -125,22 +125,65 @@ int main(int argc, char *argv[]) {
     trayMenu->setStyleSheet(StyleManager::getMenuStyle());
     TranslationManager *tm = TranslationManager::instance();
 
-    // 创建设置窗口（需在 buildTrayMenu 之前，以便传入）
-    SettingsWindow *settingsWindow = new SettingsWindow();
+    // 创建设置窗口（懒加载：首次从托盘打开时才构造，缩短启动路径。
+    // TrayMenuBuilder 对 settingsWindow 仅存指针不使用，传 nullptr 即可；
+    // 首次构造时补全全部信号接线。工具栏调节 → 设置页的同步在创建前
+    // 不存在（创建时 loadSettings 会从配置加载当前值），无行为差异）
+    SettingsWindow *settingsWindow = nullptr;
+    auto ensureSettingsWindow = [&]() -> SettingsWindow* {
+        if (settingsWindow) {
+            return settingsWindow;
+        }
+        settingsWindow = new SettingsWindow();
+
+        // 工具栏按钮样式变更时同步 StyleManager
+        QObject::connect(settingsWindow, &SettingsWindow::toolbarButtonStyleChanged,
+                         [](const QString &style) {
+            StyleManager::setToolbarButtonStyle(style);
+        });
+
+        // 选项卡背景颜色变更时同步更新历史记录窗口
+        QObject::connect(settingsWindow, &SettingsWindow::tabWidgetBgColorChanged,
+                         historyWindow, &HistoryWindow::updateWindowColors);
+
+        // 标注工具默认值变更时同步刷新工具栏设置
+        QObject::connect(settingsWindow, &SettingsWindow::defaultPenWidthChanged,
+                         snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
+        QObject::connect(settingsWindow, &SettingsWindow::defaultFontSizeChanged,
+                         snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
+        QObject::connect(settingsWindow, &SettingsWindow::defaultEraserWidthChanged,
+                         snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
+        QObject::connect(settingsWindow, &SettingsWindow::defaultMosaicSizeChanged,
+                         snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
+
+        // 工具栏信号连接到 SettingsWindow（工具栏调节时同步显示到设置页面）
+        snipScreen->connectToolBarToSettingsWindow(settingsWindow);
+
+        // 快捷键设置变更时实时更新（委托 ShortcutManager 统一处理）
+        // SettingsWindow 发出 (QString, QKeySequence) 信号 →
+        // ShortcutManager::updateFromUiString 适配为枚举版 update →
+        // 内部 emit shortcutChanged(ShortcutType,...) →
+        // TrayMenuBuilder::refresh 自动刷新托盘菜单显示值
+        QObject::connect(settingsWindow, &SettingsWindow::shortcutChanged,
+                         ShortcutManager::instance(), &ShortcutManager::updateFromUiString);
+
+        return settingsWindow;
+    };
 
     // 委托 ShortcutManager 构建托盘菜单的快捷键 action 部分
     // 内部按数据表顺序创建 9 个 action（历史→截图→录屏→贴图→全屏→活动窗口→
     // 录屏暂停→录屏停止→TogglePins），并在首尾插入分隔线
     // 相比原 main.cpp 补全了录屏暂停/停止/TogglePins 三个菜单项
     ShortcutManager::instance()->buildTrayMenu(trayMenu, snipScreen,
-                                                historyWindow, settingsWindow);
+                                                historyWindow, nullptr);
 
-    // 设置动作（buildTrayMenu 已在末尾插入分隔线，此处直接追加）
+    // 设置动作（首次点击时构造设置窗口）
     QAction *settingsAction = trayMenu->addAction(tm->get("traySettings"));
-    QObject::connect(settingsAction, &QAction::triggered, [settingsWindow]() {
-        settingsWindow->show();
-        settingsWindow->raise();
-        settingsWindow->activateWindow();
+    QObject::connect(settingsAction, &QAction::triggered, [&]() {
+        SettingsWindow *w = ensureSettingsWindow();
+        w->show();
+        w->raise();
+        w->activateWindow();
     });
 
     trayMenu->addSeparator();
@@ -151,36 +194,6 @@ int main(int argc, char *argv[]) {
         app.quit();
     });
 
-    // 工具栏按钮样式变更时同步 StyleManager
-    QObject::connect(settingsWindow, &SettingsWindow::toolbarButtonStyleChanged,
-                     [](const QString &style) {
-        StyleManager::setToolbarButtonStyle(style);
-    });
-
-    // 选项卡背景颜色变更时同步更新历史记录窗口
-    QObject::connect(settingsWindow, &SettingsWindow::tabWidgetBgColorChanged,
-                     historyWindow, &HistoryWindow::updateWindowColors);
-
-    // 标注工具默认值变更时同步刷新工具栏设置
-    QObject::connect(settingsWindow, &SettingsWindow::defaultPenWidthChanged,
-                     snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
-    QObject::connect(settingsWindow, &SettingsWindow::defaultFontSizeChanged,
-                     snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
-    QObject::connect(settingsWindow, &SettingsWindow::defaultEraserWidthChanged,
-                     snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
-    QObject::connect(settingsWindow, &SettingsWindow::defaultMosaicSizeChanged,
-                     snipScreen, &SnipScreen::refreshAnnotationToolDefaults);
-
-    // 工具栏信号连接到 SettingsWindow（工具栏调节时同步显示到设置页面）
-    snipScreen->connectToolBarToSettingsWindow(settingsWindow);
-
-    // 快捷键设置变更时实时更新（委托 ShortcutManager 统一处理）
-    // SettingsWindow 发出 (QString, QKeySequence) 信号 →
-    // ShortcutManager::updateFromUiString 适配为枚举版 update →
-    // 内部 emit shortcutChanged(ShortcutType,...) →
-    // TrayMenuBuilder::refresh 自动刷新托盘菜单显示值
-    QObject::connect(settingsWindow, &SettingsWindow::shortcutChanged,
-                     ShortcutManager::instance(), &ShortcutManager::updateFromUiString);
 
     // 更新托盘静态文本（设置/退出 action 文本 + tooltip）的函数
     // 9 个快捷键 action 的文本刷新由 TrayMenuBuilder::refresh/retranslate 自动处理
