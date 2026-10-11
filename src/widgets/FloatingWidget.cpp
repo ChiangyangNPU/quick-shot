@@ -71,12 +71,11 @@ public:
         // 右下角：空心圆
         painter.drawEllipse(QPointF(w, h), r, r);
 
-        // 右上角：X 关闭按钮
+        // 右上角：X 关闭按钮（中心对准文本框角点，与三个圆点一致）
         const qreal xr = r * 0.7;
-        QRectF closeRect(w - r - xr, r - xr, xr * 2, xr * 2);
         painter.setPen(QPen(closeColor, 2.0));
-        painter.drawLine(closeRect.topLeft(), closeRect.bottomRight());
-        painter.drawLine(closeRect.topRight(), closeRect.bottomLeft());
+        painter.drawLine(QPointF(w - xr, -xr), QPointF(w + xr, xr));
+        painter.drawLine(QPointF(w + xr, -xr), QPointF(w - xr, xr));
     }
 
     void mousePressEvent(QMouseEvent *e) override {
