@@ -37,7 +37,7 @@
  * @param parent 父对象
  * @author chiangyang
  */
-SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0), styleScrollArea(nullptr) {
+SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0) {
     LOG_INFO("SettingsWindow instance created");
     setWindowTitle("Settings");
     
@@ -399,318 +399,42 @@ void SettingsWindow::setupStyleTab() {
 }
 
 /**
- * @brief 通用颜色变更处理
+ * @brief 工具栏画笔粗细变更槽：转发给样式选项卡（SpinBox 同步 + 持久化）
  *
- * 统一替代原先 17 个 onXxxColorChanged 槽函数的重复逻辑：
- * 1. 弹出颜色对话框
- * 2. 若用户选择了新颜色：更新 StyleManager、刷新按钮显示、保存设置
- * 3. 执行分类对应的样式联动
- * 4. 发射信号（若有：仅 tabWidgetBgColorChanged 有订阅者）
- * @param id 颜色 ID（StyleManager::StyleColorId，兼作按钮数组索引）
- * @author chiangyang
- */
-void SettingsWindow::applyColorChange(StyleManager::StyleColorId id) {
-    const auto& s = StyleManager::colorSettingTable()[static_cast<size_t>(id)];
-
-    QColor currentColor = s.getter();
-    QColor newColor = showColorDialog(currentColor);
-    if (newColor == currentColor) {
-        return;
-    }
-
-    s.setter(newColor);
-    QPushButton* btn = m_colorButtons[static_cast<size_t>(id)];
-    if (btn) {
-        updateColorButton(btn, newColor);
-    }
-    saveStyleSettings();
-
-    applyColorPostUpdate(s.category, newColor);
-    // 发射信号（若有：仅 tabWidgetBgColorChanged 有订阅者，通知 HistoryWindow）
-    if (s.signalId == StyleManager::StyleColorSignal::TabWidgetBg) {
-        emit tabWidgetBgColorChanged();
-    }
-}
-
-/**
- * @brief 颜色变更后的样式联动
- *
- * 不同分类的颜色变更会触发不同的样式刷新：
- * - Border/Toolbar：无后处理
- * - TabButton：仅刷新 tabWidget 样式表
- * - TabWidgetBg：刷新 tabWidget + 容器 + GroupBox + 三个 tab 的背景 + 历史 tab Palette
- *
- * @param category 颜色分类（StyleManager::StyleColorCategory）
- * @param newColor 新颜色（仅 TabWidgetBg 类用到）
- * @author chiangyang
- */
-void SettingsWindow::applyColorPostUpdate(StyleManager::StyleColorCategory category, const QColor& newColor) {
-    switch (category) {
-        case StyleManager::StyleColorCategory::Border:
-        case StyleManager::StyleColorCategory::Toolbar:
-            break;
-        case StyleManager::StyleColorCategory::TabButton:
-            tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
-            break;
-        case StyleManager::StyleColorCategory::TabWidgetBg:
-            tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
-            if (styleTabContainer) {
-                styleTabContainer->setStyleSheet(QString("background-color: %1;").arg(newColor.name()));
-            }
-            if (scrollContainer) {
-                scrollContainer->setStyleSheet(QString("background-color: %1;").arg(newColor.name()));
-            }
-            updateAllGroupBoxStyles();
-            updateAllTabsPalette(newColor);
-            break;
-    }
-}
-
-/**
- * @brief 显示颜色选择器
- * @param currentColor 当前颜色
- * @return 选择的颜色
- * @author chiangyang
- */
-QColor SettingsWindow::showColorDialog(const QColor &currentColor) {
-    QColorDialog colorDialog(currentColor, this);
-    colorDialog.setWindowTitle(TranslationManager::instance()->get("style.selectColor", "Select Color"));
-    if (colorDialog.exec() == QColorDialog::Accepted) {
-        return colorDialog.currentColor();
-    }
-    return currentColor;
-}
-
-/**
- * @brief 创建一行颜色选择控件（标签 + 弹性间距 + 色块按钮）
- *
- * 统一封装样式选项卡中重复的颜色行创建逻辑。色块按钮使用 #settingColorButton
- * 对象名，尺寸/边框/圆角由全局 qss 管理，此处只设置 background-color。
- * @param parent 父控件（通常为所属 QGroupBox）
- * @param labelText 标签文本（已翻译）
- * @param color 初始颜色
- * @param outBtn 输出：创建的色块按钮指针（供调用方保存为成员变量）
- * @param outLabel 输出：创建的标签指针（供 retranslateUi 更新文本）
- * @return 包含标签和按钮的水平布局（已含 addStretch）
- * @author chiangyang
- */
-QHBoxLayout *SettingsWindow::createColorRow(QWidget *parent, const QString &labelText,
-                                             const QColor &color, QPushButton *&outBtn, QLabel *&outLabel) {
-    QLabel *label = new QLabel(labelText, parent);
-    QPushButton *btn = new QPushButton(parent);
-    btn->setObjectName("settingColorButton");
-    updateColorButton(btn, color);
-
-    QHBoxLayout *layout = new QHBoxLayout();
-    layout->addWidget(label);
-    layout->addStretch();
-    layout->addWidget(btn);
-
-    outBtn = btn;
-    outLabel = label;
-    return layout;
-}
-
-/**
- * @brief 更新颜色按钮的显示颜色
- *
- * 仅设置 background-color，尺寸/边框/圆角仍由全局 qss 的 #settingColorButton 管理，
- * 保持 DPI 自适应缩放。
- * @param btn 颜色按钮
- * @param color 新颜色
- * @author chiangyang
- */
-void SettingsWindow::updateColorButton(QPushButton *btn, const QColor &color) {
-    if (btn) {
-        btn->setStyleSheet(QString("background-color: %1;").arg(color.name()));
-    }
-}
-
-/**
- * @brief 重置样式槽函数
- * @author chiangyang
- */
-void SettingsWindow::onResetStyle() {
-    if (MessageBox::question(this,
-            TranslationManager::instance()->get("style.resetStyle", "Reset to Default"),
-            TranslationManager::instance()->get("style.confirmReset", "Are you sure you want to reset all styles to default values?"))) {
-        // 重置为默认值
-        StyleManager::resetToDefaults();
-
-        // 通过数据驱动表循环刷新所有颜色按钮（表归 StyleManager 所有）
-        const auto& table = StyleManager::colorSettingTable();
-        for (size_t i = 0; i < table.size(); ++i) {
-            if (m_colorButtons[i]) {
-                updateColorButton(m_colorButtons[i], table[i].getter());
-            }
-        }
-
-        // 重置标注工具默认值的 SpinBox
-        if (spnDefaultPenWidth) {
-            spnDefaultPenWidth->blockSignals(true);
-            spnDefaultPenWidth->setValue(StyleManager::getDefaultPenWidth());
-            spnDefaultPenWidth->blockSignals(false);
-        }
-        if (spnDefaultFontSize) {
-            spnDefaultFontSize->blockSignals(true);
-            spnDefaultFontSize->setValue(StyleManager::getDefaultFontSize());
-            spnDefaultFontSize->blockSignals(false);
-        }
-
-        // 重置橡皮擦和马赛克默认值的 SpinBox
-        if (spnDefaultEraserWidth) {
-            spnDefaultEraserWidth->blockSignals(true);
-            spnDefaultEraserWidth->setValue(StyleManager::getDefaultEraserWidth());
-            spnDefaultEraserWidth->blockSignals(false);
-        }
-        if (spnDefaultMosaicSize) {
-            spnDefaultMosaicSize->blockSignals(true);
-            spnDefaultMosaicSize->setValue(StyleManager::getDefaultMosaicSize());
-            spnDefaultMosaicSize->blockSignals(false);
-        }
-
-        // 选项卡背景相关的样式联动
-        QColor defaultTabWidgetBgColor = StyleManager::getTabWidgetBgColor();
-        applyColorPostUpdate(StyleManager::StyleColorCategory::TabWidgetBg, defaultTabWidgetBgColor);
-
-        // 保存默认值到QSettings
-        saveStyleSettings();
-
-        // 发送颜色变更信号（仅选项卡背景有订阅者：HistoryWindow）
-        emit tabWidgetBgColorChanged();
-
-        // 发送标注工具默认值变更信号（通知工具栏更新滑块）
-        emit defaultPenWidthChanged(StyleManager::getDefaultPenWidth());
-        emit defaultFontSizeChanged(StyleManager::getDefaultFontSize());
-        emit defaultEraserWidthChanged(StyleManager::getDefaultEraserWidth());
-        emit defaultMosaicSizeChanged(StyleManager::getDefaultMosaicSize());
-
-        // 重新应用样式到所有UI组件
-        retranslateUi();
-    }
-}
-
-/**
- * @brief 工具栏画笔粗细变更（委托 SettingsStyleTab）
+ * 由 SnipScreen::connectToolBarToSettingsWindow 连接工具栏信号；
+ * 默认值本身的持久化已在 BaseToolBar 信号源头收拢，此处仅为设置页显示同步。
+ * @param width 新的画笔粗细
  * @author chiangyang
  */
 void SettingsWindow::onToolPenWidthChanged(int width) {
     m_styleTabWidget->onToolPenWidthChanged(width);
 }
+
 /**
- * @brief 工具栏字号变更（委托 SettingsStyleTab）
+ * @brief 工具栏字号变更槽：转发给样式选项卡
+ * @param size 新的字号
  * @author chiangyang
  */
 void SettingsWindow::onToolFontSizeChanged(int size) {
     m_styleTabWidget->onToolFontSizeChanged(size);
 }
+
 /**
- * @brief 工具栏橡皮擦粗细变更（委托 SettingsStyleTab）
+ * @brief 工具栏橡皮擦粗细变更槽：转发给样式选项卡
+ * @param width 新的橡皮擦粗细
  * @author chiangyang
  */
 void SettingsWindow::onToolEraserWidthChanged(int width) {
     m_styleTabWidget->onToolEraserWidthChanged(width);
 }
+
 /**
- * @brief 工具栏马赛克大小变更（委托 SettingsStyleTab）
+ * @brief 工具栏马赛克大小变更槽：转发给样式选项卡
+ * @param size 新的马赛克大小
  * @author chiangyang
  */
 void SettingsWindow::onToolMosaicSizeChanged(int size) {
     m_styleTabWidget->onToolMosaicSizeChanged(size);
-}
-/**
- * @brief 工具栏按钮样式改变槽函数
- * @param index 下拉框索引
- * @author chiangyang
- */
-void SettingsWindow::onToolbarButtonStyleChanged(int index) {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    QString style = cmbToolbarButtonStyle->itemData(index).toString();
-    settings->setValue("style/toolbarButtonStyle", style);
-    settings->sync();
-
-    // 同步更新 StyleManager，确保后续创建的工具栏使用最新样式
-    StyleManager::setToolbarButtonStyle(style);
-
-    // 发送信号通知已有的工具栏和控制栏更新样式
-    emit toolbarButtonStyleChanged(style);
-}
-
-/**
- * @brief 保存样式设置
- * @author chiangyang
- */
-void SettingsWindow::saveStyleSettings() {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-
-    // 通过数据驱动表循环保存所有颜色（表归 StyleManager 所有）
-    const auto& table = StyleManager::colorSettingTable();
-    for (const auto& s : table) {
-        settings->setValue(QString("style/%1").arg(s.settingsKey), s.getter().name());
-    }
-    settings->setValue("style/toolbarButtonStyle", cmbToolbarButtonStyle->currentData().toString());
-
-    // 保存标注工具默认值
-    settings->setValue("style/defaultPenWidth", qBound(1, StyleManager::getDefaultPenWidth(), 20));
-    settings->setValue("style/defaultFontSize", qBound(8, StyleManager::getDefaultFontSize(), 48));
-    // 保存橡皮擦和马赛克默认值
-    settings->setValue("style/defaultEraserWidth", qBound(1, StyleManager::getDefaultEraserWidth(), 20));
-    settings->setValue("style/defaultMosaicSize", qBound(1, StyleManager::getDefaultMosaicSize(), 20));
-
-    // 同步保存
-    settings->sync();
-}
-
-/**
- * @brief 加载样式设置
- *
- * StyleManager 已在启动时由 initFromConfig 从持久化恢复全部样式值，
- * 此处仅把 StyleManager 已初始化的值同步到设置页 UI，
- * 不再直接读 QSettings（避免设置页持有第二套读取逻辑）。
- * @author chiangyang
- */
-void SettingsWindow::loadStyleSettings() {
-    // 通过数据驱动表循环把当前颜色同步到色块按钮
-    const auto& table = StyleManager::colorSettingTable();
-    for (size_t i = 0; i < table.size(); ++i) {
-        const auto& s = table[i];
-        if (m_colorButtons[i]) {
-            updateColorButton(m_colorButtons[i], s.getter());
-        }
-    }
-
-    // 选项卡背景相关的样式联动
-    QColor tabWidgetBgColor = StyleManager::getTabWidgetBgColor();
-    applyColorPostUpdate(StyleManager::StyleColorCategory::TabWidgetBg, tabWidgetBgColor);
-
-    // 工具栏按钮样式（已由 initFromConfig 恢复）
-    QString toolbarButtonStyle = StyleManager::getToolbarButtonStyle();
-    int styleIndex = cmbToolbarButtonStyle->findData(toolbarButtonStyle);
-    if (styleIndex >= 0) {
-        cmbToolbarButtonStyle->setCurrentIndex(styleIndex);
-    }
-
-    // 标注工具默认值（已由 initFromConfig 恢复，同步到 SpinBox）
-    if (spnDefaultPenWidth) {
-        spnDefaultPenWidth->blockSignals(true);
-        spnDefaultPenWidth->setValue(StyleManager::getDefaultPenWidth());
-        spnDefaultPenWidth->blockSignals(false);
-    }
-    if (spnDefaultFontSize) {
-        spnDefaultFontSize->blockSignals(true);
-        spnDefaultFontSize->setValue(StyleManager::getDefaultFontSize());
-        spnDefaultFontSize->blockSignals(false);
-    }
-    if (spnDefaultEraserWidth) {
-        spnDefaultEraserWidth->blockSignals(true);
-        spnDefaultEraserWidth->setValue(StyleManager::getDefaultEraserWidth());
-        spnDefaultEraserWidth->blockSignals(false);
-    }
-    if (spnDefaultMosaicSize) {
-        spnDefaultMosaicSize->blockSignals(true);
-        spnDefaultMosaicSize->setValue(StyleManager::getDefaultMosaicSize());
-        spnDefaultMosaicSize->blockSignals(false);
-    }
 }
 
 /**
@@ -833,8 +557,8 @@ void SettingsWindow::setupHistoryTab() {
 /**
  * @brief 刷新所有 QGroupBox 的背景样式（绑定到 StyleManager 的 s_tabWidgetBgColor）
  *
- * 在 applyColorChange() 改色和 onResetStyle() 重置时统一调用，
- * 覆盖通用/翻译/样式/历史记录 4 个选项卡的全部 QGroupBox，
+ * 各选项卡改色/重置路径统一调用，
+ * 覆盖通用/翻译/样式/快捷键/历史记录选项卡的全部 QGroupBox，
  * 避免每个 GroupBox 在每个改色路径下都重复写 if 判断。
  * @author chiangyang
  */
@@ -847,11 +571,8 @@ void SettingsWindow::updateAllGroupBoxStyles() {
     // Translate 翻译选项卡（样式刷新内聚在 SettingsTranslateTab）
     if (m_translateTabWidget) m_translateTabWidget->refreshStyles();
 
-    // Style 样式选项卡
-    if (tabGroup) tabGroup->setStyleSheet(style);
-    if (borderGroup) borderGroup->setStyleSheet(style);
-    if (toolbarGroup) toolbarGroup->setStyleSheet(style);
-    if (m_annotationDefaultsGroup) m_annotationDefaultsGroup->setStyleSheet(style);
+    // Style 样式选项卡（样式刷新内聚在 SettingsStyleTab）
+    if (m_styleTabWidget) m_styleTabWidget->refreshStyles();
 
     // Shortcuts 快捷键选项卡（样式刷新内聚在 SettingsShortcutsTab）
     if (m_shortcutsTabWidget) m_shortcutsTabWidget->refreshStyles();
@@ -932,8 +653,8 @@ bool SettingsWindow::eventFilter(QObject *obj, QEvent *event) {
         // （快捷键选项卡的滚轮滚动内聚在 SettingsShortcutsTab::eventFilter）
         int currentIndex = tabWidget->currentIndex();
         QScrollArea *scrollArea = nullptr;
-        if (currentIndex == 2 && styleScrollArea) {
-            scrollArea = styleScrollArea;
+        if (currentIndex == 2 && m_styleTabWidget) {
+            scrollArea = m_styleTabWidget->scrollArea();
         } else if (currentIndex == 4 && m_historyTabWidget) {
             scrollArea = m_historyTabWidget->scrollArea();
         }

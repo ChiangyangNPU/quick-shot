@@ -261,8 +261,8 @@ private:
     /**
      * @brief 刷新所有 QGroupBox 的背景样式（绑定到 StyleManager 的 s_tabWidgetBgColor）
      *
-     * 在 applyColorChange() 改色和 onResetStyle() 重置时统一调用，
-     * 覆盖通用/翻译/样式/历史记录 4 个选项卡的全部 QGroupBox，
+     * 各选项卡改色/重置路径统一调用，
+     * 覆盖通用/翻译/样式/快捷键/历史记录选项卡的全部 QGroupBox，
      * 避免每个 GroupBox 在每个改色路径下都重复写 if 判断。
      * @author chiangyang
      */
@@ -287,7 +287,6 @@ private:
     void loadSettings();
 
     QTabWidget *tabWidget;          ///< 选项卡控件
-    QScrollArea *styleScrollArea;   ///< 样式选项卡滚动区域
     SettingsGeneralTab *m_generalTabWidget; ///< 通用选项卡
     SettingsStyleTab *m_styleTabWidget;         ///< 样式选项卡
 
@@ -305,44 +304,10 @@ private:
     // Translate（选项卡内容内聚在 SettingsTranslateTab）
     SettingsTranslateTab *m_translateTabWidget; ///< 翻译选项卡
 
-    // Style
-    QGroupBox *borderGroup;         ///< 边框颜色设置组
-    QGroupBox *toolbarGroup;        ///< 工具栏样式设置组
-    QGroupBox *tabGroup;            ///< 选项卡样式设置组
-    QWidget *styleTabContainer;     ///< 样式选项卡容器
-    QWidget *scrollContainer;       ///< 滚动区域容器
     QPropertyAnimation *heightAnimation; ///< 高度动画
     int m_animatedHeight; ///< 动画高度属性
-    QPushButton *btnResetStyle;     ///< 重置样式按钮
-
-    // Toolbar Button Style
-    QLabel *lblToolbarButtonStyle;  ///< 工具栏按钮样式标签
-    QComboBox *cmbToolbarButtonStyle; ///< 工具栏按钮样式下拉框
-
-    // Annotation Defaults
-    QGroupBox *m_annotationDefaultsGroup; ///< 标注工具默认值设置组
-    QLabel *lblDefaultPenWidth;          ///< 画笔默认粗细标签
-    QSpinBox *spnDefaultPenWidth;        ///< 画笔默认粗细 SpinBox
-    QLabel *lblDefaultFontSize;          ///< 文本默认字号标签
-    QSpinBox *spnDefaultFontSize;        ///< 文本默认字号 SpinBox
-    QLabel *lblDefaultEraserWidth;       ///< 橡皮擦默认粗细标签
-    QSpinBox *spnDefaultEraserWidth;     ///< 橡皮擦默认粗细 SpinBox
-    QLabel *lblDefaultMosaicSize;        ///< 马赛克默认大小标签
-    QSpinBox *spnDefaultMosaicSize;      ///< 马赛克默认大小 SpinBox
 
 private slots:
-    /**
-     * @brief 重置样式槽函数
-     * @author chiangyang
-     */
-    void onResetStyle();
-
-    /**
-     * @brief 工具栏按钮样式改变槽函数
-     * @param index 下拉框索引
-     * @author chiangyang
-     */
-    void onToolbarButtonStyleChanged(int index);
 
     /**
      * @brief 选项卡切换槽函数，用于自适应调整窗口高度
@@ -388,56 +353,6 @@ private:
     void setupHistoryTab();
 
     /**
-     * @brief 显示颜色选择器
-     * @param currentColor 当前颜色
-     * @return 选择的颜色
-     * @author chiangyang
-     */
-    QColor showColorDialog(const QColor &currentColor);
-
-    /**
-     * @brief 创建一行颜色选择控件（标签 + 弹性间距 + 色块按钮）
-     *
-     * 统一封装样式选项卡中重复的颜色行创建逻辑：创建标签和色块按钮，
-     * 按钮使用 #settingColorButton 对象名（尺寸/边框/圆角由全局 qss 管理），
-     * 并通过 outLabel/outBtn 输出指针供调用方保存为成员变量、连接信号。
-     *
-     * @param parent 父控件（通常为所属 QGroupBox）
-     * @param labelText 标签文本（已翻译）
-     * @param color 初始颜色
-     * @param outBtn 输出：创建的色块按钮指针（供调用方保存为成员变量）
-     * @param outLabel 输出：创建的标签指针（供 retranslateUi 更新文本）
-     * @return 包含标签和按钮的水平布局（已含 addStretch）
-     * @author chiangyang
-     */
-    QHBoxLayout *createColorRow(QWidget *parent, const QString &labelText,
-                                 const QColor &color, QPushButton *&outBtn, QLabel *&outLabel);
-
-    /**
-     * @brief 更新颜色按钮的显示颜色
-     *
-     * 仅设置 background-color，尺寸/边框/圆角仍由全局 qss 的 #settingColorButton 管理，
-     * 保持 DPI 自适应缩放。
-     *
-     * @param btn 颜色按钮
-     * @param color 新颜色
-     * @author chiangyang
-     */
-    void updateColorButton(QPushButton *btn, const QColor &color);
-
-    /**
-     * @brief 保存样式设置
-     * @author chiangyang
-     */
-    void saveStyleSettings();
-
-    /**
-     * @brief 加载样式设置
-     * @author chiangyang
-     */
-    void loadStyleSettings();
-
-    /**
      * @brief 根据当前屏幕逻辑 DPI 重新计算并应用窗口宽度
      *
      * 系统缩放比例变化时调用。基于当前屏幕的 logicalDotsPerInch 重新计算
@@ -472,36 +387,6 @@ private:
     // StyleManager::colorSettingTable()（core 层单一数据源），SettingsWindow 只消费它，
     // 不再持有第二份颜色表（原先 SettingsWindow::colorSettingTable 的默认色与
     // StyleManager::DEFAULT_* 不一致，是历史 bug 来源）。
-
-    /**
-     * @brief 通用颜色变更处理
-     *
-     * 统一替代原先 17 个 onXxxColorChanged 槽函数的重复逻辑：
-     * 1. 弹出颜色对话框
-     * 2. 若用户选择了新颜色：更新 StyleManager、刷新按钮显示、保存设置
-     * 3. 执行分类对应的样式联动
-     * 4. 发射信号（若有：仅 tabWidgetBgColorChanged 有订阅者）
-     * @param id 颜色 ID（StyleManager::StyleColorId，兼作按钮数组索引）
-     * @author chiangyang
-     */
-    void applyColorChange(StyleManager::StyleColorId id);
-
-    /**
-     * @brief 颜色变更后的样式联动
-     *
-     * 不同分类的颜色变更会触发不同的样式刷新：
-     * - Border/Toolbar：无后处理
-     * - TabButton：仅刷新 tabWidget 样式表
-     * - TabWidgetBg：刷新 tabWidget + 容器 + GroupBox + 三个 tab 的背景 + 历史 tab Palette
-     *
-     * @param category 颜色分类（StyleManager::StyleColorCategory）
-     * @param newColor 新颜色（仅 TabWidgetBg 类用到）
-     * @author chiangyang
-     */
-    void applyColorPostUpdate(StyleManager::StyleColorCategory category, const QColor& newColor);
-
-    std::array<QPushButton*, StyleManager::kStyleColorCount> m_colorButtons{};  ///< 颜色按钮数组（按 StyleColorId 索引）
-    std::array<QLabel*, StyleManager::kStyleColorCount> m_colorLabels{};        ///< 颜色标签数组（按 StyleColorId 索引）
 
     // 拖动相关
     bool m_isDragging = false;   ///< 是否正在拖动窗口

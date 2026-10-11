@@ -47,6 +47,12 @@ public:
      */
     void loadStyleSettings();
 
+    /**
+     * @brief 获取选项卡内部滚动区域（外壳 eventFilter 定制滚轮滚动用）
+     * @author chiangyang
+     */
+    QScrollArea *scrollArea() const { return styleScrollArea; }
+
 public slots:
     /// 工具栏画笔粗细变更（SnipScreen 工具栏联动，经宿主转发）
     void onToolPenWidthChanged(int width);
