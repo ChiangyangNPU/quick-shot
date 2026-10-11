@@ -4,6 +4,9 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
+#include <QDialogButtonBox>
+#include <QPushButton>
+#include <QCoreApplication>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
@@ -53,6 +56,28 @@ QString Utils::showFileDialog(QWidget *parent, const QString &title, const QStri
     // 按钮盒保持 Qt 的 macOS 默认布局（保存在上、取消在下的垂直堆叠），
     // 「保存」的主按钮蓝色高亮由 app.qss 的 QFileDialog QPushButton:default 规则提供
     dlg.setOption(QFileDialog::DontUseNativeDialog, true);
+
+    // 按钮尺寸：平台样式的 minimumSizeHint 把按钮卡在偏大尺寸（~106x29），
+    // QSS 的 min-width/padding 调不动；这里显式设定为与系统按钮相当的小尺寸
+    dlg.show();
+    QCoreApplication::processEvents();
+    if (auto *box = dlg.findChild<QDialogButtonBox *>()) {
+        const QFontMetrics fm(dlg.font());
+        int maxTextW = 0;
+        const auto buttons = box->findChildren<QPushButton *>();
+        for (auto *b : buttons) {
+            QString text = b->text();
+            text.remove(QLatin1Char('&'));  // 去掉助记符标记参与测量
+            maxTextW = qMax(maxTextW, fm.horizontalAdvance(text));
+        }
+        const int btnW = maxTextW + qRound(fm.height() * 1.8);
+        const int btnH = qRound(fm.height() * 1.45);
+        for (auto *b : buttons) {
+            b->setMinimumSize(btnW, btnH);
+            b->setMaximumSize(btnW, btnH);
+        }
+    }
+
     if (dlg.exec() != QDialog::Accepted) {
         return QString();
     }
