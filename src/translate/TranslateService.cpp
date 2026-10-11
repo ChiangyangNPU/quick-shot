@@ -6,6 +6,7 @@
 #include "ConfigManager.h"
 #include "../core/TranslationManager.h"
 #include "../core/StyleManager.h"
+#include "../utils/Utils.h"
 #include "../log/Logger.h"
 
 #include <QSettings>
@@ -69,7 +70,10 @@ bool TranslateService::checkEnabledAndPrivacy(QWidget *parent, const QRect &cent
         msgBox.centerOn(targetRect);
     }
 
+    // macOS：置顶覆盖层场景下降级父窗口，避免消息框开在覆盖层后面
+    Utils::beginModalOverOverlay(parent);
     msgBox.exec();
+    Utils::endModalOverOverlay(parent);
 
     if (msgBox.clickedButton() == yesButton) {
         if (dontAsk->isChecked()) {

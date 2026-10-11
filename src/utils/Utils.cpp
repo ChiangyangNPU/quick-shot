@@ -24,6 +24,58 @@
  * @return 是否保存成功
  * @author chiangyang
  */
+
+#ifdef Q_OS_MACOS
+#include <objc/message.h>
+#include <objc/objc.h>
+
+/**
+ * @brief 将窗口级别恢复到菜单栏之上（与 SnipScreen 启动时的提升一致）
+ * @author chiangyang
+ */
+static void restoreWindowAboveMenuBar(WId wid) {
+    if (!wid) return;
+    id nsView = reinterpret_cast<id>(wid);
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) return;
+    // [nsWindow setLevel:NSPopUpMenuWindowLevel]
+    ((void (*)(id, SEL, long))objc_msgSend)(nsWindow, sel_registerName("setLevel:"), 101);
+}
+#endif
+
+/**
+ * @brief 模态对话框打开前临时降低置顶父窗口的层级
+ * @author chiangyang
+ */
+void Utils::beginModalOverOverlay(QWidget *parent) {
+    QWidget *win = parent ? parent->window() : nullptr;
+    if (!win) return;
+    if (win->windowFlags() & Qt::WindowStaysOnTopHint) {
+        // 取消置顶会让 macOS 把 NSWindow 级别重置为普通窗口，
+        // 原生保存面板/消息框即可显示在覆盖层之上
+        win->setWindowFlag(Qt::WindowStaysOnTopHint, false);
+        win->show();
+        LOG_INFO("Overlay window lowered for modal dialog");
+    }
+}
+
+/**
+ * @brief 恢复 beginModalOverOverlay 降低的置顶状态（mac 上含菜单栏覆盖级别）
+ * @author chiangyang
+ */
+void Utils::endModalOverOverlay(QWidget *parent) {
+    QWidget *win = parent ? parent->window() : nullptr;
+    if (!win) return;
+    if (!(win->windowFlags() & Qt::WindowStaysOnTopHint)) {
+        win->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+        win->show();
+#ifdef Q_OS_MACOS
+        restoreWindowAboveMenuBar(win->winId());
+#endif
+        LOG_INFO("Overlay window restored after modal dialog");
+    }
+}
+
 bool Utils::saveImageToDesktop(const QPixmap& source, const QString& prefix) {
     QString desktopPath = getDesktopPath() + "/temp1/";
     QString fileName = QString("%1/%2_%3.png")
@@ -67,8 +119,14 @@ QString Utils::savePixmapToFile(QWidget* parent, std::function<QPixmap()> pixmap
     QString saveDir = ConfigManager::instance()->value("capture/saveDir", defaultDir).toString();
     QString initialPath = QDir(saveDir).filePath(defaultName);
 
+    // macOS：截图/贴图窗口是置顶覆盖层（级别高于原生面板），
+    // 不降级的话保存面板会开在覆盖层后面而不可见
+    beginModalOverOverlay(parent);
+
     QString selectedFilter;
     QString filename = QFileDialog::getSaveFileName(parent, title, initialPath, filter, &selectedFilter);
+
+    endModalOverOverlay(parent);
 
     if (filename.isEmpty()) {
         return QString();
