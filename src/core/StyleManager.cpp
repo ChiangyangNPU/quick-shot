@@ -289,6 +289,32 @@ public:
                     // Qt 完成自身定位后再修正（单发延迟到下一轮事件循环）
                     QTimer::singleShot(0, this, [comboGuard, popupGuard]() {
                         if (!comboGuard || !popupGuard) return;
+
+                        // ① 弹窗宽度自适应最长条目文本，且不窄于 combo 本体
+                        //   （弹窗宽度跟随内部视图，视图默认 sizeHint 在不同缩放/
+                        //     字体度量下可能窄于文字，导致条目中间省略）
+                        int maxItemWidth = 0;
+                        const QFontMetrics fm(comboGuard->font());
+                        for (int i = 0; i < comboGuard->count(); ++i) {
+                            maxItemWidth = qMax(maxItemWidth,
+                                fm.horizontalAdvance(comboGuard->itemText(i)));
+                        }
+                        const int minWidth = qMax(
+                            maxItemWidth + qRound(fm.horizontalAdvance('M') * 2.0),
+                            comboGuard->minimumWidth());
+                        if (QAbstractItemView *view = comboGuard->view()) {
+                            view->setMinimumWidth(minWidth);
+                            // 仅按需加宽容器（宽度 = 视图最小宽 + 容器边框），
+                            // 高度保留 Qt 的计算结果——对容器 adjustSize 会把
+                            // 视图高度破坏成 0
+                            const int chrome = qMax(0, popupGuard->width() - view->width());
+                            const int neededWidth = minWidth + chrome;
+                            if (popupGuard->width() < neededWidth) {
+                                popupGuard->resize(neededWidth, popupGuard->height());
+                            }
+                        }
+
+                        // ② 锚定到 combo 正下方
                         const QPoint below = comboGuard->mapToGlobal(QPoint(0, comboGuard->height()));
                         if (popupGuard->pos() != below) {
                             popupGuard->move(below);
