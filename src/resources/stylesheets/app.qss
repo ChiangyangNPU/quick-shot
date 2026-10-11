@@ -139,6 +139,30 @@ QScrollBar:horizontal {
 ///////////////////////////////////////////////////////////////*/
 
 /* 截图工具栏配色按钮：正方形，尺寸跟字体 */
+
+/* 文件对话框按钮：全局 QPushButton 的极小高度会把 mac 按钮盒按钮压成无边框文字，
+   这里给 Qt 自绘文件对话框的按钮明确的尺寸与外观 */
+QFileDialog QPushButton {
+    height: auto;
+    min-height: 1.6em;
+    min-width: 5em;
+    padding: 0.3em 1.2em;
+    border: 1px solid #b0b0b0;
+    border-radius: 5px;
+    background-color: #e8e8e8;
+}
+QFileDialog QPushButton:hover {
+    background-color: #dcdcdc;
+}
+QFileDialog QPushButton:default {
+    background-color: #0078d7;
+    color: #ffffff;
+    border: 1px solid #005a9e;
+}
+QFileDialog QPushButton:default:hover {
+    background-color: #106ebe;
+}
+
 QPushButton#toolbarColorButton {
     width: 0.95em;
     height: 0.95em;

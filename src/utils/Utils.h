@@ -3,6 +3,7 @@
 
 #include <functional>
 #include <QString>
+#include <QFileDialog>
 #include <QPixmap>
 
 class QWidget;
@@ -78,6 +79,27 @@ public:
      * @author chiangyang
      */
     static QPixmap grabActiveWindowPixmap();
+
+    /**
+     * @brief 打开统一样式的 Qt 自绘文件对话框
+     *
+     * 统一入口：非原生（按钮/标签跟随 app 语言）、按钮盒强制水平排布
+     * （macOS 风格默认垂直堆叠）、按钮样式由 app.qss 的 QFileDialog 规则提供。
+     * @param parent 父窗口
+     * @param title 标题（已翻译）
+     * @param dir 初始目录或文件路径
+     * @param filter 文件过滤器（可空）
+     * @param fileMode 文件模式（AnyFile/ExistingFile/Directory 等）
+     * @param saveMode true=保存模式（AcceptSave），false=打开模式
+     * @param selectedFilter 输出：用户选中的过滤器（可空）
+     * @return 选中的路径；用户取消返回空字符串
+     * @author chiangyang
+     */
+    static QString showFileDialog(QWidget *parent, const QString &title, const QString &dir,
+                                  const QString &filter = QString(),
+                                  int fileMode = QFileDialog::AnyFile,
+                                  bool saveMode = false,
+                                  QString *selectedFilter = nullptr);
 
     /**
      * @brief 模态对话框打开前临时降低置顶父窗口的层级

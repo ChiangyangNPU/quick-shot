@@ -8,6 +8,7 @@
 #include "../../core/TranslationManager.h"
 #include "../../core/StyleManager.h"
 #include "../../log/Logger.h"
+#include "../../utils/Utils.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -421,9 +422,9 @@ void SettingsGeneralTab::onChooseCaptureSaveDir() {
     QSettings *settings = ConfigManager::instance()->getSettings();
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString currentDir = settings->value("capture/saveDir", defaultDir).toString();
-    // 非原生对话框：按钮/标签跟随 app 语言（原生面板跟随系统语言）
-    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("capture.chooseDir", "Choose"),
-                                                          currentDir, QFileDialog::DontUseNativeDialog);
+    const QString dir = Utils::showFileDialog(this,
+        TranslationManager::instance()->get("capture.chooseDir", "Choose"),
+        currentDir, QString(), QFileDialog::Directory);
     if (dir.isEmpty()) return;
     settings->setValue("capture/saveDir", dir);
     settings->sync();
@@ -439,8 +440,9 @@ void SettingsGeneralTab::onChooseRecordSaveDir() {
     QSettings *settings = ConfigManager::instance()->getSettings();
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
     const QString currentDir = settings->value("record/saveDir", defaultDir).toString();
-    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("record.chooseDir", "Choose"),
-                                                          currentDir, QFileDialog::DontUseNativeDialog);
+    const QString dir = Utils::showFileDialog(this,
+        TranslationManager::instance()->get("record.chooseDir", "Choose"),
+        currentDir, QString(), QFileDialog::Directory);
     if (dir.isEmpty()) return;
     settings->setValue("record/saveDir", dir);
     settings->sync();
@@ -497,14 +499,12 @@ void SettingsGeneralTab::onChangeConfigFile() {
     }
 
     // 打开文件选择对话框
-    QString selectedFile = QFileDialog::getOpenFileName(
+    QString selectedFile = Utils::showFileDialog(
         this,
         TranslationManager::instance()->get("config.selectFile", "Select Config File"),
         m_configManager->getConfigDirectory(),
         "INI Files (*.ini);;All Files (*)",
-        nullptr,
-        QFileDialog::DontUseNativeDialog
-    );
+        QFileDialog::ExistingFile);
 
     if (selectedFile.isEmpty()) {
         // 用户取消了选择
