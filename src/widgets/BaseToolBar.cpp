@@ -7,6 +7,7 @@
 #include <QPainter>
 #include <QPaintEvent>
 #include <functional>
+#include <QAbstractItemView>
 #include "StyleManager.h"
 #include "../core/ConfigManager.h"
 #include "../core/TranslationManager.h"
@@ -147,6 +148,32 @@ QHBoxLayout *BaseToolBar::initShell(Qt::WindowFlags flags) {
     return m_primaryLayout;
 }
 
+/**
+ * @brief 按最长条目文本调整形状下拉框及其弹窗视图的最小宽度
+ *
+ * 弹窗宽度跟随内部视图的 sizeHint（约等于最宽条目 + 内边距），通常窄于
+ * 下拉框本体；不设置最小宽度时英文条目（Rectangle/Ellipse/Triangle）会被
+ * 压缩省略。语言切换（setItemText）后需重新调用。
+ * @author chiangyang
+ */
+static void adjustShapeComboPopupWidth(QComboBox *combo) {
+    if (!combo) return;
+    int maxItemWidth = 0;
+    const QFontMetrics fm(combo->font());
+    for (int i = 0; i < combo->count(); ++i) {
+        maxItemWidth = qMax(maxItemWidth, fm.horizontalAdvance(combo->itemText(i)));
+    }
+    // 下拉框本体：文本 + QSS 内边距 + 下拉箭头区 + 边框
+    const int minComboWidth = maxItemWidth + qRound(fm.horizontalAdvance('M') * 3.0);
+    combo->setMinimumWidth(minComboWidth);
+    // 弹窗视图：文本 + QSS item 内边距 + 视图边框；且不窄于下拉框本体（弹窗宽度跟随视图）
+    const int minViewWidth = qMax(maxItemWidth + qRound(fm.horizontalAdvance('M') * 2.0),
+                                  minComboWidth);
+    if (QAbstractItemView *view = combo->view()) {
+        view->setMinimumWidth(minViewWidth);
+    }
+}
+
 BaseToolBar::BaseToolBar(QWidget *parent) : QWidget(parent) {
     LOG_INFO("BaseToolBar instance created");
 
@@ -216,6 +243,7 @@ void BaseToolBar::retranslateUi() {
         rect.shapeCombo->setItemText(0, tm->get("shape.rect", "Rectangle"));
         rect.shapeCombo->setItemText(1, tm->get("shape.ellipse", "Ellipse"));
         rect.shapeCombo->setItemText(2, tm->get("shape.triangle", "Triangle"));
+        adjustShapeComboPopupWidth(rect.shapeCombo);
     }
 }
 
@@ -410,6 +438,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
             data.shapeCombo->addItem(tm->get("shape.triangle", "Triangle"), 3);
             data.shapeCombo->setCurrentIndex(0);
             data.shapeCombo->setStyleSheet(StyleManager::getComboBoxStyle());
+            adjustShapeComboPopupWidth(data.shapeCombo);
             connect(data.shapeCombo, &QComboBox::currentIndexChanged, [this, &data]() {
                 int shapeType = data.shapeCombo->currentData().toInt();
                 LOG_INFO(QString("Shape type changed: %1").arg(shapeType));
