@@ -126,6 +126,15 @@ protected:
     HitTarget hitTest(const QPoint &pos) const;
 
     /**
+     * @brief 手柄覆盖层应覆盖的帧（编辑框本地坐标，含手柄半径余量）
+     *
+     * 默认为未旋转的包围框；旋转子类重写返回旋转后的包围盒帧，
+     * 使手柄视觉与命中跟随旋转。
+     * @author chiangyang
+     */
+    virtual QRectF handleOverlayFrame() const;
+
+    /**
      * @brief 是否有拖拽/缩放交互进行中（子类可据此挂起内容自适应等副作用）
      * @author chiangyang
      */
@@ -139,9 +148,17 @@ protected:
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
 
+protected:
+    /**
+     * @brief 更新手柄覆盖层位置、几何与旋转帧
+     * @author chiangyang
+     */
+    void updateHandleOverlayPosition();
+
 private:
     /**
      * @brief 获取对角线长度
+     * @return 对角线长度
      * @author chiangyang
      */
     qreal diagonalLength() const;
@@ -152,12 +169,6 @@ private:
      * @author chiangyang
      */
     void handleCornerResize(const QPointF &currentGlobal);
-
-    /**
-     * @brief 更新手柄覆盖层位置与层级
-     * @author chiangyang
-     */
-    void updateHandleOverlayPosition();
 
     QWidget *m_handleOverlay = nullptr; ///< 手柄绘制覆盖层（父控件的子控件）
     QRect m_boundaryRect;               ///< 允许移动和缩放的边界矩形（父控件坐标系）

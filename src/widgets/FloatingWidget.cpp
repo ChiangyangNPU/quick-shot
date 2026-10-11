@@ -19,6 +19,8 @@ namespace {
 class HandleOverlay final : public QWidget {
     FloatingWidget *m_editor;
     int m_radius;
+    qreal m_angleDegrees = 0.0;   ///< 当前旋转角（度，0 = 未旋转）
+    QPointF m_editorOrigin;       ///< 编辑框原点 (0,0) 在覆盖层本地坐标中的位置
 public:
     explicit HandleOverlay(FloatingWidget *editor, int radius, QWidget *parent)
         : QWidget(parent), m_editor(editor), m_radius(radius) {
@@ -27,26 +29,47 @@ public:
         setMouseTracking(true);
     }
 
+    /**
+     * @brief 设置旋转帧（覆盖层几何由 FloatingWidget::updateHandleOverlayPosition 计算）
+     * @param angleDegrees 旋转角（度）
+     * @param editorOriginInOverlay 编辑框原点 (0,0) 在覆盖层本地坐标中的位置
+     * @author chiangyang
+     */
+    void setTransformFrame(qreal angleDegrees, const QPointF &editorOriginInOverlay) {
+        m_angleDegrees = angleDegrees;
+        m_editorOrigin = editorOriginInOverlay;
+        update();
+    }
+
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing);
 
         const int r = m_radius;
-        const int w = width();
-        const int h = height();
+        const qreal w = m_editor ? m_editor->width() : 0;
+        const qreal h = m_editor ? m_editor->height() : 0;
         const QColor circleColor = StyleManager::getHandleCircleColor();
         const QColor closeColor = StyleManager::getHandleCloseColor();
+
+        // 进入编辑框本地坐标系：原点平移 + 绕编辑框中心的旋转变换。
+        // 未旋转（angle==0）时与旧的轴对齐绘制逐像素等价。
+        painter.translate(m_editorOrigin);
+        if (m_angleDegrees != 0.0) {
+            painter.translate(w / 2.0, h / 2.0);
+            painter.rotate(m_angleDegrees);
+            painter.translate(-w / 2.0, -h / 2.0);
+        }
 
         // 左上角：空心圆（中心对准文本框角点）
         painter.setPen(QPen(circleColor, 2.0));
         painter.setBrush(Qt::NoBrush);
-        painter.drawEllipse(QPointF(r, r), r, r);
+        painter.drawEllipse(QPointF(0, 0), r, r);
 
         // 左下角：空心圆
-        painter.drawEllipse(QPointF(r, h - r), r, r);
+        painter.drawEllipse(QPointF(0, h), r, r);
 
         // 右下角：空心圆
-        painter.drawEllipse(QPointF(w - r, h - r), r, r);
+        painter.drawEllipse(QPointF(w, h), r, r);
 
         // 右上角：X 关闭按钮
         const qreal xr = r * 0.7;
@@ -69,7 +92,20 @@ public:
 private:
     void forwardToEditor(QMouseEvent *e) {
         if (!m_editor) return;
-        QPoint editorPos = m_editor->mapFromParent(mapToParent(e->pos()));
+        // 覆盖层本地 → 编辑框本地：先平移到编辑框原点；
+        // 旋转时再绕编辑框中心做逆旋转变换，保证旋转后点按角点仍然命中。
+        QPointF p = e->pos() - m_editorOrigin;
+        if (m_angleDegrees != 0.0) {
+            const qreal w = m_editor->width();
+            const qreal h = m_editor->height();
+            const qreal rad = qDegreesToRadians(-m_angleDegrees);
+            const qreal c = std::cos(rad);
+            const qreal s = std::sin(rad);
+            const QPointF center(w / 2.0, h / 2.0);
+            const QPointF d = p - center;
+            p = center + QPointF(d.x() * c - d.y() * s, d.x() * s + d.y() * c);
+        }
+        QPoint editorPos = m_editor->mapFromParent(mapToParent(p.toPoint()));
         QMouseEvent mapped(e->type(), editorPos,
                           e->globalPosition(), e->button(), e->buttons(), e->modifiers());
         if (e->type() == QEvent::MouseButtonPress)
@@ -419,15 +455,26 @@ void FloatingWidget::hideEvent(QHideEvent *event) {
 }
 
 /**
- * @brief 更新手柄覆盖层位置与层级
+ * @brief 手柄覆盖层应覆盖的帧（默认未旋转包围框）
+ * @author chiangyang
+ */
+QRectF FloatingWidget::handleOverlayFrame() const {
+    const qreal r = kHandleRadius;
+    return QRectF(-r, -r, width() + 2.0 * r, height() + 2.0 * r);
+}
+
+/**
+ * @brief 更新手柄覆盖层位置、几何与旋转帧
  * @author chiangyang
  */
 void FloatingWidget::updateHandleOverlayPosition() {
     if (!m_handleOverlay || !parentWidget()) return;
-    const int r = kHandleRadius;
-    QPoint topLeft = mapToParent(QPoint(-r, -r));
-    QSize overlaySize = QSize(width() + 2 * r, height() + 2 * r);
-    m_handleOverlay->setGeometry(QRect(topLeft, overlaySize));
+    const QRectF frame = handleOverlayFrame();
+    QPoint topLeft = mapToParent(frame.topLeft().toPoint());
+    m_handleOverlay->setGeometry(QRect(topLeft, frame.size().toSize()));
+    // 编辑框原点在覆盖层本地坐标中的位置 = -frame.topLeft()
+    static_cast<HandleOverlay *>(m_handleOverlay)
+        ->setTransformFrame(currentRotation(), QPointF(0, 0) - frame.topLeft());
     m_handleOverlay->raise();
 }
 

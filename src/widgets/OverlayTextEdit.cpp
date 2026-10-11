@@ -237,6 +237,25 @@ void OverlayTextEdit::adjustSizeToContent() {
 }
 
 /**
+ * @brief 手柄覆盖层帧：旋转预览激活时返回旋转后的包围盒帧，
+ *        使四角手柄与关闭按钮跟随旋转（未旋转时与基类一致）
+ * @author chiangyang
+ */
+QRectF OverlayTextEdit::handleOverlayFrame() const {
+    if (!m_rotationPreviewActive) {
+        return FloatingWidget::handleOverlayFrame();
+    }
+    const qreal w = width();
+    const qreal h = height();
+    QTransform t;
+    t.translate(w / 2.0, h / 2.0);
+    t.rotate(m_currentRotationDegrees);
+    t.translate(-w / 2.0, -h / 2.0);
+    const QRectF br = t.mapRect(QRectF(0, 0, w, h));
+    return br.adjusted(-kHandleRadius, -kHandleRadius, kHandleRadius, kHandleRadius);
+}
+
+/**
  * @brief 大小变化事件处理（基类同步手柄覆盖层，此处叠加旋转子系统）
  * @author chiangyang
  */
@@ -356,6 +375,9 @@ void OverlayTextEdit::updateRotationPreview() {
         rotateButton->move(QPoint(qRound(btnCenter.x() - rotateButton->width() / 2.0), qRound(btnCenter.y() - rotateButton->height() / 2.0)));
         rotateButton->raise();
     }
+
+    // 手柄覆盖层跟随旋转帧（四角圆点/X 与命中映射随旋转）
+    updateHandleOverlayPosition();
 }
 
 /**

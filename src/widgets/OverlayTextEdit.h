@@ -83,6 +83,7 @@ protected:
      */
     void onFloatingScaled(qreal diagScaleFactor) override;
 
+    QRectF handleOverlayFrame() const override;
     void resizeEvent(QResizeEvent *event) override;
     void moveEvent(QMoveEvent *event) override;
     void showEvent(QShowEvent *event) override;
