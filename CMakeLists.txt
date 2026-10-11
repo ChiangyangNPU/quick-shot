@@ -198,6 +198,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/capture/AnnotationManager.h
         src/capture/CaptureComposer.cpp
         src/capture/CaptureComposer.h
+        src/capture/AnnotationTextUtils.cpp
+        src/capture/AnnotationTextUtils.h
         src/capture/AnnotationInteractionHandler.cpp
         src/capture/AnnotationInteractionHandler.h
         src/capture/Resizer.h

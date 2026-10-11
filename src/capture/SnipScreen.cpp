@@ -3,6 +3,7 @@
 #include "PinWindow.h"
 #include "AnnotationInteractionHandler.h"
 #include "CaptureComposer.h"
+#include "AnnotationTextUtils.h"
 #include "Logger.h"
 #include "../core/TranslationManager.h"
 #include "../core/StyleManager.h"
@@ -2257,67 +2258,14 @@ void SnipScreen::finalizeTextEdit() {
     if (!m_textEdit)
         return;
 
-    QString text = m_textEdit->toPlainText().trimmed();
     LOG_INFO(QString("[SnipScreen] finalizeTextEdit: text='%1', isEmpty=%2")
-        .arg(text).arg(text.isEmpty()));
+        .arg(m_textEdit->toPlainText().trimmed())
+        .arg(m_textEdit->toPlainText().trimmed().isEmpty()));
 
-    if (!text.isEmpty()) {
-        // 计算文本在 OverlayTextEdit 中的实际渲染位置（基线坐标）
-        // OverlayTextEdit 是 SnipScreen 的子控件，pos() 返回父相对坐标
-        // 转换为全局坐标与其他标注类型统一
-        QPoint widgetPos = m_textEdit->pos() + m_virtualGeometry.topLeft();
-        int frameWidth = m_textEdit->frameWidth();
-        qreal docMargin = m_textEdit->document()->documentMargin();
-        QFont font;
-        font.setPixelSize(m_textEdit->fontSize());
-        QFontMetrics fm(font);
-
-        // 文本相对于控件左上角的偏移（控件坐标）
-        int textOffsetX = frameWidth + static_cast<int>(docMargin);
-        int textOffsetY = frameWidth + static_cast<int>(docMargin) + fm.ascent();
-
-        // 获取旋转角度
-        qreal rotation = m_textEdit->rotationDegrees();
-        LOG_INFO(QString("[SnipScreen] Text rotation: %1 degrees").arg(rotation));
-
-        QPoint textPos;
-        if (rotation != 0.0) {
-            // 计算旋转后的文本位置
-            // OverlayTextEdit 的旋转中心是控件中心
-            int widgetWidth = m_textEdit->width();
-            int widgetHeight = m_textEdit->height();
-            QPoint widgetCenter = widgetPos + QPoint(widgetWidth / 2, widgetHeight / 2);
-
-            // 文本相对于旋转中心的偏移（控件坐标）
-            int dx = textOffsetX - widgetWidth / 2;
-            int dy = textOffsetY - widgetHeight / 2;
-
-            // 应用旋转变换（以控件中心为旋转中心）
-            qreal rad = qDegreesToRadians(rotation);
-            qreal cosRad = std::cos(rad);
-            qreal sinRad = std::sin(rad);
-
-            // 旋转后的相对偏移
-            int rotatedDx = static_cast<int>(dx * cosRad - dy * sinRad);
-            int rotatedDy = static_cast<int>(dx * sinRad + dy * cosRad);
-
-            // 旋转后的全局坐标
-            textPos = widgetCenter + QPoint(rotatedDx, rotatedDy);
-        } else {
-            // 无旋转时的正常位置
-            textPos = QPoint(widgetPos.x() + textOffsetX, widgetPos.y() + textOffsetY);
-        }
-
-        LOG_INFO(QString("[SnipScreen] Text annotation pos: widget=(%1,%2) offset=(%3,%4) rotation=%5 -> final=(%6,%7)")
-            .arg(widgetPos.x()).arg(widgetPos.y())
-            .arg(textOffsetX).arg(textOffsetY)
-            .arg(rotation)
-            .arg(textPos.x()).arg(textPos.y()));
-
-        auto textAnnotation = std::make_unique<TextAnnotation>(
-            textPos, m_annotationHandler->color(), m_textEdit->fontSize());
-        textAnnotation->setText(text);
-        textAnnotation->setRotation(rotation);
+    // 编辑框是 SnipScreen 子控件，pos() 为父相对坐标，转换为全局坐标与其他标注类型统一
+    const QPoint widgetPosGlobal = m_textEdit->pos() + m_virtualGeometry.topLeft();
+    if (auto textAnnotation = AnnotationTextUtils::makeTextAnnotation(
+            m_textEdit, widgetPosGlobal, m_annotationHandler->color())) {
         m_annotationHandler->manager().add(std::move(textAnnotation));
         m_annotationHandler->manager().commit();
         updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
