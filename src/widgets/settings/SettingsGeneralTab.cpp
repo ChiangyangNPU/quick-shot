@@ -1,4 +1,9 @@
 #include "SettingsGeneralTab.h"
+// 注意：OcrEngine.h 会拉入 windows.h（其将 MessageBox 定义为 MessageBoxW 宏），
+// 必须位于 ../MessageBox.h（内部 #undef MessageBox）之前
+#ifdef ENABLE_OCR
+#include "../ocr/OcrEngine.h"
+#endif
 #include "../MessageBox.h"
 #include "../../core/TranslationManager.h"
 #include "../../core/StyleManager.h"
@@ -14,10 +19,6 @@
 #include <QStandardPaths>
 #include <QUrl>
 #include <QDesktopServices>
-
-#ifdef ENABLE_OCR
-#include "../ocr/OcrEngine.h"
-#endif
 
 // ============================================================
 // 构造与 UI 构建
