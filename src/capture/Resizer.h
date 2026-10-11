@@ -315,31 +315,31 @@ public:
 
     /**
      * @brief 获取左上角锚点（手柄）矩形
-     * @return 大小为 aw() × aw() 的正方形，左上角位于 left-aw / top-aw
+     * @return 大小为 aw() × aw() 的正方形，中心位于选区顶点 (left, top)
      * @author chiangyang
      */
-    QRect topLeftAnchor()     const { return {left() - aw(), top() - aw(), aw(), aw()}; }
+    QRect topLeftAnchor()     const { return {left() - aw()/2, top() - aw()/2, aw(), aw()}; }
 
     /**
      * @brief 获取右上角锚点（手柄）矩形
-     * @return 右上角正方形手柄
+     * @return 大小为 aw() × aw() 的正方形，中心位于选区顶点 (right, top)
      * @author chiangyang
      */
-    QRect topRightAnchor()    const { return {right(), top() - aw(), aw(), aw()}; }
+    QRect topRightAnchor()    const { return {right() - aw()/2, top() - aw()/2, aw(), aw()}; }
 
     /**
      * @brief 获取左下角锚点（手柄）矩形
-     * @return 左下角正方形手柄
+     * @return 大小为 aw() × aw() 的正方形，中心位于选区顶点 (left, bottom)
      * @author chiangyang
      */
-    QRect bottomLeftAnchor()  const { return {left() - aw(), bottom(), aw(), aw()}; }
+    QRect bottomLeftAnchor()  const { return {left() - aw()/2, bottom() - aw()/2, aw(), aw()}; }
 
     /**
      * @brief 获取右下角锚点（手柄）矩形
-     * @return 右下角正方形手柄
+     * @return 大小为 aw() × aw() 的正方形，中心位于选区顶点 (right, bottom)
      * @author chiangyang
      */
-    QRect bottomRightAnchor() const { return {right(), bottom(), aw(), aw()}; }
+    QRect bottomRightAnchor() const { return {right() - aw()/2, bottom() - aw()/2, aw(), aw()}; }
 
     /**
      * @brief 获取上边中点（水平中点）锚点（手柄）矩形
