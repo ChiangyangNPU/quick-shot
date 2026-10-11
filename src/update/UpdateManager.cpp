@@ -294,6 +294,26 @@ void UpdateManager::tryNextDownloadChannel() {
 
     m_currentReply = m_networkManager->get(request);
 
+    // 流式下载：打开写盘句柄，readyRead 增量写入（避免整包读入内存，
+    // Windows 包 ~100MB 时内存峰值从同量级降为常量）
+    m_downloadFile.setFileName(m_tempFilePath);
+    if (!m_downloadFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LOG_ERROR(QString("UpdateManager: failed to open temp file: %1").arg(m_tempFilePath));
+        m_currentReply->deleteLater();
+        m_currentReply = nullptr;
+        ErrorInfo error;
+        error.channel = m_currentChannel;
+        error.message = TranslationManager::instance()->get("update.writeTempFileFailed", "Failed to write temporary file");
+        setStatus(Status::Error);
+        emit downloadFinished(false, QString(), error);
+        return;
+    }
+    connect(m_currentReply, &QNetworkReply::readyRead, this, [this]() {
+        if (m_downloadFile.isOpen()) {
+            m_downloadFile.write(m_currentReply->readAll());
+        }
+    });
+
     // 转发下载进度，并在有数据到达时重置"无数据传输"超时
     connect(m_currentReply, &QNetworkReply::downloadProgress, this,
             [this](qint64 received, qint64 total) {
@@ -334,12 +354,16 @@ void UpdateManager::onDownloadFinished() {
         return;
     }
 
-    QByteArray data = reply->readAll();
     reply->deleteLater();
 
+    // 流式下载：数据已在 readyRead 中写盘，此处仅收尾句柄
+    m_downloadFile.close();
+
     QFile file(m_tempFilePath);
-    if (!file.open(QIODevice::WriteOnly)) {
-        LOG_ERROR(QString("UpdateManager: failed to write temp file: %1").arg(m_tempFilePath));
+    const qint64 downloadedBytes = QFileInfo(file).size();
+    if (downloadedBytes <= 0) {
+        LOG_ERROR(QString("UpdateManager: downloaded file is empty: %1").arg(m_tempFilePath));
+        file.remove();
         setStatus(Status::Error);
         ErrorInfo error;
         error.channel = m_currentChannel;
@@ -347,10 +371,8 @@ void UpdateManager::onDownloadFinished() {
         emit downloadFinished(false, QString(), error);
         return;
     }
-    file.write(data);
-    file.close();
 
-    LOG_INFO(QString("UpdateManager: download complete: %1 (%2 bytes)").arg(m_tempFilePath).arg(data.size()));
+    LOG_INFO(QString("UpdateManager: download complete: %1 (%2 bytes)").arg(m_tempFilePath).arg(downloadedBytes));
 
     setStatus(Status::Verifying);
 
@@ -494,6 +516,9 @@ void UpdateManager::handleCheckFailure(const QString &message) {
  * @author chiangyang
  */
 void UpdateManager::handleDownloadFailure(const QString &message) {
+    // 流式写盘的半截文件：切渠道重下前清理
+    m_downloadFile.close();
+    QFile::remove(m_tempFilePath);
     if (advanceChannel(message)) {
         tryNextDownloadChannel();
     } else {
@@ -521,6 +546,13 @@ void UpdateManager::cancel() {
         m_currentReply->abort();
         m_currentReply->deleteLater();
         m_currentReply = nullptr;
+    }
+    // 流式写盘的半截文件：用户取消后清理
+    if (m_downloadFile.isOpen()) {
+        m_downloadFile.close();
+    }
+    if (!m_tempFilePath.isEmpty()) {
+        QFile::remove(m_tempFilePath);
     }
 
     setStatus(Status::Idle);

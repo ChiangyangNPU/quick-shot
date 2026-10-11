@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
+#include <QFile>
 #include <QTimer>
 #include <QList>
 
@@ -378,6 +379,7 @@ private:
     VersionInfo m_currentDownloadInfo;
 
     QNetworkReply *m_currentReply;
+    QFile m_downloadFile;   ///< 流式下载：当前写盘句柄（边下边写，避免整包进内存）
     QTimer m_checkTimer;
     QTimer m_downloadTimer;
 
