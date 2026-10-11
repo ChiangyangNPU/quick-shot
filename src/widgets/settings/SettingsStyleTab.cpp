@@ -183,9 +183,15 @@ void SettingsStyleTab::setupUi() {
     layout->addStretch();
     
     // 创建样式选项卡容器（包含滚动区域 + 按钮）
-    styleTabContainer = new QWidget();
+    // 容器以子控件形式挂在选项卡根布局下（保持朴素 QWidget 形态，
+    // 使 plain background-color 样式与子控件各自样式互不干扰）
+    styleTabContainer = new QWidget(this);
     styleTabContainer->setStyleSheet(QString("background-color: %1;").arg(StyleManager::getTabWidgetBgColor().name()));
     QVBoxLayout *styleTabLayout = new QVBoxLayout(styleTabContainer);
+    QVBoxLayout *styleRootLayout = new QVBoxLayout(this);
+    styleRootLayout->setContentsMargins(0, 0, 0, 0);
+    styleRootLayout->setSpacing(0);
+    styleRootLayout->addWidget(styleTabContainer);
     styleTabLayout->setContentsMargins(0, 0, 0, 10);
     styleTabLayout->setSpacing(0);
     

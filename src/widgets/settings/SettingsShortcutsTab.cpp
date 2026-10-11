@@ -24,14 +24,13 @@ SettingsShortcutsTab::SettingsShortcutsTab(QWidget *parent)
 }
 
 void SettingsShortcutsTab::setupUi() {
-    QWidget *shortcutsTab = new QWidget();
-    shortcutsTab->setObjectName("shortcutsTabBg");
-    shortcutsTab->setStyleSheet(QString("#shortcutsTabBg { background-color: %1; }")
+    // 本控件即选项卡根容器（WA_StyledBackground 使 #shortcutsTabBg
+    // 选择器背景在子类化 QWidget 上正确渲染）
+    setObjectName("shortcutsTabBg");
+    setAttribute(Qt::WA_StyledBackground, true);
+    setStyleSheet(QString("#shortcutsTabBg { background-color: %1; }")
                                 .arg(StyleManager::getTabWidgetBgColor().name()));
-    // 布局必须创建在 shortcutsTab 上，作为该选项卡根容器的布局；
-    // 此前误写为 m_shortcutGroupGlobal（此时为 nullptr，且要到下方才 new），
-    // 导致 shortcutsTab 无布局、滚动区无法挂载，整个选项卡空白不可见。
-    QVBoxLayout *shortcutsTabLayout = new QVBoxLayout(shortcutsTab);
+    QVBoxLayout *shortcutsTabLayout = new QVBoxLayout(this);
     shortcutsTabLayout->setContentsMargins(0, 0, 0, 0);
     shortcutsTabLayout->setSpacing(0);
 
