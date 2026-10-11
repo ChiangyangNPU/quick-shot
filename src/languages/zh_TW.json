@@ -315,6 +315,7 @@
   "update.parseError": "版本資訊解析失敗",
   "update.requestTimeout": "請求逾時",
   "update.writeTempFileFailed": "無法寫入暫存檔案",
+  "update.sizeMismatch": "下載的安裝套件不完整",
   "update.check": "檢查更新",
   "update.checking": "正在檢查更新...",
   "update.checkFailed": "檢查更新失敗，請稍後重試",

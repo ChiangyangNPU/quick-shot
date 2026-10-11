@@ -315,6 +315,7 @@
   "update.parseError": "Failed to parse version info",
   "update.requestTimeout": "Request timed out",
   "update.writeTempFileFailed": "Failed to write temporary file",
+  "update.sizeMismatch": "Downloaded file is incomplete",
   "update.check": "Check for Updates",
   "update.checking": "Checking for updates...",
   "update.checkFailed": "Check update failed, please try again later",

@@ -315,6 +315,7 @@
   "update.parseError": "バージョン情報の解析に失敗しました",
   "update.requestTimeout": "リクエストがタイムアウトしました",
   "update.writeTempFileFailed": "一時ファイルの書き込みに失敗しました",
+  "update.sizeMismatch": "ダウンロードしたファイルは不完全です",
   "update.check": "アップデートを確認",
   "update.checking": "アップデートを確認中...",
   "update.checkFailed": "アップデートの確認に失敗しました。しばらくしてから再試行してください",

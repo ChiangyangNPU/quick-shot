@@ -315,6 +315,7 @@
   "update.parseError": "版本信息解析失败",
   "update.requestTimeout": "请求超时",
   "update.writeTempFileFailed": "无法写入临时文件",
+  "update.sizeMismatch": "下载的安装包不完整",
   "update.check": "检查更新",
   "update.checking": "正在检查更新...",
   "update.checkFailed": "检查更新失败，请稍后重试",

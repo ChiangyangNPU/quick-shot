@@ -309,8 +309,14 @@ void UpdateManager::tryNextDownloadChannel() {
         return;
     }
     connect(m_currentReply, &QNetworkReply::readyRead, this, [this]() {
-        if (m_downloadFile.isOpen()) {
-            m_downloadFile.write(m_currentReply->readAll());
+        if (!m_downloadFile.isOpen()) return;
+        const QByteArray data = m_currentReply->readAll();
+        // 磁盘满/IO 错误时 write 返回值会小于数据长度，静默丢数据会导致
+        // 安装包损坏，必须中止请求转入统一失败处理（切渠道重试）
+        if (m_downloadFile.write(data) != data.size()) {
+            LOG_ERROR(QString("UpdateManager: failed to write download data: %1")
+                          .arg(m_downloadFile.errorString()));
+            m_currentReply->abort();
         }
     });
 
@@ -356,8 +362,15 @@ void UpdateManager::onDownloadFinished() {
 
     reply->deleteLater();
 
-    // 流式下载：数据已在 readyRead 中写盘，此处仅收尾句柄
+    // 流式下载：数据已在 readyRead 中写盘，此处收尾句柄并检查落盘结果
+    // （close 返回后缓冲才真正落盘，磁盘满等错误在这里浮出）
     m_downloadFile.close();
+    if (m_downloadFile.error() != QFileDevice::NoError) {
+        LOG_ERROR(QString("UpdateManager: failed to flush download file: %1")
+                      .arg(m_downloadFile.errorString()));
+        handleDownloadFailure(TranslationManager::instance()->get("update.writeTempFileFailed", "Failed to write temporary file"));
+        return;
+    }
 
     QFile file(m_tempFilePath);
     const qint64 downloadedBytes = QFileInfo(file).size();
@@ -369,6 +382,17 @@ void UpdateManager::onDownloadFinished() {
         error.channel = m_currentChannel;
         error.message = TranslationManager::instance()->get("update.writeTempFileFailed", "Failed to write temporary file");
         emit downloadFinished(false, QString(), error);
+        return;
+    }
+
+    // 大小校验：release 附件自带精确大小，不匹配说明拿到了错误页/半截包
+    // （渠道侧 checksum 恒为空，这是唯一廉价的完整性防线）
+    const qint64 expectedBytes = m_currentDownloadInfo.fileSize;
+    if (expectedBytes > 0 && downloadedBytes != expectedBytes) {
+        LOG_ERROR(QString("UpdateManager: download size mismatch: expected %1, got %2")
+                      .arg(expectedBytes).arg(downloadedBytes));
+        file.remove();
+        handleDownloadFailure(TranslationManager::instance()->get("update.sizeMismatch", "Downloaded file is incomplete"));
         return;
     }
 
@@ -547,12 +571,15 @@ void UpdateManager::cancel() {
         m_currentReply->deleteLater();
         m_currentReply = nullptr;
     }
-    // 流式写盘的半截文件：用户取消后清理
-    if (m_downloadFile.isOpen()) {
-        m_downloadFile.close();
-    }
-    if (!m_tempFilePath.isEmpty()) {
-        QFile::remove(m_tempFilePath);
+    // 仅下载进行中才清理半截文件；下载已完成（ReadyToInstall 等待用户安装）时
+    // 保留已校验的安装包——否则"稍后安装"场景退出应用会经析构→cancel 误删安装包
+    if (m_status == Status::Downloading) {
+        if (m_downloadFile.isOpen()) {
+            m_downloadFile.close();
+        }
+        if (!m_tempFilePath.isEmpty()) {
+            QFile::remove(m_tempFilePath);
+        }
     }
 
     setStatus(Status::Idle);

@@ -315,6 +315,7 @@
   "update.parseError": "버전 정보 구문 분석에 실패했습니다",
   "update.requestTimeout": "요청 시간이 초과되었습니다",
   "update.writeTempFileFailed": "임시 파일 쓰기에 실패했습니다",
+  "update.sizeMismatch": "다운로드한 파일이 불완전합니다",
   "update.check": "업데이트 확인",
   "update.checking": "업데이트 확인 중...",
   "update.checkFailed": "업데이트 확인에 실패했습니다. 나중에 다시 시도해 주세요",
