@@ -260,7 +260,7 @@ version.json 使用 **release-API 形状**（tag_name + assets），使「按平
    ```bash
    hdiutil attach deploy/mac/QuickShot-Release-v0.1.0.dmg
    QUICKSHOT_UPDATE_URL=http://127.0.0.1:8000/version.json \
-     "/Volumes/QuickShot Release v0.1.0/QuickShot-Release.app/Contents/MacOS/QuickShot" &
+     "/Volumes/QuickShot Release v0.1.0/QuickShot.app/Contents/MacOS/QuickShot" &
    ```
 
 4. 应用内：托盘 → 设置 → 关于 → 检查更新（发现新版本）→ 下载更新

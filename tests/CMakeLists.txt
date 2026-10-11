@@ -11,22 +11,19 @@ set(QS_TEST_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/log/Logger.cpp
     ${CMAKE_SOURCE_DIR}/src/core/StyleManager.cpp
     ${CMAKE_SOURCE_DIR}/src/core/TranslationManager.cpp
-    ${CMAKE_SOURCE_DIR}/src/shortcut/ShortcutTypes.cpp
 )
 
 # ---- UpdateManager：版本比较与 release API 解析 ----
 add_executable(UpdateManagerVersionTest UpdateManagerVersionTest.cpp
     ${CMAKE_SOURCE_DIR}/src/update/UpdateManager.cpp
-    ${QS_TEST_CORE_SOURCES}
-    ${CMAKE_SOURCE_DIR}/tests/GuiStubs.cpp)
+    ${QS_TEST_CORE_SOURCES})
 target_include_directories(UpdateManagerVersionTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(UpdateManagerVersionTest PRIVATE
     Qt6::Test Qt6::Core Qt6::Network Qt6::Widgets Qt6::Svg)
 add_test(NAME UpdateManagerVersionTest COMMAND UpdateManagerVersionTest)
 
 # ---- StyleManager：颜色表完整性与存取回环 ----
-add_executable(StyleManagerTest StyleManagerTest.cpp ${QS_TEST_CORE_SOURCES}
-    ${CMAKE_SOURCE_DIR}/tests/GuiStubs.cpp)
+add_executable(StyleManagerTest StyleManagerTest.cpp ${QS_TEST_CORE_SOURCES})
 target_include_directories(StyleManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(StyleManagerTest PRIVATE
     Qt6::Test Qt6::Core Qt6::Widgets Qt6::Svg)
@@ -35,8 +32,7 @@ add_test(NAME StyleManagerTest COMMAND StyleManagerTest)
 # ---- TranslationManager：翻译键回退行为 ----
 add_executable(TranslationManagerTest TranslationManagerTest.cpp
     ${CMAKE_SOURCE_DIR}/src/core/TranslationManager.cpp
-    ${QS_TEST_CORE_SOURCES}
-    ${CMAKE_SOURCE_DIR}/tests/GuiStubs.cpp)
+    ${QS_TEST_CORE_SOURCES})
 target_include_directories(TranslationManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(TranslationManagerTest PRIVATE
     Qt6::Test Qt6::Core Qt6::Widgets Qt6::Svg)

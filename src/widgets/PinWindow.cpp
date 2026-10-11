@@ -15,7 +15,6 @@
 #include "TranslateOverlayWindow.h"
 #include "../translate/TranslateEngine.h"
 #include "../utils/Utils.h"
-#include "../history/HistoryManager.h"
 #include <QCursor>
 #include <QTimer>
 #include <QGuiApplication>

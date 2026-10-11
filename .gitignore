@@ -73,5 +73,6 @@ deploy/win/QuickShot-Debug-v1.0.0/
 deploy/win/QuickShot-Release-v1.0.0/
 update-test/app-v1.0.0/*
 update-test/server/*.zip
+update-test/server-mac/server-root/
 
 test/

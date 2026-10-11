@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         run: |
           $log = "$env:RUNNER_TEMP\configure.log"
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" 2>&1 | Tee-Object -FilePath $log
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$env:QT_ROOT_DIR" -DQUICKSHOT_BUILD_TESTS=ON 2>&1 | Tee-Object -FilePath $log
           if ($LASTEXITCODE -ne 0) {
             "### Configure failed (exit $LASTEXITCODE) — last 60 lines" | Add-Content $env:GITHUB_STEP_SUMMARY
             '```' | Add-Content $env:GITHUB_STEP_SUMMARY
@@ -116,7 +116,7 @@ jobs:
         shell: pwsh
         run: |
           $env:PATH = "$env:QT_ROOT_DIR\bin;$env:PATH"
-          ctest --test-dir build --output-on-failure
+          ctest --test-dir build --output-on-failure --no-tests=error
 
       - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
@@ -139,7 +139,8 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DCMAKE_PREFIX_PATH="$QT_PREFIX"
+            -DCMAKE_PREFIX_PATH="$QT_PREFIX" \
+            -DQUICKSHOT_BUILD_TESTS=ON
 
       - name: Build (macOS)
         if: runner.os == 'macOS'
@@ -147,7 +148,7 @@ jobs:
 
       - name: Run unit tests (macOS)
         if: runner.os == 'macOS'
-        run: ctest --test-dir build --output-on-failure
+        run: ctest --test-dir build --output-on-failure --no-tests=error
 
       - name: Upload artifact (macOS)
         if: runner.os == 'macOS'

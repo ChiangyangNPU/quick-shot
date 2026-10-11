@@ -504,37 +504,6 @@ void SettingsWindow::fitWindowHeight() {
 }
 
 /**
- * @brief 设置固定高度（带动画效果）
- * @param height 目标高度
- * @author chiangyang
- */
-void SettingsWindow::setFixedHeightWithAnimation(int height) {
-    // setFixedSize 覆盖布局最小高度约束，允许窗口缩到内容高度以下
-    this->setFixedSize(m_dpiScaledWidth, height);
-    
-    // 停止之前的动画
-    if (heightAnimation && heightAnimation->state() == QPropertyAnimation::Running) {
-        heightAnimation->stop();
-    }
-    
-    // 创建动画
-    if (!heightAnimation) {
-        heightAnimation = new QPropertyAnimation(this, "animatedHeight", this);
-        heightAnimation->setEasingCurve(QEasingCurve::InOutQuad);
-    }
-    
-    // 设置动画参数
-    int currentHeight = this->height();
-    
-    heightAnimation->setStartValue(currentHeight);
-    heightAnimation->setEndValue(height);
-    heightAnimation->setDuration(300);
-    
-    // 启动动画
-    heightAnimation->start();
-}
-
-/**
  * @brief 设置动画高度
  * @param height 新的高度值
  * @author chiangyang

@@ -20,28 +20,23 @@ SettingsStyleTab::SettingsStyleTab(QWidget *parent)
 }
 
 void SettingsStyleTab::setupUi() {
-    QWidget *styleTab = new QWidget();
-    QVBoxLayout *layout = new QVBoxLayout(styleTab);
-    layout->setContentsMargins(10, 10, 10, 10);
-    layout->setSpacing(10);
-    
     // 边框颜色设置
     auto *tm = TranslationManager::instance();
-    borderGroup = new QGroupBox(tm->get("style.borderColor", "Border Colors"), styleTab);
+    borderGroup = new QGroupBox(tm->get("style.borderColor", "Border Colors"));
     borderGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *borderLayout = new QVBoxLayout(borderGroup);
     borderLayout->setContentsMargins(10, 10, 10, 10);
     borderLayout->setSpacing(8);
 
     // 工具栏样式设置
-    toolbarGroup = new QGroupBox(TranslationManager::instance()->get("style.toolbarStyle", "Toolbar Style"), styleTab);
+    toolbarGroup = new QGroupBox(TranslationManager::instance()->get("style.toolbarStyle", "Toolbar Style"));
     toolbarGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *toolbarLayout = new QVBoxLayout(toolbarGroup);
     toolbarLayout->setContentsMargins(10, 10, 10, 10);
     toolbarLayout->setSpacing(8);
 
     // 选项卡样式设置
-    tabGroup = new QGroupBox(TranslationManager::instance()->get("style.tabStyle", "Tab Style"), styleTab);
+    tabGroup = new QGroupBox(TranslationManager::instance()->get("style.tabStyle", "Tab Style"));
     tabGroup->setObjectName("tabGroup");
     tabGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *tabLayout = new QVBoxLayout(tabGroup);
@@ -99,7 +94,7 @@ void SettingsStyleTab::setupUi() {
     toolbarLayout->addLayout(toolbarButtonStyleLayout);
 
     // 标注工具默认值设置
-    m_annotationDefaultsGroup = new QGroupBox(tm->get("style.annotationDefaults", "Annotation Defaults"), styleTab);
+    m_annotationDefaultsGroup = new QGroupBox(tm->get("style.annotationDefaults", "Annotation Defaults"));
     m_annotationDefaultsGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *annotationDefaultsLayout = new QVBoxLayout(m_annotationDefaultsGroup);
     annotationDefaultsLayout->setContentsMargins(10, 10, 10, 10);
@@ -179,9 +174,6 @@ void SettingsStyleTab::setupUi() {
         emit defaultMosaicSizeChanged(value);
     });
 
-    layout->addWidget(tabGroup);
-    layout->addStretch();
-    
     // 创建样式选项卡容器（包含滚动区域 + 按钮）
     // 容器以子控件形式挂在选项卡根布局下（保持朴素 QWidget 形态，
     // 使 plain background-color 样式与子控件各自样式互不干扰）
@@ -409,10 +401,14 @@ void SettingsStyleTab::retranslateUi() {
     if (lblToolbarButtonStyle) lblToolbarButtonStyle->setText(tm->get("style.toolbarButtonStyle", "Button Style:"));
     if (cmbToolbarButtonStyle) {
         int currentIndex = cmbToolbarButtonStyle->currentIndex();
+        // clear/重建会触发 currentIndexChanged(-1→0)，屏蔽避免瞬时广播
+        // toolbarButtonStyleChanged("text") 把中间态写进配置/StyleManager
+        cmbToolbarButtonStyle->blockSignals(true);
         cmbToolbarButtonStyle->clear();
         cmbToolbarButtonStyle->addItem(tm->get("style.buttonStyle.text", "Text"), "text");
         cmbToolbarButtonStyle->addItem(tm->get("style.buttonStyle.icon", "Icon"), "icon");
         cmbToolbarButtonStyle->setCurrentIndex(currentIndex);
+        cmbToolbarButtonStyle->blockSignals(false);
     }
 }
 

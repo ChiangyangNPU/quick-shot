@@ -329,7 +329,6 @@ private slots:
      * @param height 目标高度
      * @author chiangyang
      */
-    void setFixedHeightWithAnimation(int height);
 
 
 

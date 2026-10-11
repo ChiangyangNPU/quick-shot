@@ -57,21 +57,6 @@ public:
     explicit SnipScreen(QWidget *parent = nullptr);
 
 signals:
-    /**
-     * @brief 截图已完成（用于通知外部，如贴图窗口）
-     * @param pixmap 截取的图片
-     * @param pos 截取区域的全局左上角坐标
-     * @author chiangyang
-     */
-    void snipped(const QPixmap &pixmap, const QPoint &pos);
-
-    /**
-     * @brief 截图已保存到文件
-     * @param path 保存的文件路径
-     * @author chiangyang
-     */
-    void saved(const QString &path);
-
 public slots:
     /**
      * @brief 开始截图
@@ -563,7 +548,6 @@ private:
      * @return 选区内坐标
      * @author chiangyang
      */
-    QPoint mapToSelection(const QPoint &globalPos) const;
 
     /**
      * @brief 将坐标转换为背景图坐标
@@ -571,7 +555,6 @@ private:
      * @return 背景图坐标
      * @author chiangyang
      */
-    QPoint mapToBackground(const QPoint &globalPos) const;
 
     // ---------- 核心组件 ----------
     Hunter m_hunter;                           ///< 猎物检测器（Hunter 实现 IPreyDetector）
@@ -586,7 +569,6 @@ private:
 
     // ---------- 截图数据 ----------
     QPixmap m_background;              ///< 整个虚拟桌面的截图
-    QPixmap m_annotatedBackground;     ///< 带标注的背景图（用于最终导出）
     QRect m_virtualGeometry;           ///< 虚拟桌面几何（物理像素坐标）
 
     // ---------- 标注状态（SnipScreen 专有，未提取到 Handler）----------

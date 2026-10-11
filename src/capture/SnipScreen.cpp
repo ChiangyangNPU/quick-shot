@@ -17,7 +17,6 @@
 #include "../widgets/TranslateOverlayWindow.h"
 #include "../translate/TranslateEngine.h"
 #include <QApplication>
-#include <QClipboard>
 #include <QCursor>
 #include <QDateTime>
 #include <QGuiApplication>
@@ -698,7 +697,6 @@ void SnipScreen::exit() {
 
     // 清理背景
     m_background = QPixmap();
-    m_annotatedBackground = QPixmap();
 
     // 隐藏窗口
     QWidget::close();
@@ -743,7 +741,6 @@ void SnipScreen::save() {
         QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
 
     if (!filename.isEmpty()) {
-        emit saved(filename);
 
         // 记录截图到历史
         if (HistoryManager::instance()->isScreenshotEnabled()) {
@@ -810,7 +807,6 @@ void SnipScreen::pin() {
     });
 
     // 发送信号
-    emit snipped(pixmap, safePos);
 
     exit();
 }
@@ -2367,29 +2363,6 @@ void SnipScreen::finalizeTextEdit() {
     pushAnnotationOverlay();
     LOG_INFO("[SnipScreen] Text annotation finalized");
 }
-
-/**
- * @brief 将全局坐标映射到选区相对坐标
- * @param globalPos 全局坐标
- * @return 选区内相对坐标
- * @author chiangyang
- */
-QPoint SnipScreen::mapToSelection(const QPoint &globalPos) const {
-    QRect selection = m_selector->selected();
-    return globalPos - selection.topLeft();
-}
-
-/**
- * @brief 将全局坐标映射到背景图坐标
- * @param globalPos 全局坐标
- * @return 背景图坐标
- * @author chiangyang
- */
-QPoint SnipScreen::mapToBackground(const QPoint &globalPos) const {
-    // 由于窗口geometry = 虚拟桌面，全局坐标即背景图坐标
-    return globalPos;
-}
-
 
 /**
  * @brief 根据配置刷新标注工具默认值
