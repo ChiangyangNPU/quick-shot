@@ -2,6 +2,7 @@
 #include "CaptureSession.h"
 #include "PinWindow.h"
 #include "AnnotationInteractionHandler.h"
+#include "CaptureComposer.h"
 #include "Logger.h"
 #include "../core/TranslationManager.h"
 #include "../core/StyleManager.h"
@@ -1009,34 +1010,14 @@ std::pair<QPixmap, QPoint> SnipScreen::snip() {
     m_selector->close();
 
     // 坐标偏移：将全局坐标转换为背景图片的本地坐标
-    QPoint globalOffset = -m_virtualGeometry.topLeft();
+    const QPoint globalOffset = -m_virtualGeometry.topLeft();
 
-    // 创建合成画布（与 paintEvent 相同的离屏渲染流程）
-    QPixmap canvas(m_background.size());
-    canvas.fill(Qt::transparent);
-    QPainter canvasPainter(&canvas);
+    // 合成画布（背景 + 标注 + 马赛克，流程与 paintEvent 一致）
+    QPixmap canvas = CaptureComposer::composeCanvas(m_background,
+                                                    m_annotationHandler->manager(),
+                                                    globalOffset);
 
-    // 1. 绘制背景
-    if (!m_background.isNull()) {
-        canvasPainter.drawPixmap(0, 0, m_background);
-    }
-
-    // 2. 绘制标注（转换为本地坐标）
-    canvasPainter.save();
-    canvasPainter.translate(globalOffset);
-    if (m_annotationHandler->manager().hasAnnotations()) {
-        m_annotationHandler->manager().draw(canvasPainter);
-    }
-    canvasPainter.restore();
-
-    // 3. 在合成图上绘制马赛克（同时像素化背景和标注）
-    if (m_annotationHandler->manager().hasMosaicStrokes()) {
-        m_annotationHandler->manager().drawMosaic(canvasPainter, canvas, AnnotationManager::kDefaultMosaicBlockSize, globalOffset);
-    }
-
-    canvasPainter.end();
-
-    // 4. 从合成图中裁剪选区区域（转换为本地坐标）
+    // 从合成图中裁剪选区区域（转换为本地坐标）
     QRect localRect = rect.translated(globalOffset);
     return { canvas.copy(localRect), rect.topLeft() };
 }
@@ -1054,20 +1035,11 @@ QPixmap SnipScreen::captureSelectionForOcr() {
     const QRect rect = m_selector->selected();
     if (rect.isEmpty()) return QPixmap();
 
-    QPoint globalOffset = -m_virtualGeometry.topLeft();
+    const QPoint globalOffset = -m_virtualGeometry.topLeft();
 
-    // 合成背景和标注
-    QPixmap canvas(m_background.size());
-    canvas.fill(Qt::transparent);
-    QPainter p(&canvas);
-    if (!m_background.isNull()) p.drawPixmap(0, 0, m_background);
-    p.save();
-    p.translate(globalOffset);
-    if (m_annotationHandler->manager().hasAnnotations()) m_annotationHandler->manager().draw(p);
-    p.restore();
-    if (m_annotationHandler->manager().hasMosaicStrokes())
-        m_annotationHandler->manager().drawMosaic(p, canvas, AnnotationManager::kDefaultMosaicBlockSize, globalOffset);
-    p.end();
+    QPixmap canvas = CaptureComposer::composeCanvas(m_background,
+                                                    m_annotationHandler->manager(),
+                                                    globalOffset);
 
     QRect localRect = rect.translated(globalOffset);
     return canvas.copy(localRect);
