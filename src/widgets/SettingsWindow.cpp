@@ -334,7 +334,7 @@ void SettingsWindow::loadSettings() {
     m_generalTabWidget->loadSettings();
 
     // Style
-    loadStyleSettings();
+    m_styleTabWidget->loadStyleSettings();
 
     retranslateUi();
 }
@@ -377,219 +377,25 @@ void SettingsWindow::retranslateUi() {
 
 
 
-/**
- * @brief 设置样式选项卡
- * @author chiangyang
- */
 void SettingsWindow::setupStyleTab() {
-    QWidget *styleTab = new QWidget();
-    QVBoxLayout *layout = new QVBoxLayout(styleTab);
-    layout->setContentsMargins(10, 10, 10, 10);
-    layout->setSpacing(10);
-    
-    // 边框颜色设置
-    auto *tm = TranslationManager::instance();
-    borderGroup = new QGroupBox(tm->get("style.borderColor", "Border Colors"), styleTab);
-    borderGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *borderLayout = new QVBoxLayout(borderGroup);
-    borderLayout->setContentsMargins(10, 10, 10, 10);
-    borderLayout->setSpacing(8);
-
-    // 工具栏样式设置
-    toolbarGroup = new QGroupBox(TranslationManager::instance()->get("style.toolbarStyle", "Toolbar Style"), styleTab);
-    toolbarGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *toolbarLayout = new QVBoxLayout(toolbarGroup);
-    toolbarLayout->setContentsMargins(10, 10, 10, 10);
-    toolbarLayout->setSpacing(8);
-
-    // 选项卡样式设置
-    tabGroup = new QGroupBox(TranslationManager::instance()->get("style.tabStyle", "Tab Style"), styleTab);
-    tabGroup->setObjectName("tabGroup");
-    tabGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *tabLayout = new QVBoxLayout(tabGroup);
-    tabLayout->setContentsMargins(10, 10, 10, 10);
-    tabLayout->setSpacing(8);
-
-    // 通过数据驱动表循环创建所有颜色行（元数据表归 StyleManager 所有，此处只消费）
-    const auto& table = StyleManager::colorSettingTable();
-    for (size_t i = 0; i < table.size(); ++i) {
-        const auto& s = table[i];
-
-        // 根据分类决定加入哪个 GroupBox
-        QGroupBox* group = nullptr;
-        switch (s.category) {
-            case StyleManager::StyleColorCategory::Border:     group = borderGroup;  break;
-            case StyleManager::StyleColorCategory::Toolbar:    group = toolbarGroup; break;
-            case StyleManager::StyleColorCategory::TabButton:
-            case StyleManager::StyleColorCategory::TabWidgetBg: group = tabGroup;    break;
-        }
-        if (!group || s.defaultText[0] == '\0') {
-            continue;  // defaultText 为空的行（SettingButton* / 角手柄）无 UI
-        }
-
-        QPushButton* btn = nullptr;
-        QLabel* lbl = nullptr;
-        QHBoxLayout* row = createColorRow(
-            group, tm->get(s.translationKey, s.defaultText),
-            s.getter(), btn, lbl);
-
-        m_colorButtons[i] = btn;
-        m_colorLabels[i] = lbl;
-
-        // 用 lambda 捕获 StyleColorId 调用 applyColorChange
-        connect(btn, &QPushButton::clicked, this, [this, id = s.id]() {
-            applyColorChange(id);
-        });
-
-        QVBoxLayout* grpLayout = qobject_cast<QVBoxLayout*>(group->layout());
-        if (grpLayout) {
-            grpLayout->addLayout(row);
-        }
-    }
-
-    // 工具栏按钮样式（非颜色行，单独处理）
-    QHBoxLayout *toolbarButtonStyleLayout = new QHBoxLayout();
-    lblToolbarButtonStyle = new QLabel(TranslationManager::instance()->get("style.toolbarButtonStyle", "Button Style:"), toolbarGroup);
-    cmbToolbarButtonStyle = new QComboBox(toolbarGroup);
-    cmbToolbarButtonStyle->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    cmbToolbarButtonStyle->addItem(TranslationManager::instance()->get("style.buttonStyle.text", "Text"), "text");
-    cmbToolbarButtonStyle->addItem(TranslationManager::instance()->get("style.buttonStyle.icon", "Icon"), "icon");
-    connect(cmbToolbarButtonStyle, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsWindow::onToolbarButtonStyleChanged);
-    toolbarButtonStyleLayout->addWidget(lblToolbarButtonStyle);
-    toolbarButtonStyleLayout->addStretch();
-    toolbarButtonStyleLayout->addWidget(cmbToolbarButtonStyle);
-    toolbarLayout->addLayout(toolbarButtonStyleLayout);
-
-    // 标注工具默认值设置
-    m_annotationDefaultsGroup = new QGroupBox(tm->get("style.annotationDefaults", "Annotation Defaults"), styleTab);
-    m_annotationDefaultsGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *annotationDefaultsLayout = new QVBoxLayout(m_annotationDefaultsGroup);
-    annotationDefaultsLayout->setContentsMargins(10, 10, 10, 10);
-    annotationDefaultsLayout->setSpacing(8);
-
-    // 画笔默认粗细
-    QHBoxLayout *penWidthLayout = new QHBoxLayout();
-    lblDefaultPenWidth = new QLabel(tm->get("style.defaultPenWidth", "Default Pen Width:"), m_annotationDefaultsGroup);
-    spnDefaultPenWidth = new QSpinBox(m_annotationDefaultsGroup);
-    spnDefaultPenWidth->setRange(1, 20);
-    spnDefaultPenWidth->setSuffix(" px");
-    spnDefaultPenWidth->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    spnDefaultPenWidth->setValue(StyleManager::getDefaultPenWidth());
-    penWidthLayout->addWidget(lblDefaultPenWidth);
-    penWidthLayout->addStretch();
-    penWidthLayout->addWidget(spnDefaultPenWidth);
-    annotationDefaultsLayout->addLayout(penWidthLayout);
-
-    // 文本默认字号
-    QHBoxLayout *fontSizeLayout = new QHBoxLayout();
-    lblDefaultFontSize = new QLabel(tm->get("style.defaultFontSize", "Default Font Size:"), m_annotationDefaultsGroup);
-    spnDefaultFontSize = new QSpinBox(m_annotationDefaultsGroup);
-    spnDefaultFontSize->setRange(8, 48);
-    spnDefaultFontSize->setSuffix(" px");
-    spnDefaultFontSize->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    spnDefaultFontSize->setValue(StyleManager::getDefaultFontSize());
-    fontSizeLayout->addWidget(lblDefaultFontSize);
-    fontSizeLayout->addStretch();
-    fontSizeLayout->addWidget(spnDefaultFontSize);
-    annotationDefaultsLayout->addLayout(fontSizeLayout);
-
-    // 橡皮擦默认粗细
-    QHBoxLayout *eraserWidthLayout = new QHBoxLayout();
-    lblDefaultEraserWidth = new QLabel(tm->get("style.defaultEraserWidth", "Default Eraser Width:"), m_annotationDefaultsGroup);
-    spnDefaultEraserWidth = new QSpinBox(m_annotationDefaultsGroup);
-    spnDefaultEraserWidth->setRange(1, 20);
-    spnDefaultEraserWidth->setSuffix(" px");
-    spnDefaultEraserWidth->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    spnDefaultEraserWidth->setValue(StyleManager::getDefaultEraserWidth());
-    eraserWidthLayout->addWidget(lblDefaultEraserWidth);
-    eraserWidthLayout->addStretch();
-    eraserWidthLayout->addWidget(spnDefaultEraserWidth);
-    annotationDefaultsLayout->addLayout(eraserWidthLayout);
-
-    // 马赛克默认大小
-    QHBoxLayout *mosaicSizeLayout = new QHBoxLayout();
-    lblDefaultMosaicSize = new QLabel(tm->get("style.defaultMosaicSize", "Default Mosaic Size:"), m_annotationDefaultsGroup);
-    spnDefaultMosaicSize = new QSpinBox(m_annotationDefaultsGroup);
-    spnDefaultMosaicSize->setRange(1, 20);
-    spnDefaultMosaicSize->setSuffix(" px");
-    spnDefaultMosaicSize->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    spnDefaultMosaicSize->setValue(StyleManager::getDefaultMosaicSize());
-    mosaicSizeLayout->addWidget(lblDefaultMosaicSize);
-    mosaicSizeLayout->addStretch();
-    mosaicSizeLayout->addWidget(spnDefaultMosaicSize);
-    annotationDefaultsLayout->addLayout(mosaicSizeLayout);
-
-    // 连接信号
-    connect(spnDefaultPenWidth, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
-        ConfigManager::instance()->setValue("style/defaultPenWidth", value);
-        StyleManager::setDefaultPenWidth(value);
-        emit defaultPenWidthChanged(value);
+    m_styleTabWidget = new SettingsStyleTab(this);
+    // 跨选项卡联动：tabWidget QSS / 其他选项卡背景 / 全部分组样式
+    connect(m_styleTabWidget, &SettingsStyleTab::tabWidgetStyleChanged, this, [this]() {
+        tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
     });
-    connect(spnDefaultFontSize, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
-        ConfigManager::instance()->setValue("style/defaultFontSize", value);
-        StyleManager::setDefaultFontSize(value);
-        emit defaultFontSizeChanged(value);
+    connect(m_styleTabWidget, &SettingsStyleTab::tabWidgetBgChanged, this, [this](const QColor &color) {
+        tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
+        updateAllTabsPalette(color);
+        updateAllGroupBoxStyles();
     });
-    connect(spnDefaultEraserWidth, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
-        ConfigManager::instance()->setValue("style/defaultEraserWidth", value);
-        StyleManager::setDefaultEraserWidth(value);
-        emit defaultEraserWidthChanged(value);
-    });
-    connect(spnDefaultMosaicSize, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
-        ConfigManager::instance()->setValue("style/defaultMosaicSize", value);
-        StyleManager::setDefaultMosaicSize(value);
-        emit defaultMosaicSizeChanged(value);
-    });
-
-    layout->addWidget(tabGroup);
-    layout->addStretch();
-    
-    // 创建样式选项卡容器（包含滚动区域 + 按钮）
-    styleTabContainer = new QWidget();
-    styleTabContainer->setStyleSheet(QString("background-color: %1;").arg(StyleManager::getTabWidgetBgColor().name()));
-    QVBoxLayout *styleTabLayout = new QVBoxLayout(styleTabContainer);
-    styleTabLayout->setContentsMargins(0, 0, 0, 10);
-    styleTabLayout->setSpacing(0);
-    
-    // 创建一个容器来包含需要滚动的内容
-    scrollContainer = new QWidget();
-    scrollContainer->setStyleSheet(QString("background-color: %1;").arg(StyleManager::getTabWidgetBgColor().name()));
-    QVBoxLayout *scrollLayout = new QVBoxLayout(scrollContainer);
-    scrollLayout->setContentsMargins(10, 10, 10, 10);
-    scrollLayout->setSpacing(10);
-    scrollLayout->addWidget(tabGroup);
-    scrollLayout->addWidget(m_annotationDefaultsGroup);
-    scrollLayout->addWidget(borderGroup);
-    scrollLayout->addWidget(toolbarGroup);
-    scrollLayout->addStretch();
-    
-    // 创建滚动区域
-    styleScrollArea = new QScrollArea();
-    styleScrollArea->setWidget(scrollContainer);
-    styleScrollArea->setWidgetResizable(true);
-    styleScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    styleScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
-    styleScrollArea->setFrameShape(QFrame::NoFrame);
-    // 不调用 setStyleSheet 设置滚动条样式，滚动条样式由全局 QSS 提供
-    // （与历史记录选项卡保持一致，避免 setStyleSheet 影响子控件原生渲染）
-    
-    // 重置按钮 - 放在滚动区域下面，固定显示
-    btnResetStyle = new QPushButton(TranslationManager::instance()->get("style.resetStyle", "Reset to Default"), styleTabContainer);
-    btnResetStyle->setObjectName("primaryButton");
-    btnResetStyle->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(btnResetStyle, &QPushButton::clicked, this, &SettingsWindow::onResetStyle);
-    
-    // 按钮居中
-    QHBoxLayout *buttonLayout = new QHBoxLayout();
-    buttonLayout->addStretch();
-    buttonLayout->addWidget(btnResetStyle);
-    buttonLayout->addStretch();
-    
-    // 添加到容器布局
-    styleTabLayout->addWidget(styleScrollArea);
-    styleTabLayout->addLayout(buttonLayout);
-    
-    tabWidget->addTab(styleTabContainer, TranslationManager::instance()->get("tabStyle", "Style"));
+    // 对外信号转发（HistoryWindow / 工具栏订阅保持不变）
+    connect(m_styleTabWidget, &SettingsStyleTab::tabWidgetBgColorChanged, this, &SettingsWindow::tabWidgetBgColorChanged);
+    connect(m_styleTabWidget, &SettingsStyleTab::toolbarButtonStyleChanged, this, &SettingsWindow::toolbarButtonStyleChanged);
+    connect(m_styleTabWidget, &SettingsStyleTab::defaultPenWidthChanged, this, &SettingsWindow::defaultPenWidthChanged);
+    connect(m_styleTabWidget, &SettingsStyleTab::defaultFontSizeChanged, this, &SettingsWindow::defaultFontSizeChanged);
+    connect(m_styleTabWidget, &SettingsStyleTab::defaultEraserWidthChanged, this, &SettingsWindow::defaultEraserWidthChanged);
+    connect(m_styleTabWidget, &SettingsStyleTab::defaultMosaicSizeChanged, this, &SettingsWindow::defaultMosaicSizeChanged);
+    tabWidget->addTab(m_styleTabWidget, TranslationManager::instance()->get("tabStyle", "Style"));
 }
 
 /**
@@ -785,89 +591,33 @@ void SettingsWindow::onResetStyle() {
 }
 
 /**
- * @brief 工具栏画笔粗细变更槽函数
- *
- * 当用户在工具栏滑块或快捷键调节画笔粗细时调用，
- * 更新 SpinBox 显示并持久化到配置，同步更新全局默认值。
- * @param width 新的画笔粗细值
+ * @brief 工具栏画笔粗细变更（委托 SettingsStyleTab）
  * @author chiangyang
  */
 void SettingsWindow::onToolPenWidthChanged(int width) {
-    // 更新 SpinBox 显示（屏蔽信号避免重入）
-    if (spnDefaultPenWidth) {
-        spnDefaultPenWidth->blockSignals(true);
-        spnDefaultPenWidth->setValue(width);
-        spnDefaultPenWidth->blockSignals(false);
-    }
-    // 持久化到配置并更新全局默认值
-    ConfigManager::instance()->setValue("style/defaultPenWidth", width);
-    StyleManager::setDefaultPenWidth(width);
-    LOG_INFO(QString("SettingsWindow: Tool pen width changed to %1 (persisted)").arg(width));
+    m_styleTabWidget->onToolPenWidthChanged(width);
 }
-
 /**
- * @brief 工具栏字号变更槽函数
- *
- * 当用户在工具栏滑块调节字号时调用，
- * 更新 SpinBox 显示并持久化到配置，同步更新全局默认值。
- * @param size 新的字号值
+ * @brief 工具栏字号变更（委托 SettingsStyleTab）
  * @author chiangyang
  */
 void SettingsWindow::onToolFontSizeChanged(int size) {
-    // 更新 SpinBox 显示（屏蔽信号避免重入）
-    if (spnDefaultFontSize) {
-        spnDefaultFontSize->blockSignals(true);
-        spnDefaultFontSize->setValue(size);
-        spnDefaultFontSize->blockSignals(false);
-    }
-    // 持久化到配置并更新全局默认值
-    ConfigManager::instance()->setValue("style/defaultFontSize", size);
-    StyleManager::setDefaultFontSize(size);
-    LOG_INFO(QString("SettingsWindow: Tool font size changed to %1 (persisted)").arg(size));
+    m_styleTabWidget->onToolFontSizeChanged(size);
 }
-
 /**
- * @brief 工具栏橡皮擦粗细变更槽函数
- *
- * 当用户在工具栏滑块或快捷键调节橡皮擦粗细时调用，
- * 更新 SpinBox 显示并持久化到配置，同步更新全局默认值。
- * @param width 新的橡皮擦粗细值
+ * @brief 工具栏橡皮擦粗细变更（委托 SettingsStyleTab）
  * @author chiangyang
  */
 void SettingsWindow::onToolEraserWidthChanged(int width) {
-    // 更新 SpinBox 显示（屏蔽信号避免重入）
-    if (spnDefaultEraserWidth) {
-        spnDefaultEraserWidth->blockSignals(true);
-        spnDefaultEraserWidth->setValue(width);
-        spnDefaultEraserWidth->blockSignals(false);
-    }
-    // 持久化到配置并更新全局默认值
-    ConfigManager::instance()->setValue("style/defaultEraserWidth", width);
-    StyleManager::setDefaultEraserWidth(width);
-    LOG_INFO(QString("SettingsWindow: Tool eraser width changed to %1 (persisted)").arg(width));
+    m_styleTabWidget->onToolEraserWidthChanged(width);
 }
-
 /**
- * @brief 工具栏马赛克大小变更槽函数
- *
- * 当用户在工具栏滑块或快捷键调节马赛克大小时调用，
- * 更新 SpinBox 显示并持久化到配置，同步更新全局默认值。
- * @param size 新的马赛克大小值
+ * @brief 工具栏马赛克大小变更（委托 SettingsStyleTab）
  * @author chiangyang
  */
 void SettingsWindow::onToolMosaicSizeChanged(int size) {
-    // 更新 SpinBox 显示（屏蔽信号避免重入）
-    if (spnDefaultMosaicSize) {
-        spnDefaultMosaicSize->blockSignals(true);
-        spnDefaultMosaicSize->setValue(size);
-        spnDefaultMosaicSize->blockSignals(false);
-    }
-    // 持久化到配置并更新全局默认值
-    ConfigManager::instance()->setValue("style/defaultMosaicSize", size);
-    StyleManager::setDefaultMosaicSize(size);
-    LOG_INFO(QString("SettingsWindow: Tool mosaic size changed to %1 (persisted)").arg(size));
+    m_styleTabWidget->onToolMosaicSizeChanged(size);
 }
-
 /**
  * @brief 工具栏按钮样式改变槽函数
  * @param index 下拉框索引
