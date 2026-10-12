@@ -124,11 +124,7 @@ QString Utils::savePixmapToFile(QWidget* parent, std::function<QPixmap()> pixmap
     beginModalOverOverlay(parent);
 
     QString selectedFilter;
-    // 非原生对话框：原生面板的按钮/侧边栏文案跟随系统语言而非 app 语言
-    // （mac 系统英文时显示 Save/Cancel）；Qt 自绘对话框使用随包分发的
-    // qtbase_<lang>.qm 翻译，按钮与标签跟随 app 语言
-    QString filename = QFileDialog::getSaveFileName(parent, title, initialPath, filter, &selectedFilter,
-                                                    QFileDialog::DontUseNativeDialog);
+    QString filename = QFileDialog::getSaveFileName(parent, title, initialPath, filter, &selectedFilter);
 
     endModalOverOverlay(parent);
 

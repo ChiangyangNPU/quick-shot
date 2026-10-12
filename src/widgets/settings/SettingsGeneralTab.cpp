@@ -421,9 +421,7 @@ void SettingsGeneralTab::onChooseCaptureSaveDir() {
     QSettings *settings = ConfigManager::instance()->getSettings();
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::PicturesLocation);
     const QString currentDir = settings->value("capture/saveDir", defaultDir).toString();
-    // 非原生对话框：按钮/标签跟随 app 语言（原生面板跟随系统语言）
-    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("capture.chooseDir", "Choose"),
-                                                          currentDir, QFileDialog::DontUseNativeDialog);
+    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("capture.chooseDir", "Choose"), currentDir);
     if (dir.isEmpty()) return;
     settings->setValue("capture/saveDir", dir);
     settings->sync();
@@ -439,8 +437,7 @@ void SettingsGeneralTab::onChooseRecordSaveDir() {
     QSettings *settings = ConfigManager::instance()->getSettings();
     const QString defaultDir = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation);
     const QString currentDir = settings->value("record/saveDir", defaultDir).toString();
-    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("record.chooseDir", "Choose"),
-                                                          currentDir, QFileDialog::DontUseNativeDialog);
+    const QString dir = QFileDialog::getExistingDirectory(this, TranslationManager::instance()->get("record.chooseDir", "Choose"), currentDir);
     if (dir.isEmpty()) return;
     settings->setValue("record/saveDir", dir);
     settings->sync();
@@ -501,9 +498,7 @@ void SettingsGeneralTab::onChangeConfigFile() {
         this,
         TranslationManager::instance()->get("config.selectFile", "Select Config File"),
         m_configManager->getConfigDirectory(),
-        "INI Files (*.ini);;All Files (*)",
-        nullptr,
-        QFileDialog::DontUseNativeDialog
+        "INI Files (*.ini);;All Files (*)"
     );
 
     if (selectedFile.isEmpty()) {

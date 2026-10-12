@@ -1,5 +1,4 @@
 #include "ConfigManager.h"
-#include "TranslationManager.h"
 #include "StyleManager.h"
 #include "../shortcut/ShortcutTypes.h"
 #include "../log/Logger.h"
@@ -275,7 +274,7 @@ bool ConfigManager::isDefaultConfig() const {
 bool ConfigManager::openConfigFileLocation() {
     if (!isConfigFileExists()) {
         LOG_ERROR("Config file does not exist");
-        emit errorOccurred(TranslationManager::instance()->get("config.fileNotFound", "Configuration file not found"));
+        emit errorOccurred("配置文件不存在");
         return false;
     }
 
@@ -315,14 +314,14 @@ bool ConfigManager::openConfigFileLocation() {
 bool ConfigManager::changeConfigFile(const QString &newFilePath, QWidget *parent) {
     if (newFilePath.isEmpty()) {
         LOG_ERROR("New config file path is empty");
-        emit errorOccurred(TranslationManager::instance()->get("config.pathEmpty", "Configuration file path cannot be empty"));
+        emit errorOccurred("配置文件路径不能为空");
         return false;
     }
 
     // 检查文件是否存在
     if (!QFile::exists(newFilePath)) {
         LOG_ERROR(QString("Config file does not exist: %1").arg(newFilePath));
-        emit errorOccurred(TranslationManager::instance()->get("config.fileNotFound", "Configuration file not found") + ": " + newFilePath);
+        emit errorOccurred("配置文件不存在: " + newFilePath);
         return false;
     }
 
@@ -330,7 +329,7 @@ bool ConfigManager::changeConfigFile(const QString &newFilePath, QWidget *parent
     QFile file(newFilePath);
     if (!file.open(QIODevice::ReadOnly)) {
         LOG_ERROR(QString("Cannot read config file: %1").arg(newFilePath));
-        emit errorOccurred(TranslationManager::instance()->get("config.readFailed", "Unable to read configuration file, please check file permissions"));
+        emit errorOccurred("无法读取配置文件，请检查文件权限");
         return false;
     }
     file.close();
@@ -366,7 +365,7 @@ bool ConfigManager::resetToDefaultConfig() {
     if (!QFile::exists(m_defaultConfigPath)) {
         if (!createDefaultConfig()) {
             LOG_ERROR("Failed to create default config file");
-            emit errorOccurred(TranslationManager::instance()->get("config.createDefaultFailed", "Unable to create default configuration file"));
+            emit errorOccurred("无法创建默认配置文件");
             return false;
         }
     }
