@@ -43,25 +43,6 @@ static void restoreWindowAboveMenuBar(WId wid) {
 }
 #endif
 
-QString Utils::showFileDialog(QWidget *parent, const QString &title, const QString &dir,
-                                const QString &filter, int fileMode, bool saveMode,
-                                QString *selectedFilter) {
-    QFileDialog dlg(parent, title, dir, filter);
-    dlg.setFileMode(static_cast<QFileDialog::FileMode>(fileMode));
-    dlg.setAcceptMode(saveMode ? QFileDialog::AcceptSave : QFileDialog::AcceptOpen);
-    // 非原生：按钮/标签文案跟随 app 语言（原生面板跟随系统语言）。
-    // 按钮盒保持 Qt 的 macOS 默认布局（保存在上、取消在下的垂直堆叠），
-    // 「保存」的主按钮蓝色高亮由 app.qss 的 QFileDialog QPushButton:default 规则提供
-    dlg.setOption(QFileDialog::DontUseNativeDialog, true);
-    if (dlg.exec() != QDialog::Accepted) {
-        return QString();
-    }
-    if (selectedFilter) {
-        *selectedFilter = dlg.selectedNameFilter();
-    }
-    return dlg.selectedFiles().value(0);
-}
-
 /**
  * @brief 模态对话框打开前临时降低置顶父窗口的层级
  * @author chiangyang
@@ -143,9 +124,11 @@ QString Utils::savePixmapToFile(QWidget* parent, std::function<QPixmap()> pixmap
     beginModalOverOverlay(parent);
 
     QString selectedFilter;
-    QString filename = showFileDialog(parent, title, initialPath, filter,
-                                      QFileDialog::AnyFile, /*saveMode=*/true,
-                                      &selectedFilter);
+    // 非原生对话框：原生面板的按钮/侧边栏文案跟随系统语言而非 app 语言
+    // （mac 系统英文时显示 Save/Cancel）；Qt 自绘对话框使用随包分发的
+    // qtbase_<lang>.qm 翻译，按钮与标签跟随 app 语言
+    QString filename = QFileDialog::getSaveFileName(parent, title, initialPath, filter, &selectedFilter,
+                                                    QFileDialog::DontUseNativeDialog);
 
     endModalOverOverlay(parent);
 
