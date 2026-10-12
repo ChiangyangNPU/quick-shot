@@ -166,6 +166,18 @@ build_config() {
     <string>com.quickshot.app</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
+    <!-- 本地化声明：AppKit 原生面板（如 NSSavePanel 的保存/取消按钮、侧边栏）
+         按「系统语言偏好 × 本声明」取最佳匹配；无此声明时回退开发区域英文。
+         注意：仅跟随系统语言，跟随不了 app 内语言切换；且对 CLion 直跑的
+         裸二进制无效（其无 Info.plist，永远英文）。zh_HK 复用繁体。 -->
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>en</string>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>ja</string>
+        <string>ko</string>
+    </array>
     <key>CFBundleName</key>
     <string>QuickShot</string>
     <key>CFBundlePackageType</key>
