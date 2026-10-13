@@ -74,6 +74,16 @@ public:
      */
     static void refreshAllToolDefaults();
 
+    /**
+     * @brief 显示操作提示（ESC 关闭 / 拖动 / 右键 / 滚轮缩放）
+     *
+     * 是否显示的"首次"时机由调用方按入口各自控制（工具栏贴图与 Alt+P
+     * 历史贴图是两条独立入口，各有独立的首次标志）；内部延迟到窗口
+     * 显示后将提示标签居中放置，5 秒后自动隐藏。
+     * @author chiangyang
+     */
+    void showOperationHint();
+
 protected:
     /**
      * @brief 绘制事件处理

@@ -789,6 +789,12 @@ void SnipScreen::pin() {
 
     // 创建贴图窗口，延迟设置几何和显示
     PinWindow *pinWindow = new PinWindow(pixmap);
+    // 工具栏贴图入口的首次提示（与 Alt+P 历史贴图入口各自独立记首次）
+    static bool s_firstToolbarPin = true;
+    if (s_firstToolbarPin) {
+        s_firstToolbarPin = false;
+        pinWindow->showOperationHint();
+    }
     QRect targetRect(safePos, pixmap.size());
     LOG_INFO(QString("[SnipScreen] pin: creating PinWindow at (%1,%2) size %3x%4")
         .arg(safePos.x()).arg(safePos.y()).arg(pixmap.width()).arg(pixmap.height()));
@@ -881,6 +887,12 @@ void SnipScreen::pinClipboard() {
 
     // 创建 PinWindow 显示历史截图
     PinWindow *pinWindow = new PinWindow(pix);
+    // Alt+P 历史贴图入口的首次提示（与工具栏贴图入口各自独立记首次）
+    static bool s_firstHistoryPin = true;
+    if (s_firstHistoryPin) {
+        s_firstHistoryPin = false;
+        pinWindow->showOperationHint();
+    }
     QRect targetRect(pos, pix.size());
     pinWindow->setGeometry(targetRect);
     QTimer::singleShot(0, pinWindow, [pinWindow]() {

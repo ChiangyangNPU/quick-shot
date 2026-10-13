@@ -39,9 +39,6 @@
  * @param parent 父对象
  * @author chiangyang
  */
-// 静态变量，用于跟踪是否是第一次显示 PinWindow
-static bool isFirstPinWindow = true;
-
 // 静态注册表定义：所有存活的 PinWindow 实例
 QSet<PinWindow*> PinWindow::s_instances;
 
@@ -137,31 +134,6 @@ PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
         
         LOG_INFO(QString("PinWindow activated and focused, geometry: %1x%2 at (%3,%4)")
             .arg(width()).arg(height()).arg(x()).arg(y()));
-
-        // 第一次显示时添加提示
-        if (isFirstPinWindow) {
-            isFirstPinWindow = false;
-
-            // 创建提示标签，支持多语言
-            QString hintText = TranslationManager::instance()->get("pinwindow.hint", "Press ESC or left double-click to close");
-            QLabel *hintLabel = new QLabel(hintText, this);
-            hintLabel->setStyleSheet(StyleManager::getPinHintLabelStyle());
-            hintLabel->setAlignment(Qt::AlignCenter);
-            hintLabel->adjustSize();
-
-            // 定位提示标签在窗口正中间，确保坐标有效
-            int labelX = (width() - hintLabel->width()) / 2;
-            int labelY = (height() - hintLabel->height()) / 2;
-            labelX = qMax(0, labelX);
-            labelY = qMax(0, labelY);
-            hintLabel->move(labelX, labelY);
-            hintLabel->show();
-
-            // 3秒后自动隐藏提示
-            QTimer::singleShot(5000, hintLabel, &QLabel::hide);
-
-            LOG_INFO("PinWindow hint shown for first time");
-        }
     });
 
     // 创建标注交互处理器，注入 PinWindow 特有的 Host 回调
@@ -199,6 +171,33 @@ PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     m_annotationHandler->setHost(std::move(host));
 
     LOG_INFO("PinWindow initialized");
+}
+
+void PinWindow::showOperationHint() {
+    // 延迟到窗口完成显示后再创建，保证居中计算基于有效几何
+    QTimer::singleShot(100, this, [this]() {
+        if (!isVisible()) return;
+
+        // 创建提示标签，支持多语言
+        QString hintText = TranslationManager::instance()->get("pinwindow.hint", "Press ESC or left double-click to close");
+        QLabel *hintLabel = new QLabel(hintText, this);
+        hintLabel->setStyleSheet(StyleManager::getPinHintLabelStyle());
+        hintLabel->setAlignment(Qt::AlignCenter);
+        hintLabel->adjustSize();
+
+        // 定位提示标签在窗口正中间，确保坐标有效
+        int labelX = (width() - hintLabel->width()) / 2;
+        int labelY = (height() - hintLabel->height()) / 2;
+        labelX = qMax(0, labelX);
+        labelY = qMax(0, labelY);
+        hintLabel->move(labelX, labelY);
+        hintLabel->show();
+
+        // 3秒后自动隐藏提示
+        QTimer::singleShot(5000, hintLabel, &QLabel::hide);
+
+        LOG_INFO("PinWindow operation hint shown");
+    });
 }
 
 /**
