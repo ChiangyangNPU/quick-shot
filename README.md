@@ -237,7 +237,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **翻译引擎**: 基于 Qt6::Network 多引擎抽象（TranslateEngine 接口 + MyMemory/Baidu/DeepL/LibreTranslate 4 种实现），默认 MyMemory 免注册可用，TranslateError 8 种错误码本地化（tm->get）、批量翻译状态机失败单段回退原文不中断流程、首次隐私提示（自定义 MessageBox 居中定位到选区）。
 *   **工具栏动态定位**: 根据选区位置和屏幕空间自动计算工具栏位置（一级→子→控制栏三级堆叠），优先下方不足翻转上方，全屏时从底部向上排列，支持多显示器。
 *   **录屏实时标注合成（零重影 + 过程可见）**: 录屏开始 SnipScreen 调用 SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) 排除捕获；overlay cap 与 ScreenRecorder::captureRect（选区减边框）对齐；AnnotationInteractionHandler handleMouseMove 所有分支调用 syncOverlay()，拖拽过程中间帧也会被合成到视频。
-*   **跨平台录屏**: Windows 使用 Media Foundation + WASAPI；macOS 使用 ScreenCaptureKit + AVAssetWriter（H.264）+ AVCaptureSession 麦克风；Linux 使用 X11 + FFmpeg。
+*   **跨平台录屏**: Windows 使用 Media Foundation + WASAPI；macOS 使用 ScreenCaptureKit + AVAssetWriter（H.264）+ AVCaptureSession 麦克风；Linux 目前仅实现 X11 帧采集，视频编码/音频待接入（暂不产出视频文件），录屏以 Windows/macOS 为准。
 *   **标注交互统一 AnnotationInteractionHandler**: 截屏/录屏/贴图三处标注逻辑通过 Host 回调策略注入窗口差异（坐标限制、录屏同步、选区限制、工具栏碰撞检测等）共享同一套实现，包括：鼠标事件优先级（工具栏→文本框完成→橡皮擦→马赛克→控制点→文本→拖动→创建）、控制点光标样式、Shift/Alt 约束、橡皮擦/马赛克半径联动画笔粗细 × 2、全局马赛克算法、undo/redo 移动优先。
 *   **快捷键系统 ShortcutManager**: 9 个全局热键 ShortcutType 枚举 + ShortcutConfigItem 数据表（单一事实源）；ShortcutManager 外观模式统一 API；ShortcutRegistry 注册表管理 GlobalShortcut 生命周期；AnnotationShortcutController + IShortcutHandler + QShortcut(Qt::WindowShortcut) 统一管理 SnipScreen/PinWindow 标注快捷键；setBareKeysEnabled(false/true) 处理文本编辑冲突。
 *   **工具栏子工具栏防闪烁**: BaseToolBar 切换工具时使用同步 `delete` 立即释放布局空间；`showSubTools` 包裹 `setUpdatesEnabled(false/true)` 阻塞中间绘制；PinWindow 独立顶层子工具栏窗口设置 `WA_NoSystemBackground` 阻止系统级背景清除。

@@ -637,3 +637,7 @@ graph LR
 | ba69e55 | PinWindow 接入 Handler 净减少约二百四十八行 阶段三 |
 | a8843a8 | 修复录屏视频中标注重复显示 排除SnipScreen窗口捕获加overlay坐标与边框对齐 |
 | 08e0c2e | 修复录屏过程中绘制与拖动过程不显示 补充handleMouseMove分支中两处syncOverlay调用 |
+| 0a62431 | 修复录屏输入遮罩选区边框挖孔带宽硬编码3与实际边框2不一致 留下1px隐形事件捕获带 改用StyleManager::SNIP_BORDER_WIDTH |
+| 383b9a7 | 修复保存路径上第二次全桌面composeCanvas合成 savePixmapToFile的provider内顺带记录尺寸供历史记录 |
+
+撤销/重做状态机的行为契约由单元测试固化：`tests/AnnotationManagerTest.cpp`（17 个用例，覆盖上表全部操作序列的撤销/重做往返、清除快照、移动记录、新标注失效语义与 scaleAll 同步），运行方式见 `docs/architecture.md` 第 11 章。

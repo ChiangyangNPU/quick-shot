@@ -14,10 +14,10 @@ QuickShot 是一款跨平台的截图与录屏工具，基于 **Qt 6.10.2** 框�
 | OCR 引擎 | ONNX Runtime + PP-OCRv4 | 文字识别 |
 | 翻译引擎 | Qt6::Network + 多引擎抽象 | MyMemory 默认 + 百度/DeepL/LibreTranslate |
 | 屏幕捕获 | Win32 GDI / ScreenCaptureKit / X11 | 原生屏幕捕获 |
-| 视频编码 | Media Foundation / AVAssetWriter / FFmpeg | 视频录制 |
+| 视频编码 | Media Foundation / AVAssetWriter | 视频录制（Linux 编码待接入，见 6.7 平台适配） |
 | 音频捕获 | WASAPI / ScreenCaptureKit+AVCaptureSession | 系统音频+麦克风 |
 | 数据存储 | SQLite（Qt6::Sql） | 历史记录本地数据库 |
-| 国际化 | Qt Linguist + JSON | 多语言支持 |
+| 国际化 | JSON 键值字典（TranslationManager）+ Qt Linguist | 自研文案走六语言 JSON；Qt 官方 qtbase_*.qm 仅覆盖 QColorDialog 等标准控件 |
 | 并发执行 | QtConcurrent / std::thread | 异步任务处理 |
 
 ### 1.2 核心特性
@@ -110,7 +110,7 @@ graph TB
         U[Qt Framework]
         V[ONNX Runtime]
         W[平台API Windows/macOS/Linux]
-        X[FFmpeg]
+        X[平台视频编码器]
         Y[SQLite 数据库]
         NET[Qt6::Network]
     end
@@ -1955,7 +1955,7 @@ macOS（尤其是 Sidecar/AirPlay 副屏）不支持跨多屏的透明窗口，�
 - `ConfigManager`：全局唯一配置实例，QSettings 持久化封装（Facade），负责配置默认值播种
 - `StyleManager`：集中管理 UI 样式和颜色主题
 - `TranslationManager`：统一多语言管理（注意：本类负责 UI 界面文案翻译，与文本翻译服务区分）
-- `OcrEngine`：唯一 OCR 引擎实例
+- `OcrEngine`：唯一 OCR 引擎实例（全接口共用一把可重入互斥锁，`recognize()` 全程持锁串行化；main 启动时在主线程预热构造，避免单例在 QtConcurrent 工作线程首次创建导致线程亲和性错位）
 - `HistoryManager`：唯一历史记录管理器实例，管理 SQLite 数据库和自动清理
 - `TranslateService`：唯一文本翻译服务实例，管理多引擎切换与批量翻译状态机
 - `Logger`：全局日志记录器
@@ -1991,7 +1991,7 @@ SnipScreen 同时支持截图和录屏：
 屏幕捕获采用平台特定实现：
 - Windows：GDI API 抓取屏幕 + Media Foundation 视频编码 + WASAPI 音频捕获
 - macOS：ScreenCaptureKit 屏幕捕获 + AVAssetWriter H.264 编码 + AVCaptureSession 麦克风
-- Linux：X11 屏幕捕获 + FFmpeg 编码
+- Linux：X11 帧采集已实现（XGetImage），视频编码/音频/文件输出**待接入**——当前 Linux 录制不产出视频文件，录屏功能以 Windows/macOS 为准
 - 通过条件编译隔离平台代码（`Q_OS_WIN`、`Q_OS_MACOS`、`Q_OS_LINUX`）
 - macOS 录屏要求 13+（Ventura），权限检测支持 macOS 14+ 的 `CGPreflightScreenCaptureAccess`
 - macOS 使用 ScreenCaptureKit `SCContentFilter` 区分窗口录制与区域录制模式
@@ -2490,7 +2490,7 @@ graph TB
         F2[ONNX Runtime]
         F3[DirectML / CoreML]
         F4[SQLite]
-        F5[FFmpeg]
+        F5[平台视频编码器]
         F6[Platform API]
     end
 
@@ -2874,7 +2874,7 @@ graph TB
 
     subgraph Linux实现
         L1[ScreenRecorder_linux.cpp]
-        L2[X11 + FFmpeg]
+        L2[X11 帧采集（编码待接入）]
     end
 
     A --> W1
@@ -3194,6 +3194,31 @@ graph TD
 | **跨平台一致** | Windows/macOS/Linux 三平台支持，编译宏 + 运行时判断 |
 
 
+## 11. 单元测试
+
+测试框架为 Qt Test，每个测试可执行文件直接编译被测源文件（依赖闭包见 `tests/CMakeLists.txt`），与主目标互不影响。`QUICKSHOT_BUILD_TESTS=OFF`（默认 ON）可整体关闭。
+
+| 测试目标 | 被测对象 | 覆盖内容 |
+|---|---|---|
+| `AnnotationManagerTest` | AnnotationManager | 撤销/重做状态机：三操作流（标注/橡皮擦组/马赛克组）序号合并、清除快照（undo 完整恢复/redo 再清除）、移动记录（位置恢复、无位移不记录、Pen 路径点恢复）、新标注使移动历史失效、scaleAll 同步栈内与快照内容 |
+| `OcrDetPostprocessTest` | OcrDetPostprocess | DB 检测后处理（纯计算，无 GUI 依赖） |
+| `StyleManagerTest` | StyleManager | 颜色配置表完整性与存取回环 |
+| `TranslationManagerTest` | TranslationManager | 翻译键回退契约、六语言文件可加载且 currentLanguage 跟随、加载失败不污染状态、config.* 错误文案词条六语言齐备 |
+| `UpdateManagerVersionTest` | UpdateManager | 版本比较与 release API 解析 |
+
+本地运行：
+
+```bash
+cmake -S . -B build -DQUICKSHOT_BUILD_TESTS=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+CI（`.github/workflows/ci.yml`）在 Windows MinGW 与 macOS arm64 双平台构建后运行 `ctest --output-on-failure --no-tests=error`，无测试注册即失败。
+
+选型原则：优先为**纯逻辑、无 GUI 依赖**的复杂状态机补测试（如 AnnotationManager 的序号合并撤销重做），GUI 交互层依赖窗口系统不强行覆盖。
+
+
 ## 附录
 
 ### A. 目录结构
@@ -3241,7 +3266,7 @@ src/
 │       ├── ScreenRecorder_mac.cpp      # macOS 实现（ScreenCaptureKit + AVAssetWriter）
 │       ├── ScreenRecorder_mac_helper.h  # macOS 辅助头文件
 │       ├── ScreenRecorder_mac_helper.mm # macOS 辅助实现（ObjC++）
-│       └── ScreenRecorder_linux.cpp     # Linux 实现（X11 + FFmpeg）
+│       └── ScreenRecorder_linux.cpp     # Linux 实现（X11 帧采集，编码待接入）
 ├── shortcut/             # 快捷键系统（重构：ShortcutManager外观+Registry注册表+TrayMenuBuilder数据驱动）
 │   ├── ShortcutTypes.h            # ShortcutType枚举+ShortcutConfigItem数据表（单一事实源）
 │   ├── ShortcutManager.h/cpp      # 快捷键管理器（单例，外观模式）
@@ -3301,7 +3326,7 @@ src/
 | `src/shortcut/TrayMenuBuilder.h` | 托盘菜单构建器（工厂方法+数据驱动遍历配置表、refresh/retranslate） |
 | `src/shortcut/AnnotationShortcutController.h` | 标注快捷键控制器（QShortcut + setBareKeysEnabled 文本冲突） |
 | `src/shortcut/IShortcutHandler.h` | 标注快捷键处理策略接口（SnipScreen/PinWindow 实现 10 个动作命令） |
-| `src/shortcut/GlobalShortcut.h` | 全局热键底层实现（Win32 热键 / macOS 事件监听） |
+| `src/shortcut/GlobalShortcut.h` | 全局热键底层实现（Win32 RegisterHotKey / macOS Carbon RegisterEventHotKey） |
 | `src/core/Hunter.h` | 窗口捕捉（窗口/显示器枚举、contains/Contained 层级） |
 | `src/core/Hunter.cpp` | 窗口捕捉实现 |
 | `src/core/DisplayInfo.h` | 显示器信息（平台相关，虚拟桌面/单屏坐标） |

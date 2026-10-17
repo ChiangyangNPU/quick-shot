@@ -4,7 +4,7 @@ QuickShot 的快捷键系统分为四大类，与「设置 → 快捷键」选�
 
 | 分类 | 是否可配置 | 适用场景 | 实现方式 |
 |---|---|---|---|
-| [全局热键](#一全局热键可配置) | ✅ 可在「设置 → 快捷键」自定义 | 任意时刻系统级触发（无需激活窗口） | 系统级 API（Windows: `RegisterHotKey`，macOS: `CGEventTap`） |
+| [全局热键](#一全局热键可配置) | ✅ 可在「设置 → 快捷键」自定义 | 任意时刻系统级触发（无需激活窗口） | 系统级 API（Windows: `RegisterHotKey`，macOS: Carbon `RegisterEventHotKey`） |
 | [标注工具](#二标注工具固定) | ❌ 固定约定，不进设置 | 截图/录屏选区完成或 PinWindow 标注模式下切换工具 | `QShortcut`（由 `AnnotationShortcutController` 统一管理） |
 | [标注操作](#三标注操作固定) | ❌ 固定约定，不进设置 | 截图/录屏选区完成或 PinWindow 标注模式下编辑标注 | `QShortcut`（由 `AnnotationShortcutController` 统一管理） |
 | [贴图快捷键](#四贴图快捷键固定) | ❌ 固定约定，不进设置 | 贴图窗口（PinWindow）激活时操作 | `QShortcut`（标注模式下由 `AnnotationShortcutController` 管理）/ `keyPressEvent`（非标注模式） |
@@ -428,7 +428,7 @@ sequenceDiagram
         alt Windows
             GS->>OS: RegisterHotKey(NULL, id, mod, vk)
         else macOS
-            GS->>OS: CGEventTapCreate + CGEventTapEnable
+            GS->>OS: RegisterEventHotKey（Carbon，免辅助功能权限）
         end
         OS-->>GS: 成功
         GS-->>SR: true
@@ -449,9 +449,9 @@ sequenceDiagram
     participant SS as SnipScreen
 
     Note over OS,SS: 用户按下 Alt+Q
-    OS->>GS: WM_HOTKEY / CGEventTap 事件
-    GS->>GS: nativeEventFilter() 拦截
-    GS->>SR: 查找对应 GlobalShortcut 实例
+    OS->>GS: WM_HOTKEY / Carbon kEventHotKeyPressed 事件
+    GS->>GS: Windows: nativeEventFilter() 拦截<br/>macOS: Carbon 处理器查表后经 QueuedConnection 切回主线程
+    GS->>GS: triggerCallback() 校验已注册
     GS->>SS: m_callback() → start()
 ```
 
@@ -678,7 +678,7 @@ sequenceDiagram
 
 | 维度 | 全局热键 | 应用内快捷键 |
 |---|---|---|
-| 注册方式 | 系统级 API（Windows: `RegisterHotKey`，macOS: `CGEventTap`） | `QShortcut`（由 `AnnotationShortcutController` 统一管理） |
+| 注册方式 | 系统级 API（Windows: `RegisterHotKey`，macOS: Carbon `RegisterEventHotKey`） | `QShortcut`（由 `AnnotationShortcutController` 统一管理） |
 | 触发条件 | 任意时刻，无需激活窗口 | 对应窗口激活且处于有效状态 |
 | 可配置性 | ✅ 用户可在设置中自定义 | ❌ 固定约定，不进设置 |
 | 冲突处理 | 系统级抢占，需避免与其他软件冲突 | 窗口级，仅窗口激活时生效 |
@@ -691,7 +691,7 @@ sequenceDiagram
 
 1. **`ShortcutManager`**（外观模式 + 单例）：对外提供统一 API，协调 `ShortcutRegistry` 和 `TrayMenuBuilder`，发射 `shortcutChanged` 信号驱动观察者刷新。
 2. **`ShortcutRegistry`**（注册表模式）：集中管理所有 `GlobalShortcut` 实例的生命周期、注册、更新、注销。以 `ShortcutType` 枚举为键，避免硬编码。
-3. **`GlobalShortcut`**（跨平台实现）：封装 Windows `RegisterHotKey` 和 macOS `CGEventTap` 两种平台 API，提供统一的 `registerShortcut`/`unregisterShortcut`/`updateShortcut` 接口。
+3. **`GlobalShortcut`**（跨平台实现）：封装 Windows `RegisterHotKey` 和 macOS Carbon `RegisterEventHotKey` 两种平台 API（后者无需"辅助功能"权限，相比旧 CGEventTap 方案开箱即用），提供统一的 `registerShortcut`/`unregisterShortcut`/`updateShortcut` 接口。
 
 数据驱动配置：`ShortcutTypes.h` 中的 `kShortcutConfigs[]` 数据表统一定义所有快捷键的类型、配置键、默认值、托盘菜单文本，新增/删除快捷键只需修改此表。
 
@@ -750,11 +750,11 @@ sequenceDiagram
 
 | 平台 | API | 实现文件 |
 |---|---|---|
-| Windows | `RegisterHotKey` / `UnregisterHotKey` | `GlobalShortcut::nativeRegister` / `nativeUnregister` |
-| macOS | `CGEventTapCreate` / `CGEventTapEnable` | `GlobalShortcut::nativeRegister` / `nativeUnregister` |
+| Windows | `RegisterHotKey` / `UnregisterHotKey`（WM_HOTKEY 原生事件过滤） | `GlobalShortcut::nativeRegister` / `nativeUnregister` |
+| macOS | Carbon `RegisterEventHotKey` / `UnregisterEventHotKey`（应用级事件处理器派发，免辅助功能权限） | `GlobalShortcut::nativeRegister` / `nativeUnregister` |
 | Linux | 空实现（返回 false） | `GlobalShortcut::nativeRegister` / `nativeUnregister` |
 
-macOS 额外支持 Fn 键回调（`setFnKeyCallback`），并在事件回调中拦截 Fn+字母组合防止误触发。
+macOS 的 `setFnKeyCallback` 接口在 Carbon 方案下仅保留兼容（Carbon 不支持 Fn 单独作修饰键注册全局热键），调用时写警告日志、不产生实际效果。
 
 ---
 

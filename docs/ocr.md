@@ -157,6 +157,7 @@ classDiagram
         -bool m_pendingRelease
         -OcrLanguage m_language
         -QString m_modelDir
+        -QRecursiveMutex m_mutex
         +OcrEngine* instance()$
         +bool initialize(modelDir)
         +bool isReady() const
@@ -775,10 +776,16 @@ models/ocr/
 - 避免重复加载模型造成内存浪费
 - 统一管理模型生命周期
 
+线程安全约束：
+- `instance()` 加锁懒加载——识别经 `QtConcurrent` 在线程池执行，快速连续触发两次识别时两个 worker 可能并发进入，无锁会竞态创建两个实例并泄漏一个
+- 所有接口共用一把 **可重入互斥锁**（`QRecursiveMutex`）：`recognize()` 全程持锁串行化；其内部自动初始化路径 `initialize()→release()` 会再次加锁，必须可重入
+- `main()` 启动时在主线程预热 `instance()`——否则单例会在首次识别的 worker 线程上构造，QObject 线程亲和性错位
+
 ### 8.2 惰性初始化
 
 引擎采用惰性初始化策略：
-- 不在应用启动时加载模型
+- 单例对象在启动时由 main 主线程预热构造（仅空对象，开销可忽略）
+- 模型加载不在应用启动时进行
 - 首次调用 `recognize()` 时才自动初始化
 - 减少启动时间和内存占用
 
@@ -791,11 +798,10 @@ models/ocr/
 
 ### 8.4 延迟释放机制
 
-当识别过程中请求释放时：
-- 设置 `m_pendingRelease` 标志
-- 当前识别继续完成
-- 完成后立即执行释放
-- 避免在识别过程中断，保证结果完整性
+释放与识别通过同一把可重入互斥锁串行化：
+- 识别进行中时调用 `release()` 会阻塞到当前识别结束后再执行释放，不会中断推理
+- `m_pendingRelease` 标志保留为防御路径（`finalizeRecognition` 内统一复位识别状态并执行待释放）
+- 正常流程下 `release()` 由 OcrAsync finished 回调在识别返回后触发，无竞争
 
 ### 8.5 异步执行
 
