@@ -249,8 +249,9 @@ private:
 
     // 配置项键名常量
     static const char* KEY_CONFIG_PATH; ///< 配置路径键名
-    static const char* ORGANIZATION_NAME; ///< 组织名称
-    static const char* APPLICATION_NAME; ///< 应用名称
+    // 组织名/应用名常量已删除：无任何使用方，且 "MyCompany" 与 main.cpp
+    // 的 QApplication::setOrganizationName("QuickShot") 不一致易埋雷；
+    // 应用标识统一以 QApplication 设置为准
 
     // 配置默认值常量（从 StyleManager 迁移：这些属于配置层而非样式层）
     static const char* DEFAULT_VERSION;            ///< 默认版本号

@@ -18,8 +18,6 @@ ConfigManager* ConfigManager::s_instance = nullptr;
 
 // 配置键名常量
 const char* ConfigManager::KEY_CONFIG_PATH = "general/configFilePath";
-const char* ConfigManager::ORGANIZATION_NAME = "MyCompany";
-const char* ConfigManager::APPLICATION_NAME = "QuickShot";
 
 // 配置默认值常量（原属 StyleManager，迁移至此：配置默认值归配置层）
 const char* ConfigManager::DEFAULT_VERSION = "1.0";          ///< 默认版本号
