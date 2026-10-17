@@ -45,3 +45,11 @@ add_executable(OcrDetPostprocessTest OcrDetPostprocessTest.cpp
 target_include_directories(OcrDetPostprocessTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(OcrDetPostprocessTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
 add_test(NAME OcrDetPostprocessTest COMMAND OcrDetPostprocessTest)
+
+# ---- AnnotationManager：撤销/重做/清除快照/移动记录/缩放（纯逻辑，无 GUI 依赖）----
+add_executable(AnnotationManagerTest AnnotationManagerTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/AnnotationManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/Annotation.cpp)
+target_include_directories(AnnotationManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(AnnotationManagerTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
+add_test(NAME AnnotationManagerTest COMMAND AnnotationManagerTest)
