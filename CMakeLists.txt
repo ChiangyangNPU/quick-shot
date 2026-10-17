@@ -219,6 +219,7 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/RecordingToolBar.h
 
         src/widgets/BaseToolBar.cpp
+        src/widgets/BaseToolBarActions.cpp
         src/widgets/BaseToolBar.h
         src/widgets/PinAnnotationToolBar.cpp
         src/widgets/PinAnnotationToolBar.h

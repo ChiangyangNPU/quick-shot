@@ -3288,7 +3288,8 @@ src/
 ├── utils/                # 工具函数
 │   └── Utils.h/cpp       # 通用工具（savePixmapToFile、桌面路径等）
 ├── widgets/              # 通用组件
-│   ├── BaseToolBar.h/cpp  # 基础工具栏（布局、子工具栏防闪烁：同步delete+setUpdatesEnabled+WA_NoSystemBackground）
+│   ├── BaseToolBar.h/cpp  # 基础工具栏核心骨架（布局、子工具栏变体系统、定位、eventFilter）
+│   ├── BaseToolBarActions.cpp # 基础工具栏动作与样式层（动作按钮注册表、ToolDef元数据表、按钮样式、画笔/颜色/形状操作、状态切换）
 │   ├── OverlayTextEdit.h/cpp  # 文本编辑框（浮动输入、拖拽缩放、边界限制、焦点冲突管理）
 │   ├── PinWindow.h/cpp    # 贴图窗口（置顶、拖拽、调整大小、标注模式、Alt+P分页、WA_DeleteOnClose）
 │   ├── PinAnnotationToolBar.h/cpp  # 贴图窗口标注工具栏
