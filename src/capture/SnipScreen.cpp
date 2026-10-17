@@ -726,10 +726,15 @@ void SnipScreen::save() {
     QString defaultName =
         "QuickShot_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hhmmss_zzz") + ".png";
 
-    // 使用懒加载：对话框确认后才执行 snip()，避免提前隐藏选区框
+    // 使用懒加载：对话框确认后才执行 snip()，避免提前隐藏选区框。
+    // provider 内顺带记录尺寸供历史记录使用——savePixmapToFile 同步调用
+    // provider，保存成功后无需再调一次 snip() 取尺寸（每次 snip 都是一轮
+    // 全桌面 composeCanvas 合成）
+    QSize savedSize;
     QString filename = Utils::savePixmapToFile(
-        this, [this]() -> QPixmap {
+        this, [&savedSize, this]() -> QPixmap {
             auto [pixmap, _] = snip();
+            savedSize = pixmap.isNull() ? QSize(0, 0) : pixmap.size();
             return pixmap;
         }, defaultName, TranslationManager::instance()->get("dialog.saveImage", "Save Image"),
         QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
@@ -738,12 +743,10 @@ void SnipScreen::save() {
 
         // 记录截图到历史
         if (HistoryManager::instance()->isScreenshotEnabled()) {
-            auto [pixmap, _] = snip();
-            QSize imageSize = pixmap.isNull() ? QSize(0, 0) : pixmap.size();
             QString windowTitle = this->windowTitle().isEmpty()
                                       ? QApplication::applicationName()
                                       : this->windowTitle();
-            HistoryManager::instance()->addScreenshot(filename, windowTitle, imageSize);
+            HistoryManager::instance()->addScreenshot(filename, windowTitle, savedSize);
         }
     }
 
