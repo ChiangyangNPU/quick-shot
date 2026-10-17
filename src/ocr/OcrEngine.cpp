@@ -27,6 +27,10 @@ OcrEngine* OcrEngine::s_instance = nullptr;
  * @author chiangyang
  */
 OcrEngine* OcrEngine::instance() {
+    // 加锁懒加载：OCR 经 QtConcurrent 在线程池执行，快速连续触发两次识别时
+    // 两个 worker 可能并发进入本函数，无锁会竞态创建两个实例（泄漏一个）
+    static QMutex instanceMutex;
+    QMutexLocker locker(&instanceMutex);
     if (!s_instance) {
         s_instance = new OcrEngine();
     }
@@ -278,6 +282,9 @@ void OcrEngine::releaseGpuProvider() {
  * @author chiangyang
  */
 bool OcrEngine::initialize(const QString &modelDir) {
+    // 与 recognize()/release() 串行化；recognize() 持锁期间进入时依赖可重入锁
+    QMutexLocker locker(&m_mutex);
+
     // 如果已初始化，先释放资源
     if (m_ready) {
         release();
@@ -432,6 +439,9 @@ bool OcrEngine::switchLanguage(OcrLanguage lang) {
     LOG_WARNING("OcrEngine: ONNX Runtime not available, cannot switch language");
     return false;
 #else
+    // 与 recognize()/release() 串行化：换语言要重建 recSession，禁止与识别并发
+    QMutexLocker locker(&m_mutex);
+
     if (lang == m_language && m_ready) {
         LOG_INFO(QString("OcrEngine: Language already set to %1, no switch needed").arg(languageToKey(lang)));
         return true;
@@ -501,6 +511,7 @@ bool OcrEngine::switchLanguage(OcrLanguage lang) {
  * @author chiangyang
  */
 OcrEngine::OcrLanguage OcrEngine::currentLanguage() const {
+    QMutexLocker locker(&m_mutex);
     return m_language;
 }
 
@@ -510,6 +521,7 @@ OcrEngine::OcrLanguage OcrEngine::currentLanguage() const {
  * @author chiangyang
  */
 bool OcrEngine::isReady() const {
+    QMutexLocker locker(&m_mutex);
     return m_ready;
 }
 
@@ -522,6 +534,10 @@ bool OcrEngine::isReady() const {
  * @author chiangyang
  */
 void OcrEngine::release() {
+    // 与 recognize() 串行化：若识别正在进行，本调用阻塞到识别结束后执行释放
+    // （正常流程下 release 由 OcrAsync finished 回调在识别返回后触发，无竞争）
+    QMutexLocker locker(&m_mutex);
+
     // 如果正在识别中，延迟释放
     if (m_isRecognizing) {
         LOG_INFO("OcrEngine: Recognition in progress, deferring release");
@@ -549,6 +565,7 @@ void OcrEngine::release() {
  * @author chiangyang
  */
 bool OcrEngine::isRecognizing() const {
+    QMutexLocker locker(&m_mutex);
     return m_isRecognizing;
 }
 

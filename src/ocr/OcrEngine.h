@@ -234,7 +234,9 @@ private:
     bool m_pendingRelease = false;              ///< 是否有待释放（识别中时设置）
     OcrLanguage m_language = OcrLanguage::ChineseEnglish; ///< 当前语言
     QString m_modelDir;                         ///< 模型目录路径
-    mutable QMutex m_mutex;                    ///< 互斥锁，保护线程安全
+    /// 递归互斥锁：recognize() 全程持锁；其内部自动初始化路径
+    /// initialize()→release() 会再次加锁，必须可重入
+    mutable QRecursiveMutex m_mutex;
 };
 
 #endif // OCR_ENGINE_H

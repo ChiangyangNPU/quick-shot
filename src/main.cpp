@@ -15,6 +15,7 @@
 #include "history/HistoryManager.h"
 #include "history/ClipboardMonitor.h"
 #include "widgets/HistoryWindow.h"
+#include "ocr/OcrEngine.h"
 #include "../log/Logger.h"
 
 // 版本号宏，由 CMake 通过 add_compile_definitions 注入
@@ -94,6 +95,10 @@ int main(int argc, char *argv[]) {
     StyleManager::initFromConfig(configManager);
 
     TranslationManager::instance();
+
+    // OCR 引擎主线程预热：确保单例对象在线程池首次识别前就绑定主线程
+    // （OcrAsync 经 QtConcurrent 执行，若不预热，单例会在 worker 线程上构造）
+    OcrEngine::instance();
 
     // 初始化历史记录管理器
     HistoryManager::instance();
