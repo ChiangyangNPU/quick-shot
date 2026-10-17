@@ -250,8 +250,7 @@ int main(int argc, char *argv[]) {
     trayIcon->show();
     LOG_INFO("Tray icon shown, entering event loop");
 
-#ifdef Q_OS_WIN
-    // Windows: 显示启动通知
+    // Windows / macOS：显示启动通知（两平台行为一致，统一处理）
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         QString title = tm->get("quickShot", "QuickShot");
         QString snipKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString();
@@ -261,20 +260,6 @@ int main(int argc, char *argv[]) {
         trayIcon->showMessage(title, message, QSystemTrayIcon::Information, 5000);
         LOG_INFO("Startup notification shown");
     }
-#endif
-
-#ifdef Q_OS_MAC
-    // macOS: 显示启动通知
-    if (QSystemTrayIcon::isSystemTrayAvailable()) {
-        QString title = tm->get("quickShot", "QuickShot");
-        QString snipKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString();
-        QString recordKey = ShortcutManager::instance()->getSequence(ShortcutType::Record).toString();
-        QString historyKey = ShortcutManager::instance()->getSequence(ShortcutType::History).toString();
-        QString message = tm->get("runningInBackground", {snipKey, recordKey, historyKey});
-        trayIcon->showMessage(title, message, QSystemTrayIcon::Information, 5000);
-        LOG_INFO("Startup notification shown");
-    }
-#endif
 
     LOG_INFO("QuickShot application started successfully");
     return app.exec();
