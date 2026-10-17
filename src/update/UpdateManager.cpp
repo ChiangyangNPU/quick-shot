@@ -695,6 +695,8 @@ void UpdateManager::installUpdate(const QString &zipPath, const QString &install
         stream << "echo Updating QuickShot...\r\n";
         stream << "\r\n";
         // 等待主程序退出：使用 findstr 精确匹配 PID（find "" 会匹配所有行导致死循环）
+        // 注意：PID 消失严格晚于 main 中 QLockFile（单实例锁）的析构释放，
+        // 因此后续 start 新版本时锁必然空闲——不要改动此等待条件
         stream << "REM Wait for main process to exit\r\n";
         stream << ":waitloop\r\n";
         stream << "tasklist /fi \"pid eq " << pid << "\" 2>nul | findstr \"" << pid << "\" >nul\r\n";
