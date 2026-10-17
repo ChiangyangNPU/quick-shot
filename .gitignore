@@ -2,6 +2,11 @@
 cmake-build-*/
 build/
 
+# 运行期产物（Logger 旧版曾在 cwd 落 log.txt，现写 <appDir>/logs/）
+test/
+logs/
+log.txt
+
 Release/
 QuickShot-Release-*/
 QuickShot-Release-*.zip
