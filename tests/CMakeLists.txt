@@ -83,6 +83,12 @@ target_link_libraries(HistoryManagerTest PRIVATE
     Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg)
 add_test(NAME HistoryManagerTest COMMAND HistoryManagerTest)
 
+# ---- Resizer：选区几何（header-only 纯逻辑，QTEST_MAIN 需 QApplication 跑 QCursor）----
+add_executable(ResizerTest ResizerTest.cpp)
+target_include_directories(ResizerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ResizerTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets)
+add_test(NAME ResizerTest COMMAND ResizerTest)
+
 # ---- AnnotationManager：撤销/重做/清除快照/移动记录/缩放（纯逻辑，无 GUI 依赖）----
 add_executable(AnnotationManagerTest AnnotationManagerTest.cpp
     ${CMAKE_SOURCE_DIR}/src/capture/AnnotationManager.cpp
