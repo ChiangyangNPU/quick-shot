@@ -46,6 +46,22 @@ target_include_directories(OcrDetPostprocessTest PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(OcrDetPostprocessTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
 add_test(NAME OcrDetPostprocessTest COMMAND OcrDetPostprocessTest)
 
+# ---- OcrRecPostprocess：CTC 解码（纯计算，无 GUI 依赖）----
+add_executable(OcrRecPostprocessTest OcrRecPostprocessTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/ocr/OcrRecPostprocess.cpp
+    ${CMAKE_SOURCE_DIR}/src/log/Logger.cpp)
+target_include_directories(OcrRecPostprocessTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(OcrRecPostprocessTest PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME OcrRecPostprocessTest COMMAND OcrRecPostprocessTest)
+
+# ---- OcrPreprocess：det/rec 缩放 + 归一化 + CHW 转换（纯计算）----
+add_executable(OcrPreprocessTest OcrPreprocessTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/ocr/OcrPreprocess.cpp
+    ${CMAKE_SOURCE_DIR}/src/log/Logger.cpp)
+target_include_directories(OcrPreprocessTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(OcrPreprocessTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
+add_test(NAME OcrPreprocessTest COMMAND OcrPreprocessTest)
+
 # ---- GlobalShortcut 键码映射表：Qt 键 → 平台虚拟键码（纯数据，无 GUI 依赖）----
 add_executable(GlobalShortcutKeyMapTest GlobalShortcutKeyMapTest.cpp
     ${CMAKE_SOURCE_DIR}/src/shortcut/ShortcutKeyMap.cpp)
