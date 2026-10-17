@@ -13,6 +13,7 @@
 #include <QMutexLocker>
 
 HistoryManager* HistoryManager::s_instance = nullptr;
+QString HistoryManager::s_databasePathOverride;
 
 /**
  * @brief 构造函数
@@ -351,7 +352,9 @@ QList<HistoryItem> HistoryManager::getItems(HistoryType type, int page, int page
     if (type != HistoryType::All) {
         sql += QString(" WHERE type = %1").arg(typeToInt(type));
     }
-    sql += " ORDER BY timestamp DESC";
+    // timestamp 为 ISODate 字符串（无毫秒），同一秒内的记录时间戳相同，
+    // 必须以单调递增的 id 作为次级排序键，否则分页顺序不确定
+    sql += " ORDER BY timestamp DESC, id DESC";
 
     if (pageSize > 0) {
         sql += QString(" LIMIT %1 OFFSET %2").arg(pageSize).arg(page * pageSize);
@@ -399,7 +402,7 @@ QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryTy
         // type 为内部枚举转 int，非用户输入，可安全内联
         sql += QString(" AND type = %1").arg(typeToInt(type));
     }
-    sql += " ORDER BY timestamp DESC LIMIT :limit OFFSET :offset";
+    sql += " ORDER BY timestamp DESC, id DESC LIMIT :limit OFFSET :offset";
 
     QSqlQuery query(m_database);
     query.prepare(sql);
@@ -679,7 +682,7 @@ void HistoryManager::cleanupExpired()
         QSqlQuery deleteQuery(m_database);
         QString deleteSql = QString(
             "DELETE FROM history_items WHERE id IN ("
-            "SELECT id FROM history_items ORDER BY timestamp ASC LIMIT %1"
+            "SELECT id FROM history_items ORDER BY timestamp ASC, id ASC LIMIT %1"
             ")"
         ).arg(excessCount);
 
@@ -781,7 +784,19 @@ QSqlDatabase HistoryManager::getDatabase()
  */
 QString HistoryManager::databasePath() const
 {
+    if (!s_databasePathOverride.isEmpty()) {
+        return s_databasePathOverride;  // 测试覆盖（如 ":memory:"）
+    }
     return historyDirPath() + "/history.db";
+}
+
+/**
+ * @brief 覆盖数据库文件路径（仅供单元测试使用）
+ * @author chiangyang
+ */
+void HistoryManager::setDatabaseFilePathForTest(const QString &path)
+{
+    s_databasePathOverride = path;
 }
 
 /**

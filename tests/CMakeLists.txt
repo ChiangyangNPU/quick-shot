@@ -73,6 +73,16 @@ if (APPLE)
 endif()
 add_test(NAME GlobalShortcutKeyMapTest COMMAND GlobalShortcutKeyMapTest)
 
+# ---- HistoryManager：分页/清理/搜索（内存 SQLite，QTEST_MAIN 需 QApplication 跑 QPixmap）----
+add_executable(HistoryManagerTest HistoryManagerTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/history/HistoryManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/history/ClipboardMonitor.cpp
+    ${QS_TEST_CORE_SOURCES})
+target_include_directories(HistoryManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(HistoryManagerTest PRIVATE
+    Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg)
+add_test(NAME HistoryManagerTest COMMAND HistoryManagerTest)
+
 # ---- AnnotationManager：撤销/重做/清除快照/移动记录/缩放（纯逻辑，无 GUI 依赖）----
 add_executable(AnnotationManagerTest AnnotationManagerTest.cpp
     ${CMAKE_SOURCE_DIR}/src/capture/AnnotationManager.cpp

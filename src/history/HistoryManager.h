@@ -34,6 +34,15 @@ public:
     static void destroy();
 
     /**
+     * @brief 覆盖数据库文件路径（仅供单元测试使用）
+     *
+     * 必须在单例首次实例化之前调用；传 ":memory:" 可使用进程内 SQLite，
+     * 使测试不触碰真实历史库。生产代码不得调用。
+     * @author chiangyang
+     */
+    static void setDatabaseFilePathForTest(const QString &path);
+
+    /**
      * @brief 添加截图记录
      * @param filePath 截图文件路径
      * @param windowTitle 窗口标题
@@ -329,6 +338,7 @@ private:
     static HistoryType intToType(int value);
 
     static HistoryManager* s_instance;      ///< 单例实例
+    static QString s_databasePathOverride;  ///< 测试用数据库路径覆盖（setDatabaseFilePathForTest）
     mutable QRecursiveMutex m_mutex;       ///< 递归互斥锁（支持嵌套加锁）
     QSqlDatabase m_database;                ///< 数据库连接
 
