@@ -1180,11 +1180,13 @@ void SnipScreen::updateInputMask() {
     }
 
     // 选区边框（selected() 返回屏幕坐标，需转为本地坐标）
+    // 挖孔带宽度必须与实际绘制的边框一致（StyleManager::SNIP_BORDER_WIDTH），
+    // 否则边框上会留下一条隐形的事件捕获带
     if (m_selector) {
         QRect sel = m_selector->selected();
         if (sel.isValid() && !sel.isEmpty()) {
             QRect localSel = sel.translated(localOffset);
-            const int bw = 3;
+            const int bw = StyleManager::SNIP_BORDER_WIDTH;
             mask += QRegion(localSel).subtracted(localSel.adjusted(bw, bw, -bw, -bw));
         }
 
