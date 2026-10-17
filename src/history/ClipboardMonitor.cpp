@@ -45,11 +45,24 @@ void ClipboardMonitor::start()
         return;
     }
 
+#ifdef Q_OS_MACOS
+    // macOS：Cocoa 不为后台剪贴板变更派发 QClipboard::dataChanged（Qt 仅在
+    // 应用激活时检查粘贴板，后台复制会漏记），改用 1s 轮询 changeCount 兜底，
+    // 变化后手动走同一处理槽（onClipboardChanged 内有文本去重）。
+    // 快照在启动时取，只捕获启动之后的变化（与其他平台 dataChanged 语义一致）。
+    m_lastChangeCount = currentPasteboardChangeCount();
+    m_pollTimer = new QTimer(this);
+    connect(m_pollTimer, &QTimer::timeout,
+            this, &ClipboardMonitor::pollPasteboardChange);
+    m_pollTimer->start(1000);
+    LOG_INFO("Clipboard monitor started (macOS pasteboard polling, 1s)");
+#else
     connect(m_clipboard, &QClipboard::dataChanged,
             this, &ClipboardMonitor::onClipboardChanged);
+    LOG_INFO("Clipboard monitor started");
+#endif
 
     m_isActive = true;
-    LOG_INFO("Clipboard monitor started");
 }
 
 /**
@@ -62,14 +75,65 @@ void ClipboardMonitor::stop()
         return;
     }
 
+#ifdef Q_OS_MACOS
+    if (m_pollTimer) {
+        m_pollTimer->stop();
+        m_pollTimer->deleteLater();
+        m_pollTimer = nullptr;
+    }
+#else
     if (m_clipboard) {
         disconnect(m_clipboard, &QClipboard::dataChanged,
                    this, &ClipboardMonitor::onClipboardChanged);
     }
+#endif
 
     m_isActive = false;
     LOG_INFO("Clipboard monitor stopped");
 }
+
+#ifdef Q_OS_MACOS
+/**
+ * @brief 读取系统粘贴板当前 changeCount（仅 macOS）
+ *
+ * [NSPasteboard generalPasteboard].changeCount，经 ObjC runtime 消息
+ * 发送获取（纯 .cpp 不引 AppKit 头，与 getSourceAppName 同惯用法）。
+ * @author chiangyang
+ */
+qint64 ClipboardMonitor::currentPasteboardChangeCount() const
+{
+    id gp = ((id (*)(id, SEL))objc_msgSend)((id)objc_getClass("NSPasteboard"),
+                                            sel_registerName("generalPasteboard"));
+    if (!gp) {
+        return 0;
+    }
+    // changeCount 返回 NSInteger（64 位下为 long）
+    return static_cast<qint64>(((long (*)(id, SEL))objc_msgSend)(gp,
+                                                                 sel_registerName("changeCount")));
+}
+
+/**
+ * @brief 粘贴板轮询槽（仅 macOS）
+ *
+ * changeCount 相对上次快照有变化即视为一次剪贴板变更，
+ * 手动调用与 dataChanged 相同的处理槽；文本去重由
+ * onClipboardChanged 内部的 m_lastText 比较兜底（应用激活期间
+ * dataChanged 与轮询可能对同一次变更各触发一次）。
+ * @author chiangyang
+ */
+void ClipboardMonitor::pollPasteboardChange()
+{
+    if (!m_isActive) {
+        return;
+    }
+    const qint64 count = currentPasteboardChangeCount();
+    if (count == m_lastChangeCount) {
+        return;
+    }
+    m_lastChangeCount = count;
+    onClipboardChanged();
+}
+#endif
 
 /**
  * @brief 获取当前监听状态

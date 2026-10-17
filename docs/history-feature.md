@@ -46,7 +46,7 @@
 | 需求点 | 技术方案 | 理由 |
 |--------|----------|------|
 | 数据存储 | SQLite（Qt 自带） | 轻量级、无需额外依赖、支持查询/索引、Qt 原生支持 `QSqlDatabase` |
-| 剪贴板监听 | `QClipboard::dataChanged` 信号 | Qt 原生 API，可监听系统剪贴板变化 |
+| 剪贴板监听 | Windows/Linux 用 `QClipboard::dataChanged` 信号；macOS 用 1s 轮询 `NSPasteboard changeCount` | Windows/Linux 系统事件驱动后台也触发；Cocoa 不为后台剪贴板变更派发通知（Qt 仅激活时检查粘贴板），轮询 changeCount 是 mac 剪贴板管理器的标准做法 |
 | 截图存储 | 缩略图 + 原图路径 | 缩略图加快加载速度，保留原图路径供用户查看 |
 | UI 框架 | 纯 Qt Widgets | 保持与现有代码风格一致 |
 | 线程安全 | `QRecursiveMutex` | 递归互斥锁，支持嵌套加锁场景（如 `removeItem` 内部调用 `getItemById`） |
@@ -356,7 +356,8 @@ private:
  * @brief 剪贴板监听器类
  *
  * 监听系统剪贴板变化，捕获用户的复制/剪切操作。
- * 通过 QClipboard::dataChanged 信号实现。
+ * Windows/Linux 经 QClipboard::dataChanged 信号；macOS 经 1s 轮询
+ * NSPasteboard changeCount（Cocoa 无后台变更通知）。
  * 仅记录文本类型，忽略图片等其他类型。
  */
 class ClipboardMonitor : public QObject {
@@ -606,12 +607,14 @@ flowchart TD
     F --> G[数据库插入记录]
     G --> H[发出 itemAdded 信号]
 
-    B -.->|触发 dataChanged 信号| I[ClipboardMonitor::onClipboardChanged]
+    B -.->|触发 dataChanged 信号（macOS 为轮询到 changeCount 变化）| I[ClipboardMonitor::onClipboardChanged]
     I --> J[getClipboardText 对图片返回空字符串]
     J --> K[跳过，不重复记录]
 ```
 
 > **注意**：复制截图时虽然会触发 `QClipboard::dataChanged` 信号，但 `ClipboardMonitor::getClipboardText()` 对图片类型返回空字符串，不会重复记录。
+>
+> **macOS 监听方式**：Cocoa 不为后台剪贴板变更派发通知（Qt 仅在应用激活时检查粘贴板），`ClipboardMonitor` 在 macOS 上以 1s 定时器轮询 `NSPasteboard changeCount` 兜底，变化后手动走同一处理槽 `onClipboardChanged`（内部文本去重兜底双触发）；Windows/Linux 保持事件驱动不变。
 
 ### 7.2 剪贴板记录流程
 
