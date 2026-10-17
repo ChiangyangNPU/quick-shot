@@ -470,6 +470,9 @@ void SnipScreen::exit() {
     // 清理背景
     m_background = QPixmap();
 
+    // 释放马赛克分支两级绘制缓存（下次会话重建，归还 ~2x 全屏位图内存）
+    m_annotationHandler->clearPaintCaches();
+
     // 隐藏窗口
     QWidget::close();
 }
@@ -993,24 +996,12 @@ void SnipScreen::paintEvent(QPaintEvent *) {
     QPoint globalOffset = -m_virtualGeometry.topLeft();
 
     if (m_annotationHandler->manager().hasMosaicStrokes()) {
-        // 有马赛克时：先渲染到离屏 pixmap，再对 pixmap 做马赛克处理
-        QPixmap canvas(size());
-        canvas.fill(Qt::transparent);
-        QPainter canvasPainter(&canvas);
-
-        // 1. 绘制背景
-        if (!m_background.isNull()) {
-            canvasPainter.drawPixmap(0, 0, m_background);
-        }
-
-        // 2. 绘制标注 + 马赛克 + 控制点（委托给 handler）
-        m_annotationHandler->drawWithMosaic(canvasPainter, canvas,
-            AnnotationManager::kDefaultMosaicBlockSize, globalOffset);
-        canvasPainter.end();
-
-        // 3. 绘制到屏幕
+        // 有马赛克时：走带两级缓存（基础层+全局像素化）的合成路径，
+        // 涂抹过程中仅重建像素化图层，不再每帧分配/重绘全屏画布
         QPainter painter(this);
-        painter.drawPixmap(0, 0, canvas);
+        m_annotationHandler->drawWithMosaic(painter, m_background, size(),
+                                            AnnotationManager::kDefaultMosaicBlockSize,
+                                            globalOffset);
     } else {
         // 无马赛克时：直接绘制
         QPainter painter(this);

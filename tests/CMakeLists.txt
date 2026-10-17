@@ -89,6 +89,15 @@ target_include_directories(ResizerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(ResizerTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets)
 add_test(NAME ResizerTest COMMAND ResizerTest)
 
+# ---- 马赛克两级绘制缓存：输出等价性（QTEST_MAIN 需 QGuiApplication 跑 QPixmap）----
+add_executable(MosaicPaintCacheTest MosaicPaintCacheTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/AnnotationInteractionHandler.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/AnnotationManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/Annotation.cpp)
+target_include_directories(MosaicPaintCacheTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(MosaicPaintCacheTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets)
+add_test(NAME MosaicPaintCacheTest COMMAND MosaicPaintCacheTest)
+
 # ---- AnnotationManager：撤销/重做/清除快照/移动记录/缩放（纯逻辑，无 GUI 依赖）----
 add_executable(AnnotationManagerTest AnnotationManagerTest.cpp
     ${CMAKE_SOURCE_DIR}/src/capture/AnnotationManager.cpp

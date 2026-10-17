@@ -141,19 +141,40 @@ public:
     void drawAnnotations(QPainter &painter, const QPoint &offset);
 
     /**
-     * @brief 绘制标注、马赛克和控制点（马赛克分支）
+     * @brief 绘制标注、马赛克和控制点（马赛克分支，带两级离屏缓存）
      *
-     * 在已画好背景的 canvas 上依次绘制：标注 → 马赛克（像素化）→ 控制点（不被像素化）。
+     * 合成顺序：背景+标注（基础层）→ 马赛克（像素化）→ 控制点（不被像素化）。
      * 控制点在马赛克之后绘制，确保控制点清晰可见。
      *
-     * @param canvasPainter canvas 的画笔
-     * @param canvas 已画好背景的离屏画布（马赛克以此为背景采样）
+     * 性能设计（4K 马赛克涂抹防卡顿）：
+     * - 基础层缓存：背景+标注合成一次，仅当标注/橡皮擦内容版本、背景、
+     *   目标尺寸、坐标偏移、拉伸标记变化时重建；
+     * - 全局像素化缓存：基础层的整体降/升采样结果。涂抹过程中基础层
+     *   不变，仅马赛克版本变化时重建——每帧一次全帧重采样，替代旧的
+     *   "每个笔迹组一次全帧重采样"（组数线性放大，N 组即 N 次）；
+     * - 马赛克区域经 clip 一次性从像素化图层绘入，与录屏 overlay
+     *   （renderAnnotationOverlay）的既有方案一致。
+     * 缓存常驻至下次重建或 clearPaintCaches()；宿主隐藏/退出时可主动
+     * 释放归还内存。
+     *
+     * @param target 目标画笔（屏幕或离屏）
+     * @param background 背景图（宿主持有，如 SnipScreen 的桌面截图 / PinWindow 的贴图）
+     * @param targetSize 目标尺寸（缓存几何基准）
      * @param blockSize 马赛克块大小（下采样缩放因子）
-     * @param offset 坐标偏移
+     * @param offset 坐标偏移（SnipScreen 为 globalOffset，PinWindow 为 QPoint(0,0)）
+     * @param stretchBackground true=背景拉伸铺满 targetSize（PinWindow 缩放窗口场景）；
+     *                          false=背景 1:1 绘制在原点（SnipScreen 物理像素场景）
      * @author chiangyang
      */
-    void drawWithMosaic(QPainter &canvasPainter, QPixmap &canvas,
-                        int blockSize, const QPoint &offset);
+    void drawWithMosaic(QPainter &target, const QPixmap &background,
+                        const QSize &targetSize, int blockSize,
+                        const QPoint &offset, bool stretchBackground = false);
+
+    /**
+     * @brief 释放两级绘制缓存（宿主隐藏/退出时调用，归还内存）
+     * @author chiangyang
+     */
+    void clearPaintCaches();
 
     // ---------- 标注创建 ----------
 
@@ -350,6 +371,18 @@ private:
     int m_currentShapeType = 1;              ///< 当前形状类型（1=矩形, 2=椭圆, 3=三角形）
 
     Host m_host;  ///< 宿主回调接口
+
+    // ---------- 马赛克分支两级绘制缓存（drawWithMosaic 私有，主线程专用） ----------
+    QPixmap m_baseCache;               ///< 基础层：背景+标注（不含马赛克/控制点）
+    quint64 m_baseCacheVersion = 0;    ///< 生成时的基础内容版本
+    qint64  m_baseCacheBgKey = 0;      ///< 生成时的背景 cacheKey
+    QSize   m_baseCacheSize;           ///< 生成时的目标尺寸
+    QPoint  m_baseCacheOffset;         ///< 生成时的坐标偏移
+    bool    m_baseCacheStretch = false;///< 生成时的背景拉伸标记
+    QPixmap m_mosaicCache;             ///< 基础层的全局像素化版本
+    quint64 m_mosaicCacheMosaicVer = 0;      ///< 生成时的马赛克版本
+    quint64 m_mosaicCacheBaseVer = 0;        ///< 生成时的基础层版本
+    int     m_mosaicCacheBlockSize = 0;      ///< 生成时的块大小
 };
 
 #endif // ANNOTATIONINTERACTIONHANDLER_H

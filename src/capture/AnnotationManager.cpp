@@ -7,6 +7,7 @@
 // ============ AnnotationManager.h 内联实现迁入 ============
 
 void AnnotationManager::add(std::unique_ptr<Annotation> annotation) {
+        ++m_contentVersion;
         m_undoStack.push_back(std::move(annotation));
         m_annotationSeqs.push_back(m_nextOpSeq++);
         // 新标注使移动历史失效
@@ -17,6 +18,7 @@ void AnnotationManager::add(std::unique_ptr<Annotation> annotation) {
 }
 
 void AnnotationManager::updateLast(const QPoint &end) {
+        ++m_contentVersion;
         if (!m_undoStack.empty()) {
             m_undoStack.back()->setEnd(end);
         }
@@ -28,6 +30,7 @@ void AnnotationManager::commit() {
 }
 
 void AnnotationManager::rollback() {
+        ++m_contentVersion;
         if (!m_undoStack.empty()) {
             m_undoStack.pop_back();
             m_annotationSeqs.pop_back();
@@ -38,6 +41,8 @@ void AnnotationManager::rollback() {
 }
 
 void AnnotationManager::undo() {
+        ++m_contentVersion;
+        ++m_mosaicVersion;
         // 优先级1：撤销清除操作
         if (m_clearUndoSnapshot.valid) {
             // 保存当前清除后的空状态到重做快照，使 redo 可再次清除
@@ -85,6 +90,8 @@ void AnnotationManager::undo() {
 }
 
 void AnnotationManager::redo() {
+        ++m_contentVersion;
+        ++m_mosaicVersion;
         // 优先级1：重做清除操作
         if (m_clearRedoSnapshot.valid) {
             // 保存当前状态到撤销快照，使 undo 可再次恢复
@@ -132,6 +139,8 @@ void AnnotationManager::redo() {
 }
 
 void AnnotationManager::clear() {
+        ++m_contentVersion;
+        ++m_mosaicVersion;
         // 如果当前没有任何内容，无需保存快照
         if (m_undoStack.empty() && m_redoStack.empty() &&
             m_eraserGroups.empty() && m_mosaicGroups.empty() &&
@@ -177,6 +186,8 @@ void AnnotationManager::clear() {
 
 void AnnotationManager::scaleAll(double sx, double sy) {
         if (sx == 1.0 && sy == 1.0) return;
+        ++m_contentVersion;
+        ++m_mosaicVersion;
         for (auto &ann : m_undoStack) ann->scale(sx, sy);
         for (auto &ann : m_redoStack) ann->scale(sx, sy);
         scaleEraserGroups(m_eraserGroups, sx, sy);
@@ -211,11 +222,13 @@ void AnnotationManager::scaleAll(double sx, double sy) {
 }
 
 void AnnotationManager::eraseAt(const QPoint &pos, const int size) {
+        ++m_contentVersion;
         QRect eraserRect(pos.x() - size, pos.y() - size, size * 2, size * 2);
         m_activeEraserStroke.push_back(eraserRect);
 }
 
 void AnnotationManager::endEraserStroke() {
+        ++m_contentVersion;
         if (!m_activeEraserStroke.empty()) {
             m_eraserGroups.push_back({std::move(m_activeEraserStroke), m_nextOpSeq++});
             m_activeEraserStroke.clear();
@@ -238,11 +251,13 @@ QRegion AnnotationManager::eraserRegion() const {
 }
 
 void AnnotationManager::mosaicAt(const QPoint &pos, const int size) {
+        ++m_mosaicVersion;
         QRect mosaicRect(pos.x() - size, pos.y() - size, size * 2, size * 2);
         m_activeMosaicStroke.push_back(mosaicRect);
 }
 
 void AnnotationManager::endMosaicStroke() {
+        ++m_mosaicVersion;
         if (!m_activeMosaicStroke.empty()) {
             m_mosaicGroups.push_back({std::move(m_activeMosaicStroke), m_nextOpSeq++});
             m_activeMosaicStroke.clear();
@@ -315,6 +330,7 @@ Qt::CursorShape AnnotationManager::controlPointCursorAt(const QPoint &pos) const
 }
 
 void AnnotationManager::moveLastControlPoint(int index, const QPoint &pos) {
+        ++m_contentVersion;
         Annotation *last = lastAnnotation();
         if (last) last->moveControlPoint(index, pos);
 }
@@ -326,6 +342,7 @@ void AnnotationManager::beginMove() {
 }
 
 void AnnotationManager::translateLast(const QPoint &offset) {
+        ++m_contentVersion;
         Annotation *last = lastAnnotation();
         if (last) {
             last->translate(offset);

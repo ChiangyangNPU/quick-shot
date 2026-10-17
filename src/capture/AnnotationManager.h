@@ -55,6 +55,21 @@ public:
      */
     AnnotationManager() = default;
 
+    // ---------- 内容版本计数（供绘制层缓存失效判断） ----------
+    /**
+     * @brief 基础内容版本（标注 + 橡皮擦，影响"背景+标注"合成层）
+     *
+     * 任何改变可见基础内容的操作（增删标注、移动、控制点、擦除）递增。
+     * @author chiangyang
+     */
+    quint64 contentVersion() const { return m_contentVersion; }
+
+    /**
+     * @brief 马赛克笔迹版本（影响马赛克区域与全局像素化图层）
+     * @author chiangyang
+     */
+    quint64 mosaicVersion() const { return m_mosaicVersion; }
+
     /**
      * @brief 添加新标注
      *
@@ -671,6 +686,8 @@ private:
     std::vector<QRect> m_activeEraserStroke;               ///< 活跃橡皮擦笔迹缓冲（拖拽中）
     std::vector<QRect> m_activeMosaicStroke;               ///< 活跃马赛克笔迹缓冲（拖拽中）
     uint64_t m_nextOpSeq = 0;                              ///< 全局操作序号（递增）
+    quint64 m_contentVersion = 0;                          ///< 基础内容版本（标注/橡皮擦变化递增）
+    quint64 m_mosaicVersion = 0;                           ///< 马赛克笔迹版本（马赛克变化递增）
     MoveRecord m_undoMoveState;                            ///< undo 目标状态（移动前原始位置）
     MoveRecord m_redoMoveState;                            ///< redo 目标状态（移动后位置）
     ClearSnapshot m_clearUndoSnapshot;                     ///< 清除操作的撤销快照（保存清除前状态）

@@ -358,10 +358,20 @@ void AnnotationInteractionHandler::drawAnnotations(QPainter &painter, const QPoi
 }
 
 /**
- * @brief 绘制标注、马赛克和控制点（马赛克分支）
+ * @brief 绘制标注、马赛克和控制点（马赛克分支，带两级离屏缓存）
  *
- * 在已画好背景的 canvas 上依次绘制：标注 → 马赛克（像素化）→ 控制点（不被像素化）。
+ * 合成顺序：背景+标注（基础层）→ 马赛克（像素化）→ 控制点（不被像素化）。
  * 控制点在马赛克之后绘制，确保控制点清晰可见。
+ *
+ * 性能设计（4K 马赛克涂抹防卡顿）：
+ * - 基础层缓存：背景+标注合成一次，仅当标注/橡皮擦内容版本、背景、
+ *   目标尺寸、坐标偏移、拉伸标记变化时重建；
+ * - 全局像素化缓存：基础层的整体降/升采样结果。涂抹过程中基础层
+ *   不变，仅马赛克版本变化时重建——每帧一次全帧重采样，替代旧的
+ *   "每个笔迹组一次全帧重采样"（组数线性放大，N 组即 N 次）；
+ * - 马赛克区域经 clip 一次性从像素化图层绘入，与录屏 overlay
+ *   （renderAnnotationOverlay）的既有全局预像素化方案一致。
+ * 缓存常驻至下次重建或 clearPaintCaches()；宿主隐藏/退出时可主动释放。
  *
  * 控制点显示策略：
  * 1. 仅在无任何交互进行时绘制（isInteractionActive() 为 false）。创建标注、拖动标注、
@@ -370,33 +380,110 @@ void AnnotationInteractionHandler::drawAnnotations(QPainter &painter, const QPoi
  * 2. 仅在当前工具支持调节时绘制（canDragCurrentTool() 为 true）。橡皮擦和马赛克为涂抹式
  *    工具，切换到这两个工具后栈顶标注不再可调节，控制点应当隐藏。
  *
- * @param canvasPainter canvas 的画笔
- * @param canvas 已画好背景的离屏画布（马赛克以此为背景采样）
+ * @param target 目标画笔（屏幕或离屏）
+ * @param background 背景图（宿主持有，如 SnipScreen 的桌面截图 / PinWindow 的贴图）
+ * @param targetSize 目标尺寸（缓存几何基准）
  * @param blockSize 马赛克块大小（下采样缩放因子）
- * @param offset 坐标偏移
+ * @param offset 坐标偏移（SnipScreen 为 globalOffset，PinWindow 为 QPoint(0,0)）
+ * @param stretchBackground true=背景拉伸铺满 targetSize（PinWindow 缩放窗口场景）；
+ *                          false=背景 1:1 绘制在原点（SnipScreen 物理像素场景）
  * @author chiangyang
  */
-void AnnotationInteractionHandler::drawWithMosaic(QPainter &canvasPainter, QPixmap &canvas,
-                                                   int blockSize, const QPoint &offset) {
-    // 1. 绘制标注（转换为本地坐标）
-    if (m_annotationManager.hasAnnotations()) {
-        canvasPainter.save();
-        canvasPainter.translate(offset);
-        m_annotationManager.draw(canvasPainter);
-        canvasPainter.restore();
+void AnnotationInteractionHandler::drawWithMosaic(QPainter &target, const QPixmap &background,
+                                                  const QSize &targetSize, int blockSize,
+                                                  const QPoint &offset, bool stretchBackground) {
+    // 1. 基础层缓存（背景+标注，不含马赛克/控制点）：仅在内容版本、背景、
+    //    目标几何或拉伸标记变化时重建。涂抹马赛克过程中基础层完全不变，
+    //    直接复用上一帧结果。
+    const quint64 contentVer = m_annotationManager.contentVersion();
+    const qint64 bgKey = background.cacheKey();
+    if (m_baseCache.isNull() || m_baseCacheVersion != contentVer
+        || m_baseCacheBgKey != bgKey || m_baseCacheSize != targetSize
+        || m_baseCacheOffset != offset || m_baseCacheStretch != stretchBackground) {
+        m_baseCache = QPixmap(targetSize);
+        m_baseCache.fill(Qt::transparent);
+        QPainter basePainter(&m_baseCache);
+        basePainter.setRenderHint(QPainter::SmoothPixmapTransform, stretchBackground);
+        if (!background.isNull()) {
+            if (stretchBackground) {
+                basePainter.drawPixmap(QRect(QPoint(0, 0), targetSize), background,
+                                        QRectF(background.rect()));
+            } else {
+                basePainter.drawPixmap(0, 0, background);
+            }
+        }
+        if (m_annotationManager.hasAnnotations()) {
+            basePainter.translate(offset);
+            m_annotationManager.draw(basePainter);
+        }
+        basePainter.end();
+        m_baseCacheVersion = contentVer;
+        m_baseCacheBgKey = bgKey;
+        m_baseCacheSize = targetSize;
+        m_baseCacheOffset = offset;
+        m_baseCacheStretch = stretchBackground;
     }
 
-    // 2. 在合成图上绘制马赛克（同时像素化背景和标注）
-    m_annotationManager.drawMosaic(canvasPainter, canvas, blockSize, offset);
+    // 2. 全局像素化缓存：基础层整体降/升采样一次。涂抹过程中仅马赛克
+    //    版本变化 → 只重建本层（一次全帧重采样/帧），替代旧的每笔迹组
+    //    一次全帧重采样（组数线性放大）。块对齐全局原点，与录屏 overlay
+    //    的既有全局预像素化方案一致。
+    const quint64 mosaicVer = m_annotationManager.mosaicVersion();
+    if (m_mosaicCache.isNull() || m_mosaicCacheMosaicVer != mosaicVer
+        || m_mosaicCacheBaseVer != m_baseCacheVersion
+        || m_mosaicCacheBlockSize != blockSize) {
+        const int scale = qMax(2, blockSize);
+        const QSize smallSize(qMax(1, targetSize.width() / scale),
+                              qMax(1, targetSize.height() / scale));
+        m_mosaicCache = m_baseCache.scaled(smallSize, Qt::IgnoreAspectRatio,
+                                           Qt::SmoothTransformation)
+                                   .scaled(targetSize, Qt::IgnoreAspectRatio,
+                                           Qt::FastTransformation);
+        m_mosaicCacheMosaicVer = mosaicVer;
+        m_mosaicCacheBaseVer = m_baseCacheVersion;
+        m_mosaicCacheBlockSize = blockSize;
+    }
 
-    // 3. 在马赛克之后绘制控制点（确保控制点不被像素化）
-    //    仅在无交互进行且当前工具支持调节时绘制
+    // 3. 合成到目标：基础层 → 马赛克区域（clip 内一次性 blit）→ 控制点
+    target.drawPixmap(0, 0, m_baseCache);
+
+    const std::vector<QRect> strokes = m_annotationManager.mosaicStrokes();
+    if (!strokes.empty()) {
+        QRegion mosaicRegion;
+        const QRect targetRect(QPoint(0, 0), targetSize);
+        for (const QRect &stroke : strokes) {
+            QRect adjusted = offset.isNull() ? stroke : stroke.translated(offset);
+            QRect clipped = adjusted.intersected(targetRect);
+            if (!clipped.isEmpty())
+                mosaicRegion += clipped;
+        }
+        if (!mosaicRegion.isEmpty()) {
+            target.save();
+            target.setClipRegion(mosaicRegion);
+            target.drawPixmap(0, 0, m_mosaicCache);
+            target.restore();
+        }
+    }
+
+    // 4. 控制点最上层（不被像素化）；仅无交互且当前工具支持调节时绘制
     if (!isInteractionActive() && canDragCurrentTool()) {
-        canvasPainter.save();
-        canvasPainter.translate(offset);
-        m_annotationManager.drawControlPoints(canvasPainter);
-        canvasPainter.restore();
+        target.save();
+        target.translate(offset);
+        m_annotationManager.drawControlPoints(target);
+        target.restore();
     }
+}
+
+/**
+ * @brief 释放两级绘制缓存（宿主隐藏/退出时调用，归还内存）
+ * @author chiangyang
+ */
+void AnnotationInteractionHandler::clearPaintCaches() {
+    m_baseCache = QPixmap();
+    m_mosaicCache = QPixmap();
+    m_baseCacheVersion = 0;
+    m_mosaicCacheMosaicVer = 0;
+    m_mosaicCacheBaseVer = 0;
 }
 
 // ============================================================

@@ -226,19 +226,11 @@ void PinWindow::paintEvent(QPaintEvent *event) {
 
     // 绘制标注
     if (m_annotationHandler->manager().hasMosaicStrokes()) {
-        // 有马赛克时：先渲染到离屏 canvas（拉伸原图 + 标注），再对 canvas 做马赛克像素化
-        // background 使用 canvas 本身（所见即所得），offset 为零（马赛克笔迹已是本地坐标）
-        QPixmap canvas(size());
-        if (canvas.isNull()) {
-            return;
-        }
-        canvas.fill(Qt::transparent);
-        QPainter cp(&canvas);
-        cp.setRenderHint(QPainter::SmoothPixmapTransform, scaled);
-        cp.drawPixmap(rect(), m_pixmap, QRectF(m_pixmap.rect()));
-        m_annotationHandler->drawWithMosaic(cp, canvas, AnnotationManager::kDefaultMosaicBlockSize, QPoint());
-        cp.end();
-        painter.drawPixmap(0, 0, canvas);
+        // 有马赛克时：走带两级缓存（基础层+全局像素化）的合成路径，
+        // 背景为拉伸铺满窗口的贴图原图；涂抹过程中仅重建像素化图层
+        m_annotationHandler->drawWithMosaic(painter, m_pixmap, size(),
+                                            AnnotationManager::kDefaultMosaicBlockSize,
+                                            QPoint(), /*stretchBackground=*/true);
     } else if (m_annotationHandler->manager().hasAnnotations()) {
         // 无马赛克时：直接在窗口上绘制标注
         m_annotationHandler->drawAnnotations(painter, QPoint());
