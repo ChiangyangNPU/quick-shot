@@ -49,6 +49,15 @@ TranslationManager::TranslationManager(QObject *parent) : QObject(parent) {
     
     // If system language is Chinese, load Chinese
     if (systemLang.startsWith("zh")) {
+        // 先精确匹配系统语言的繁体变体（zh_TW/zh_HK），匹配不到再回退简体，
+        // 避免繁体系统初始拿到简体界面；带脚本标记的形式（zh_Hant_*）视为繁体
+        QString preferred = systemLang.contains("Hant", Qt::CaseInsensitive)
+                                ? QStringLiteral("zh_TW")
+                                : systemLang;
+        if (preferred != "zh_CN" && loadLanguage(preferred)) {
+            LOG_INFO(QString("Loaded Chinese language: %1").arg(preferred));
+            return;
+        }
         if (loadLanguage("zh_CN")) {
             LOG_INFO("Loaded Chinese language");
             return;
