@@ -189,6 +189,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/core/StyleManager.h
         src/core/ConfigManager.cpp
         src/core/ConfigManager.h
+        src/core/SecretStore.cpp
+        src/core/SecretStore.h
         src/core/DisplayInfo.cpp
         src/core/DisplayInfo.h
         src/core/Hunter.cpp
@@ -353,7 +355,7 @@ if (WIN32 AND ONNXRUNTIME_FOUND AND ENABLE_OCR_GPU_ACCELERATION)
 endif()
 
 if (WIN32)
-    target_link_libraries(QuickShot mfplat mfreadwrite mfuuid ole32 dbghelp dwmapi)
+    target_link_libraries(QuickShot mfplat mfreadwrite mfuuid ole32 dbghelp dwmapi crypt32)
 endif()
 
 # Ninja + MinGW：强制链接/编译走响应文件（@rsp），避免对象文件全量内联进
@@ -372,6 +374,7 @@ if (ONNXRUNTIME_FOUND AND WIN32)
 endif()
 
 if (APPLE)
+    find_library(SECURITY_KIT Security)
     find_library(SCREEN_CAPTURE_KIT ScreenCaptureKit)
     find_library(APP_KIT AppKit)
     find_library(CORE_FOUNDATION CoreFoundation)
@@ -381,7 +384,7 @@ if (APPLE)
     find_library(CORE_VIDEO CoreVideo)
     find_library(CORE_MEDIA CoreMedia)
     find_library(QUARTZ_CORE QuartzCore)
-    target_link_libraries(QuickShot ${SCREEN_CAPTURE_KIT} ${APP_KIT} ${CORE_FOUNDATION} ${CORE_GRAPHICS} ${CARBON} ${AV_FOUNDATION} ${CORE_VIDEO} ${CORE_MEDIA} ${QUARTZ_CORE})
+    target_link_libraries(QuickShot ${SCREEN_CAPTURE_KIT} ${APP_KIT} ${CORE_FOUNDATION} ${CORE_GRAPHICS} ${CARBON} ${AV_FOUNDATION} ${CORE_VIDEO} ${CORE_MEDIA} ${QUARTZ_CORE} ${SECURITY_KIT})
 endif()
 
 # 拷贝 models 目录到构建输出目录

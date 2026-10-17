@@ -157,9 +157,8 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "translate/sourceLang", "auto" },
         { "translate/targetLang", "en" },
         { "translate/mymemoryEmail", "" },
-        { "translate/baiduAppId", "" },
-        { "translate/baiduKey", "" },
-        { "translate/deeplKey", "" },
+        // 翻译引擎凭据（baiduAppId/baiduKey/deeplKey）不入 INI 默认值：
+        // 经 SecretStore 加密存储（DPAPI/Keychain），老配置由读路径自动迁移
         { "translate/libreUrl", "" },
         { "translate/showPrivacyWarning", true },
     };
@@ -445,7 +444,7 @@ void ConfigManager::sync() {
 void ConfigManager::saveConfigPath(const QString &path) {
     // 使用默认配置文件保存配置路径信息
     QSettings defaultSettings(m_defaultConfigPath, QSettings::IniFormat);
-    defaultSettings.setValue(KEY_CONFIG_PATH, encryptString(path));
+    defaultSettings.setValue(KEY_CONFIG_PATH, encodeConfigPath(path));
     defaultSettings.sync();
     LOG_INFO(QString("Saved config path: %1").arg(path));
 }
@@ -461,7 +460,7 @@ QString ConfigManager::loadConfigPath() {
     if (encryptedPath.isEmpty()) {
         return QString();
     }
-    return decryptString(encryptedPath);
+    return decodeConfigPath(encryptedPath);
 }
 
 /**
@@ -470,7 +469,7 @@ QString ConfigManager::loadConfigPath() {
  * @return 加密后的文本
  * @author chiangyang
  */
-QString ConfigManager::encryptString(const QString &plainText) {
+QString ConfigManager::encodeConfigPath(const QString &plainText) {
     QByteArray data = plainText.toUtf8();
     return data.toBase64();
 }
@@ -481,7 +480,7 @@ QString ConfigManager::encryptString(const QString &plainText) {
  * @return 解密后的明文
  * @author chiangyang
  */
-QString ConfigManager::decryptString(const QString &encryptedText) {
-    QByteArray data = QByteArray::fromBase64(encryptedText.toUtf8());
+QString ConfigManager::decodeConfigPath(const QString &encodedText) {
+    QByteArray data = QByteArray::fromBase64(encodedText.toUtf8());
     return QString::fromUtf8(data);
 }

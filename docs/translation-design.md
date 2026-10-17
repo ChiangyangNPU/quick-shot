@@ -17,6 +17,7 @@ QuickShot 的翻译功能基于截图 OCR 识别结果，将识别出的文字�
 | 翻译引擎抽象 | 纯 Qt QObject 子类 | 统一异步 translate() 接口与错误码体系 |
 | 默认引擎 | MyMemory 免费 API（免注册） | 国内可直连，带 email 提升额度至 50000 词/天 |
 | 扩展引擎 | 百度翻译 / DeepL / LibreTranslate | 用户自填 Key / URL，软件不预置任何凭证 |
+| 凭据存储 | SecretStore（Windows DPAPI / macOS Keychain / Linux 明文降级） | API Key 不再明文进 INI，老配置读路径自动迁移 |
 | 网络请求 | Qt6::Network QNetworkAccessManager | HTTP GET + JSON 解析 |
 | TLS 支持 | Qt TLS 后端插件 post-build 部署 | 确保 HTTPS 请求正常 |
 | 批量翻译 | 逐段顺序 + 失败回退原文 | 避免单段失败中断整体流程 |

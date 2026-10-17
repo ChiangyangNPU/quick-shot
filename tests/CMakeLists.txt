@@ -89,6 +89,17 @@ target_include_directories(ResizerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(ResizerTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets)
 add_test(NAME ResizerTest COMMAND ResizerTest)
 
+# ---- SecretStore：凭据安全存储（DPAPI/Keychain 回环，主线程 QSettings）----
+add_executable(SecretStoreTest SecretStoreTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/core/SecretStore.cpp
+    ${QS_TEST_CORE_SOURCES})
+target_include_directories(SecretStoreTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(SecretStoreTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg)
+if (APPLE)
+    target_link_libraries(SecretStoreTest PRIVATE "-framework Security")
+endif()
+add_test(NAME SecretStoreTest COMMAND SecretStoreTest)
+
 # ---- 马赛克两级绘制缓存：输出等价性（QTEST_MAIN 需 QGuiApplication 跑 QPixmap）----
 add_executable(MosaicPaintCacheTest MosaicPaintCacheTest.cpp
     ${CMAKE_SOURCE_DIR}/src/capture/AnnotationInteractionHandler.cpp

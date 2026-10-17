@@ -3236,6 +3236,7 @@ src/
 │   └── SnipScreen.h/cpp  # 主窗口（截图路径协调 + 模式切换入口）
 ├── core/                 # 核心服务
 │   ├── ConfigManager.h/cpp      # 配置管理（单例、QSettings 持久化封装）
+│   ├── SecretStore.h/cpp        # 凭据安全存储（Windows DPAPI / macOS Keychain / Linux 明文降级 + 旧明文自动迁移）
 │   ├── DisplayInfo.h/cpp # 显示器信息（平台相关）
 │   ├── Hunter.h/cpp      # 窗口捕捉（窗口/显示器枚举与吸附）
 │   ├── StyleManager.h/cpp       # 样式管理（颜色主题、QSS样式）
@@ -3355,6 +3356,7 @@ src/
 | `src/history/ClipboardMonitor.h` | 剪贴板监听器（捕获复制/剪切文本入库） |
 | `src/translate/TranslateEngine.h` | 翻译引擎抽象接口 + TranslateError 错误码枚举 |
 | `src/translate/TranslateService.h` | 翻译服务单例（多引擎切换、批量翻译状态机、checkEnabledAndPrivacy、错误消息本地化） |
+| `src/core/SecretStore.h` | 凭据安全存储（百度/DeepL Key 经 DPAPI/Keychain 加密，readWithLegacyMigration 自动迁移旧明文） |
 | `src/widgets/TranslateOverlayWindow.h` | 译文叠加窗口（OCR 多边形位置渲染、三态视图、文字选择复制、保存图片、翻译完成退出截图框） |
 | `src/translate/MyMemoryEngine.h` | MyMemory 引擎（默认免注册、国内直连、50000 词/天 email 提额） |
 | `src/translate/BaiduTranslateEngine.h` | 百度翻译引擎（用户自填 AppId + Key，200 万字符/月免费） |

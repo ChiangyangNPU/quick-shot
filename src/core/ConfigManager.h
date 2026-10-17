@@ -220,20 +220,21 @@ private:
     QString loadConfigPath();
 
     /**
-     * @brief 加密字符串（简单的 Base64 编码，实际使用中建议使用更安全的加密方式）
+     * @brief 配置路径存储混淆（Base64 编码——仅避免路径以明文直读，
+     *        不是加密；敏感凭据请使用 SecretStore）
      * @param plainText 明文
-     * @return 加密后的文本
+     * @return Base64 编码文本
      * @author chiangyang
      */
-    QString encryptString(const QString &plainText);
+    QString encodeConfigPath(const QString &plainText);
 
     /**
-     * @brief 解密字符串
-     * @param encryptedText 加密文本
-     * @return 解密后的明文
+     * @brief 还原配置路径混淆（Base64 解码）
+     * @param encodedText 编码文本
+     * @return 原文
      * @author chiangyang
      */
-    QString decryptString(const QString &encryptedText);
+    QString decodeConfigPath(const QString &encodedText);
 
     /**
      * @brief 创建默认配置文件

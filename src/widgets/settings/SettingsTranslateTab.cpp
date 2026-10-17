@@ -1,5 +1,6 @@
 #include "SettingsTranslateTab.h"
 #include "../../core/ConfigManager.h"
+#include "../../core/SecretStore.h"
 #include "../../core/TranslationManager.h"
 #include "../../core/StyleManager.h"
 #include "../../translate/TranslateService.h"
@@ -212,9 +213,9 @@ void SettingsTranslateTab::setupUi() {
         m_translateEngineCombo->setCurrentIndex(eIdx);
     }
     m_mymemoryEmailEdit->setText(settings->value("translate/mymemoryEmail", "").toString());
-    m_baiduAppIdEdit->setText(settings->value("translate/baiduAppId", "").toString());
-    m_baiduKeyEdit->setText(settings->value("translate/baiduKey", "").toString());
-    m_deeplKeyEdit->setText(settings->value("translate/deeplKey", "").toString());
+    m_baiduAppIdEdit->setText(SecretStore::readWithLegacyMigration(settings, "translate/baiduAppId"));
+    m_baiduKeyEdit->setText(SecretStore::readWithLegacyMigration(settings, "translate/baiduKey"));
+    m_deeplKeyEdit->setText(SecretStore::readWithLegacyMigration(settings, "translate/deeplKey"));
     m_libreUrlEdit->setText(settings->value("translate/libreUrl", "").toString());
     int tIdx = m_translateLangCombo->findData(settings->value("translate/targetLang", "en").toString());
     if (tIdx >= 0) {
@@ -259,9 +260,14 @@ void SettingsTranslateTab::onTranslateSettingChanged() {
     settings->setValue("translate/engine", m_translateEngineCombo->currentData().toString());
     settings->setValue("translate/targetLang", m_translateLangCombo->currentData().toString());
     settings->setValue("translate/mymemoryEmail", m_mymemoryEmailEdit->text());
-    settings->setValue("translate/baiduAppId", m_baiduAppIdEdit->text());
-    settings->setValue("translate/baiduKey", m_baiduKeyEdit->text());
-    settings->setValue("translate/deeplKey", m_deeplKeyEdit->text());
+    // 凭据经 SecretStore 加密存储（空串=删除）；仅存储成功时才清除可能
+    // 残留的旧明文键——存储失败时保留明文兜底，避免用户输入丢失
+    const bool appOk = SecretStore::storeSecret("translate/baiduAppId", m_baiduAppIdEdit->text());
+    const bool baiduOk = SecretStore::storeSecret("translate/baiduKey", m_baiduKeyEdit->text());
+    const bool deeplOk = SecretStore::storeSecret("translate/deeplKey", m_deeplKeyEdit->text());
+    if (appOk) settings->remove("translate/baiduAppId");
+    if (baiduOk) settings->remove("translate/baiduKey");
+    if (deeplOk) settings->remove("translate/deeplKey");
     settings->setValue("translate/libreUrl", m_libreUrlEdit->text());
     settings->setValue("translate/enabled", m_translateEnabledCheck->isChecked());
     settings->setValue("translate/showPrivacyWarning", m_translatePrivacyCheck->isChecked());

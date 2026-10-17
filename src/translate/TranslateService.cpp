@@ -4,6 +4,7 @@
 #include "DeepLEngine.h"
 #include "LibreTranslateEngine.h"
 #include "ConfigManager.h"
+#include "SecretStore.h"
 #include "../core/TranslationManager.h"
 #include "../core/StyleManager.h"
 #include "../utils/Utils.h"
@@ -139,9 +140,10 @@ void TranslateService::loadConfig(QSettings *settings) {
     m_targetLang = settings->value("translate/targetLang", "en").toString();
     m_sourceLang = settings->value("translate/sourceLang", "auto").toString();
     m_mymemoryEmail = settings->value("translate/mymemoryEmail", "").toString();
-    m_baiduAppId = settings->value("translate/baiduAppId", "").toString();
-    m_baiduKey = settings->value("translate/baiduKey", "").toString();
-    m_deeplKey = settings->value("translate/deeplKey", "").toString();
+    // 凭据经 SecretStore 加密存储；老明文配置在此自动迁移
+    m_baiduAppId = SecretStore::readWithLegacyMigration(settings, "translate/baiduAppId");
+    m_baiduKey = SecretStore::readWithLegacyMigration(settings, "translate/baiduKey");
+    m_deeplKey = SecretStore::readWithLegacyMigration(settings, "translate/deeplKey");
     m_libreUrl = settings->value("translate/libreUrl", "").toString();
 
     // 重建所有引擎实例
