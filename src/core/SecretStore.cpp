@@ -80,12 +80,11 @@ QString SecretStore::readSecret(const QString &key) {
                       .arg(key).arg(GetLastError()));
         return QString();
     }
+    // 存储时不含 NUL，读回长度即字符数
     const QString plain = QString::fromWCharArray(
         reinterpret_cast<const wchar_t *>(out.pbData),
         static_cast<int>(out.cbData / sizeof(wchar_t)));
     LocalFree(out.pbData);
-    // 去掉加密时附带写入的尾部 NUL
-    while (plain.endsWith(QChar(u'\0'))) plain.chop(1);
     return plain;
 }
 
@@ -98,7 +97,7 @@ bool SecretStore::storeSecret(const QString &key, const QString &plain) {
     const std::wstring w = plain.toStdWString();
     DATA_BLOB in{}, out{};
     in.pbData = reinterpret_cast<BYTE *>(const_cast<wchar_t *>(w.data()));
-    in.cbData = static_cast<DWORD>((w.size() + 1) * sizeof(wchar_t));  // 含 NUL
+    in.cbData = static_cast<DWORD>(w.size() * sizeof(wchar_t));  // 不含 NUL（DPAPI 不要求结尾符）
     if (!CryptProtectData(&in, L"QuickShot", nullptr, nullptr, nullptr, 0, &out)) {
         LOG_ERROR(QString("SecretStore: CryptProtectData failed for '%1' (err %2)")
                       .arg(key).arg(GetLastError()));
