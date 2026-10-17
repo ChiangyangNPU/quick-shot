@@ -168,6 +168,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         # 快捷键子系统
         src/shortcut/GlobalShortcut.cpp
         src/shortcut/GlobalShortcut.h
+        src/shortcut/ShortcutKeyMap.cpp
+        src/shortcut/ShortcutKeyMap.h
         src/shortcut/ShortcutTypes.h
         src/shortcut/ShortcutTypes.cpp
         src/shortcut/ShortcutRegistry.cpp

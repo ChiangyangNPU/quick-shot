@@ -46,6 +46,17 @@ target_include_directories(OcrDetPostprocessTest PRIVATE ${CMAKE_SOURCE_DIR}/src
 target_link_libraries(OcrDetPostprocessTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
 add_test(NAME OcrDetPostprocessTest COMMAND OcrDetPostprocessTest)
 
+# ---- GlobalShortcut 键码映射表：Qt 键 → 平台虚拟键码（纯数据，无 GUI 依赖）----
+add_executable(GlobalShortcutKeyMapTest GlobalShortcutKeyMapTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/shortcut/ShortcutKeyMap.cpp)
+target_include_directories(GlobalShortcutKeyMapTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(GlobalShortcutKeyMapTest PRIVATE Qt6::Test Qt6::Core)
+if (APPLE)
+    # ShortcutKeyMap.cpp 的 macOS 分支使用 Carbon kVK_* 常量
+    target_link_libraries(GlobalShortcutKeyMapTest PRIVATE "-framework Carbon")
+endif()
+add_test(NAME GlobalShortcutKeyMapTest COMMAND GlobalShortcutKeyMapTest)
+
 # ---- AnnotationManager：撤销/重做/清除快照/移动记录/缩放（纯逻辑，无 GUI 依赖）----
 add_executable(AnnotationManagerTest AnnotationManagerTest.cpp
     ${CMAKE_SOURCE_DIR}/src/capture/AnnotationManager.cpp

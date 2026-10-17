@@ -1,4 +1,5 @@
 #include "GlobalShortcut.h"
+#include "ShortcutKeyMap.h"
 #include <QCoreApplication>
 #include <atomic>
 #include "../log/Logger.h"
@@ -86,40 +87,9 @@ bool GlobalShortcut::nativeRegister(Qt::KeyboardModifiers modifiers, Qt::Key key
     if (modifiers & Qt::ShiftModifier) fsModifiers |= MOD_SHIFT;
     if (modifiers & Qt::MetaModifier) fsModifiers |= MOD_WIN;
 
-    // 将Qt::Key转换为Windows虚拟键码
-    // 字母键 A-Z 和数字键 0-9 的 Qt::Key 与 ASCII 码相同，可直接用作 VK
-    // 功能键 F1-F24 通过偏移计算
-    // 标点键（反引号/减号/方括号等）需通过 OEM 虚拟键码映射表转换
-    UINT vk = 0;
-    if (key >= Qt::Key_A && key <= Qt::Key_Z) {
-        vk = key;
-    } else if (key >= Qt::Key_0 && key <= Qt::Key_9) {
-        vk = key;
-    } else if (key >= Qt::Key_F1 && key <= Qt::Key_F24) {
-        vk = VK_F1 + (key - Qt::Key_F1);
-    } else {
-        // 常用标点键映射表（OEM 虚拟键码）
-        // 解决反引号(`)等标点键无法注册全局热键的问题
-        static const QHash<int, UINT> extraKeyMap = {
-            { Qt::Key_QuoteLeft,   VK_OEM_3 },      // ` 反引号
-            { Qt::Key_Minus,       VK_OEM_MINUS },  // - 减号
-            { Qt::Key_Equal,       VK_OEM_PLUS },   // = 等号
-            { Qt::Key_BracketLeft,  VK_OEM_4 },     // [ 左方括号
-            { Qt::Key_BracketRight, VK_OEM_6 },     // ] 右方括号
-            { Qt::Key_Semicolon,   VK_OEM_1 },      // ; 分号
-            { Qt::Key_Apostrophe,  VK_OEM_7 },      // ' 单引号
-            { Qt::Key_Comma,       VK_OEM_COMMA },  // , 逗号
-            { Qt::Key_Period,      VK_OEM_PERIOD }, // . 句号
-            { Qt::Key_Slash,       VK_OEM_2 },      // / 斜杠
-            { Qt::Key_Backslash,   VK_OEM_5 },      // \ 反斜杠
-        };
-        auto it = extraKeyMap.find(key);
-        if (it != extraKeyMap.end()) {
-            vk = it.value();
-        }
-    }
-
-    if (vk == 0) {
+    // 将Qt::Key转换为Windows虚拟键码（映射表在 ShortcutKeyMap，可独立单测）
+    const int vk = ShortcutKeyMap::qtKeyToVirtualKeyCode(key);
+    if (vk < 0) {
         LOG_ERROR(QString("不支持的键: %1, ID: %2")
                   .arg(key).arg(m_hotkeyId));
         LOG_WARNING(QString("Unsupported key for global shortcut: %1").arg(key));
@@ -128,7 +98,7 @@ bool GlobalShortcut::nativeRegister(Qt::KeyboardModifiers modifiers, Qt::Key key
 
     // RegisterHotKey(HWND, ID, Modifiers, VK)
     // HWND可以为NULL，以便在消息循环线程中接收WM_HOTKEY
-    BOOL result = RegisterHotKey(NULL, m_hotkeyId, fsModifiers | MOD_NOREPEAT, vk);
+    BOOL result = RegisterHotKey(NULL, m_hotkeyId, fsModifiers | MOD_NOREPEAT, static_cast<UINT>(vk));
     if (result) {
         m_isRegistered = true;
     } else {
@@ -264,50 +234,14 @@ static void ensureCarbonHandlerInstalled() {
 bool GlobalShortcut::nativeRegister(Qt::KeyboardModifiers modifiers, Qt::Key key) {
     m_targetKeyCode = 0;
 
-    // Qt::Key 到 macOS 虚拟键码（kVK_ANSI_*）映射表（与 Carbon 一致）
-    static const QHash<int, int> keyMapping = {
-        // 字母键
-        {Qt::Key_A, kVK_ANSI_A}, {Qt::Key_S, kVK_ANSI_S},
-        {Qt::Key_D, kVK_ANSI_D}, {Qt::Key_F, kVK_ANSI_F},
-        {Qt::Key_H, kVK_ANSI_H}, {Qt::Key_G, kVK_ANSI_G},
-        {Qt::Key_Z, kVK_ANSI_Z}, {Qt::Key_X, kVK_ANSI_X},
-        {Qt::Key_C, kVK_ANSI_C}, {Qt::Key_V, kVK_ANSI_V},
-        {Qt::Key_B, kVK_ANSI_B}, {Qt::Key_Q, kVK_ANSI_Q},
-        {Qt::Key_W, kVK_ANSI_W}, {Qt::Key_E, kVK_ANSI_E},
-        {Qt::Key_R, kVK_ANSI_R}, {Qt::Key_Y, kVK_ANSI_Y},
-        {Qt::Key_T, kVK_ANSI_T}, {Qt::Key_O, kVK_ANSI_O},
-        {Qt::Key_U, kVK_ANSI_U}, {Qt::Key_I, kVK_ANSI_I},
-        {Qt::Key_P, kVK_ANSI_P}, {Qt::Key_L, kVK_ANSI_L},
-        {Qt::Key_J, kVK_ANSI_J}, {Qt::Key_K, kVK_ANSI_K},
-        {Qt::Key_N, kVK_ANSI_N}, {Qt::Key_M, kVK_ANSI_M},
-        // 数字键
-        {Qt::Key_1, kVK_ANSI_1}, {Qt::Key_2, kVK_ANSI_2},
-        {Qt::Key_3, kVK_ANSI_3}, {Qt::Key_4, kVK_ANSI_4},
-        {Qt::Key_5, kVK_ANSI_5}, {Qt::Key_6, kVK_ANSI_6},
-        {Qt::Key_7, kVK_ANSI_7}, {Qt::Key_8, kVK_ANSI_8},
-        {Qt::Key_9, kVK_ANSI_9}, {Qt::Key_0, kVK_ANSI_0},
-        // 标点键
-        {Qt::Key_QuoteLeft,   kVK_ANSI_Grave},
-        {Qt::Key_Minus,       kVK_ANSI_Minus},
-        {Qt::Key_Equal,       kVK_ANSI_Equal},
-        {Qt::Key_BracketLeft, kVK_ANSI_LeftBracket},
-        {Qt::Key_BracketRight,kVK_ANSI_RightBracket},
-        {Qt::Key_Semicolon,   kVK_ANSI_Semicolon},
-        {Qt::Key_Apostrophe,  kVK_ANSI_Quote},
-        {Qt::Key_Comma,       kVK_ANSI_Comma},
-        {Qt::Key_Period,      kVK_ANSI_Period},
-        {Qt::Key_Slash,       kVK_ANSI_Slash},
-        {Qt::Key_Backslash,   kVK_ANSI_Backslash},
-    };
-
-    if (keyMapping.contains(key)) {
-        m_targetKeyCode = keyMapping.value(key);
-    } else if (key >= Qt::Key_F1 && key <= Qt::Key_F24) {
-        m_targetKeyCode = kVK_F1 + (key - Qt::Key_F1);
-    } else {
+    // Qt::Key → Carbon 虚拟键码（映射表在 ShortcutKeyMap，可独立单测；
+    // kVK_F* 宏不连续，F 键已改显式查表修复旧算术映射的错键问题）
+    const int vk = ShortcutKeyMap::qtKeyToVirtualKeyCode(key);
+    if (vk < 0) {
         LOG_ERROR(QString("不支持的键: %1, ID: %2").arg(key).arg(m_hotkeyId));
         return false;
     }
+    m_targetKeyCode = vk;
 
     // 修饰键：Qt → Carbon 经典修饰键位
     // Qt::AltModifier     → optionKey  (0x08, ⌥)
