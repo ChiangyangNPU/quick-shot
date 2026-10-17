@@ -370,7 +370,7 @@ bool OcrEngine::initialize(const QString &modelDir) {
             auto shape = tensorInfo.GetShape();
             QString shapeStr;
             for (auto s : shape) shapeStr += QString("%1 ").arg(s);
-            LOG_INFO(QString("OcrEngine: Det input %1: name=%2, shape=[%3]")
+            LOG_DEBUG(QString("OcrEngine: Det input %1: name=%2, shape=[%3]")
                 .arg(i).arg(name.get()).arg(shapeStr.trimmed()));
         }
         for (size_t i = 0; i < detOutputCount; ++i) {
@@ -380,7 +380,7 @@ bool OcrEngine::initialize(const QString &modelDir) {
             auto shape = tensorInfo.GetShape();
             QString shapeStr;
             for (auto s : shape) shapeStr += QString("%1 ").arg(s);
-            LOG_INFO(QString("OcrEngine: Det output %1: name=%2, shape=[%3]")
+            LOG_DEBUG(QString("OcrEngine: Det output %1: name=%2, shape=[%3]")
                 .arg(i).arg(name.get()).arg(shapeStr.trimmed()));
         }
 
@@ -395,7 +395,7 @@ bool OcrEngine::initialize(const QString &modelDir) {
             auto shape = tensorInfo.GetShape();
             QString shapeStr;
             for (auto s : shape) shapeStr += QString("%1 ").arg(s);
-            LOG_INFO(QString("OcrEngine: Rec input %1: name=%2, shape=[%3]")
+            LOG_DEBUG(QString("OcrEngine: Rec input %1: name=%2, shape=[%3]")
                 .arg(i).arg(name.get()).arg(shapeStr.trimmed()));
         }
         for (size_t i = 0; i < recOutputCount; ++i) {
@@ -405,7 +405,7 @@ bool OcrEngine::initialize(const QString &modelDir) {
             auto shape = tensorInfo.GetShape();
             QString shapeStr;
             for (auto s : shape) shapeStr += QString("%1 ").arg(s);
-            LOG_INFO(QString("OcrEngine: Rec output %1: name=%2, shape=[%3]")
+            LOG_DEBUG(QString("OcrEngine: Rec output %1: name=%2, shape=[%3]")
                 .arg(i).arg(name.get()).arg(shapeStr.trimmed()));
         }
 
@@ -623,12 +623,12 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
 
     try {
         // 1. 预处理：检测
-        LOG_INFO(QString("OcrEngine: Input image size: %1x%2, GPU=%3")
+        LOG_DEBUG(QString("OcrEngine: Input image size: %1x%2, GPU=%3")
             .arg(image.width()).arg(image.height())
             .arg(m_useGpu ? "enabled" : "disabled"));
 
         auto detInput = OcrPreprocess::preprocessForDet(image);
-        LOG_INFO(QString("OcrEngine: Det preprocessed: %1x%2, data size: %3")
+        LOG_DEBUG(QString("OcrEngine: Det preprocessed: %1x%2, data size: %3")
             .arg(detInput.resizedW).arg(detInput.resizedH).arg(detInput.data.size()));
         // 2. 运行检测模型
         Ort::AllocatorWithDefaultOptions allocator;
@@ -654,16 +654,20 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
         int outH = static_cast<int>(detOutputShape[2]);
         int outW = static_cast<int>(detOutputShape[3]);
 
-        // 打印检测输出的统计信息
-        float minVal = 1e9, maxVal = -1e9, sumVal = 0;
-        int totalPixels = outH * outW;
-        for (int i = 0; i < totalPixels; ++i) {
-            if (detOutputData[i] < minVal) minVal = detOutputData[i];
-            if (detOutputData[i] > maxVal) maxVal = detOutputData[i];
-            sumVal += detOutputData[i];
+        // 检测输出统计信息仅在 DEBUG 级别计算与打印：
+        // 全像素遍历（如 960x960 约 92 万次）在默认 INFO 级别下纯属开销
+        if (Logger::instance()->isLogEnabled()
+            && Logger::instance()->getLogLevel() <= Logger::LOG_DEBUG) {
+            float minVal = 1e9, maxVal = -1e9, sumVal = 0;
+            int totalPixels = outH * outW;
+            for (int i = 0; i < totalPixels; ++i) {
+                if (detOutputData[i] < minVal) minVal = detOutputData[i];
+                if (detOutputData[i] > maxVal) maxVal = detOutputData[i];
+                sumVal += detOutputData[i];
+            }
+            LOG_DEBUG(QString("OcrEngine: Det output shape: [%1, %2], min=%3, max=%4, avg=%5")
+                .arg(outH).arg(outW).arg(minVal).arg(maxVal).arg(sumVal / totalPixels));
         }
-        LOG_INFO(QString("OcrEngine: Det output shape: [%1, %2], min=%3, max=%4, avg=%5")
-            .arg(outH).arg(outW).arg(minVal).arg(maxVal).arg(sumVal / totalPixels));
 
         auto boxes = OcrDetPostprocess::process(detOutputData, outH, outW,
             image.width(), image.height(),
@@ -689,13 +693,13 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
             QRect bbox = box.boundingRect().toRect();
             bbox = bbox.intersected(image.rect());
             if (bbox.width() < 2 || bbox.height() < 2) {
-                LOG_INFO(QString("OcrEngine: Box %1 too small (%2x%3), skipped")
+                LOG_DEBUG(QString("OcrEngine: Box %1 too small (%2x%3), skipped")
                     .arg(i).arg(bbox.width()).arg(bbox.height()));
                 continue;
             }
 
             QImage crop = image.copy(bbox);
-            LOG_INFO(QString("OcrEngine: Box %1 crop: %2x%3 at (%4,%5)")
+            LOG_DEBUG(QString("OcrEngine: Box %1 crop: %2x%3 at (%4,%5)")
                 .arg(i).arg(crop.width()).arg(crop.height()).arg(bbox.x()).arg(bbox.y()));
 
             // 预处理：识别
@@ -717,12 +721,12 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
             int seqLen = static_cast<int>(recOutputShape[1]);
             int numChars = static_cast<int>(recOutputShape[2]);
 
-            LOG_INFO(QString("OcrEngine: Box %1 rec output shape: [%2, %3], dict size: %4")
+            LOG_DEBUG(QString("OcrEngine: Box %1 rec output shape: [%2, %3], dict size: %4")
                 .arg(i).arg(seqLen).arg(numChars).arg(m_charDict.size()));
 
             auto recResult = OcrRecPostprocess::decode(recOutputData, seqLen, numChars, m_charDict);
 
-            LOG_INFO(QString("OcrEngine: Raw rec result: score=%1 text=\"%2\" (seqLen=%3, numChars=%4, dictSize=%5)")
+            LOG_DEBUG(QString("OcrEngine: Raw rec result: score=%1 text=\"%2\" (seqLen=%3, numChars=%4, dictSize=%5)")
                      .arg(recResult.score, 0, 'f', 3).arg(recResult.text).arg(seqLen).arg(numChars).arg(m_charDict.size()));
 
             if (!recResult.text.isEmpty() && recResult.score > 0.0f) {
@@ -739,7 +743,7 @@ OcrEngine::OcrResult OcrEngine::recognize(const QImage &image) {
 
         LOG_INFO(QString("OcrEngine: Recognized %1 text regions").arg(result.texts.size()));
         for (int i = 0; i < result.texts.size(); ++i) {
-            LOG_INFO(QString("OcrEngine: [%1] score=%2 text=\"%3\"").arg(i).arg(result.scores[i], 0, 'f', 3).arg(result.texts[i]));
+            LOG_DEBUG(QString("OcrEngine: [%1] score=%2 text=\"%3\"").arg(i).arg(result.scores[i], 0, 'f', 3).arg(result.texts[i]));
         }
 
     } catch (const Ort::Exception &e) {
