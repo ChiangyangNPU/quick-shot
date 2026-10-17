@@ -1,4 +1,4 @@
-QuickShot v0.2.0 —— 安全性与体验全面升级（GitHub / Gitee 双端同步发布）
+QuickShot v0.1.1 —— 安全性与体验全面升级（GitHub / Gitee 双端同步发布）
 
 ## ✨ 新增
 
@@ -34,9 +34,9 @@ QuickShot v0.2.0 —— 安全性与体验全面升级（GitHub / Gitee 双端�
 
 | 平台 | 文件 | 说明 |
 |------|------|------|
-| Windows x64 | `QuickShot-Release-v0.2.0-Windows-x64.zip` | 解压即用，已含全部依赖 |
-| macOS arm64 | `QuickShot-Release-v0.2.0.dmg` | 引导式安装窗口，把 QuickShot 拖入「应用程序」 |
+| Windows x64 | `QuickShot-Release-v0.1.1-Windows-x64.zip` | 解压即用，已含全部依赖 |
+| macOS arm64 | `QuickShot-Release-v0.1.1.dmg` | 引导式安装窗口，把 QuickShot 拖入「应用程序」 |
 
 > macOS 未做 Apple 公证：首次打开请**右键 →「打开」**放行；录屏 / 系统录音需在「系统设置 → 隐私与安全性」中授权。
-> **升级提示**：安装前请先退出正在运行的旧版本（托盘图标右键 → 退出），否则新版会被单实例拦截无法启动。
+> **升级提示**：通过应用内"检查更新"升级的用户无需任何操作（更新流程自动完成新旧交接）。手动安装时若启动新版提示「QuickShot 已在运行」，请先退出旧版本（托盘图标右键 → 退出）再启动——这正是单实例保护在防止两个版本同时抢占热键和剪贴板记录。
 > **密钥迁移提示**：使用过百度/DeepL 翻译的用户，首次启动新版本后 Key 会自动迁移到系统安全存储（Windows 首次可能弹出 DPAPI 相关确认，属正常现象）。
