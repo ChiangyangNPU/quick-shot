@@ -4,8 +4,17 @@
 
 #include <QApplication>
 #include <QClipboard>
-#include <QWindow>
-#include <QWidget>
+
+#ifdef Q_OS_WIN
+#include <QFileInfo>
+#include <windows.h>
+#elif defined(Q_OS_MACOS)
+// 经 ObjC runtime 消息发送取前台应用（.cpp 内不引 AppKit 头，与
+// SnipScreen.cpp 的 raiseWindowAboveMenuBar 同一惯用法）
+#include <CoreFoundation/CoreFoundation.h>
+#include <objc/message.h>
+#include <objc/objc.h>
+#endif
 
 /**
  * @brief 构造函数
@@ -119,29 +128,60 @@ QString ClipboardMonitor::getClipboardText()
 }
 
 /**
- * @brief 获取来源应用名称
- * @return 应用名称
+ * @brief 获取来源应用名称（前台应用，按平台取真实进程）
+ *
+ * 复制动作发生在前台应用，其显示名对历史记录才有意义。原实现取
+ * QApplication::activeWindow()——那是本应用的窗口（剪贴板变化多来自
+ * 其他应用，本应用通常并无活动窗口），记录值基本无意义。
  * @author chiangyang
  */
+#if defined(Q_OS_WIN)
 QString ClipboardMonitor::getSourceAppName()
 {
-    // 尝试获取当前活动窗口的应用名称
-    // 由于 Qt 没有直接提供获取活动窗口应用的 API，
-    // 这里使用一个通用的方法，在不同平台上可能不同
-    QString appName = qApp->applicationName();
-
-    // 如果能获取到活动窗口，则尝试获取其所属应用
-    QWidget *activeWindow = QApplication::activeWindow();
-    if (activeWindow) {
-        QWindow *window = activeWindow->windowHandle();
-        if (window) {
-            // 尝试获取窗口标题作为来源信息
-            QString title = activeWindow->windowTitle();
-            if (!title.isEmpty()) {
-                return title;
-            }
-        }
+    const QString fallback = QApplication::applicationName();
+    HWND fg = GetForegroundWindow();
+    if (!fg) return fallback;
+    DWORD pid = 0;
+    GetWindowThreadProcessId(fg, &pid);
+    if (!pid) return fallback;
+    HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!proc) return fallback;
+    WCHAR path[MAX_PATH]{};
+    DWORD size = MAX_PATH;
+    QString name;
+    if (QueryFullProcessImageNameW(proc, 0, path, &size)) {
+        name = QFileInfo(QString::fromWCharArray(path, static_cast<int>(size))).fileName();
     }
-
-    return appName;
+    CloseHandle(proc);
+    return name.isEmpty() ? fallback : name;
 }
+#elif defined(Q_OS_MACOS)
+QString ClipboardMonitor::getSourceAppName()
+{
+    const QString fallback = QApplication::applicationName();
+    // [NSWorkspace sharedWorkspace]
+    id ws = ((id (*)(id, SEL))objc_msgSend)((id)objc_getClass("NSWorkspace"),
+                                            sel_registerName("sharedWorkspace"));
+    if (!ws) return fallback;
+    // ws.frontmostApplication
+    id app = ((id (*)(id, SEL))objc_msgSend)(ws, sel_registerName("frontmostApplication"));
+    if (!app) return fallback;
+    // app.localizedName（NSObject* 与 CFStringRef 无成本桥接，纯 C 下直接强转）
+    CFStringRef cfName = (CFStringRef)((id (*)(id, SEL))objc_msgSend)(app,
+                                                                      sel_registerName("localizedName"));
+    if (!cfName) return fallback;
+    char buf[512]{};
+    if (CFStringGetCString(cfName, buf, sizeof(buf), kCFStringEncodingUTF8)) {
+        const QString name = QString::fromUtf8(buf);
+        if (!name.isEmpty()) return name;
+    }
+    return fallback;
+}
+#else
+// Linux：Qt 无前台应用查询 API，X11 方案（_NET_ACTIVE_WINDOW + _NET_WM_PID）
+// 成本较高暂不引入，回退本应用名（来源字段在 Linux 上暂无参考价值）
+QString ClipboardMonitor::getSourceAppName()
+{
+    return QApplication::applicationName();
+}
+#endif

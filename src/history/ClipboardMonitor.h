@@ -62,7 +62,10 @@ private:
 
     /**
      * @brief 获取来源应用名称
-     * @return 应用名称
+     * @return 前台应用的显示名（如 "Safari"、"chrome.exe"）；
+     *         取不到时回退本应用名。Windows 用 GetForegroundWindow +
+     *         进程镜像名，macOS 用 NSWorkspace frontmostApplication，
+     *         Linux 无低成本 Qt API 暂回退。
      * @author chiangyang
      */
     QString getSourceAppName();

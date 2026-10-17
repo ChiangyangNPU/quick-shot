@@ -373,7 +373,7 @@ private slots:
 
 private:
     QString getClipboardText();   ///< 获取剪贴板文本内容
-    QString getSourceAppName();   ///< 获取来源应用名称
+    QString getSourceAppName();   ///< 获取来源应用名称（前台应用真实进程名：Win32 GetForegroundWindow+镜像名 / macOS NSWorkspace frontmostApplication / Linux 回退本应用名）
 
     QClipboard *m_clipboard;      ///< 系统剪贴板对象
     QString m_lastText;           ///< 上次记录的文本，用于去重
@@ -624,7 +624,7 @@ flowchart TD
     D -->|是| End2[跳过记录]
     D -->|否| E{text == m_lastText?<br/>重复文本}
     E -->|是| End3[跳过，避免重复]
-    E -->|否| F[获取来源应用名称<br/>getSourceAppName]
+    E -->|否| F[获取前台应用进程名<br/>getSourceAppName 平台API]
     F --> G[HistoryManager::addClipboardText<br/>text, sourceApp]
     G --> H[数据库插入记录]
     H --> I[更新 m_lastText]
