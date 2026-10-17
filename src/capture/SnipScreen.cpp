@@ -605,9 +605,11 @@ void SnipScreen::pin() {
  */
 void SnipScreen::pinClipboard() {
     // 从历史记录获取截图列表（按时间倒序，最新在前）
-    const int kMaxHistoryItems = 1000;
+    // 翻页范围上限与历史保留条数（history/maxItems 配置）保持同一数据源，
+    // 不再硬编码 1000；防御配置异常值（0/负数）
+    const int maxItems = qMax(1, HistoryManager::instance()->maxItems());
     QList<HistoryItem> items = HistoryManager::instance()->getItems(
-        HistoryType::Screenshot, 0, kMaxHistoryItems);
+        HistoryType::Screenshot, 0, maxItems);
 
     if (items.isEmpty()) {
         LOG_INFO("[SnipScreen] pinClipboard: no screenshot history, ignored");
