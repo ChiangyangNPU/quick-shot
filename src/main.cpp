@@ -2,6 +2,11 @@
 #include <QSystemTrayIcon>
 #include <QMenu>
 #include <QAction>
+#include <QDir>
+#include <QLockFile>
+#include <QLocale>
+#include <QMessageBox>
+#include <QStandardPaths>
 #include <csignal>
 
 #include "shortcut/ShortcutManager.h"
@@ -38,6 +43,33 @@ void signalHandler(int sig) {
 }
 
 /**
+ * @brief "已在运行"提示文案（按系统语言挑选，不初始化翻译子系统）
+ *
+ * 第二个实例在拿到锁之前就退出，此时不应初始化 ConfigManager/
+ * TranslationManager（会读写配置文件、与既有实例产生无谓竞争），
+ * 故用 QLocale 从六种支持语言中直接选取一句固定文案。
+ * @author chiangyang
+ */
+static QString alreadyRunningText() {
+    const QString lang = QLocale::system().name();
+    if (lang.contains(QStringLiteral("Hant"), Qt::CaseInsensitive)
+        || lang.startsWith(QStringLiteral("zh_TW"))
+        || lang.startsWith(QStringLiteral("zh_HK"))) {
+        return QStringLiteral("QuickShot 已在執行中");
+    }
+    if (lang.startsWith(QStringLiteral("zh"))) {
+        return QStringLiteral("QuickShot 已在运行中");
+    }
+    if (lang.startsWith(QStringLiteral("ja"))) {
+        return QStringLiteral("QuickShot はすでに起動しています");
+    }
+    if (lang.startsWith(QStringLiteral("ko"))) {
+        return QStringLiteral("QuickShot이 이미 실행 중입니다");
+    }
+    return QStringLiteral("QuickShot is already running");
+}
+
+/**
  * @brief 主函数
  * @param argc 命令行参数个数
  * @param argv 命令行参数数组
@@ -58,6 +90,36 @@ int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
 
     LOG_INFO("QuickShot application starting");
+
+    // ============================================================
+    // 单实例互斥：第二个实例提示后立即退出
+    //
+    // 无防护时双开的后果：全局热键注册静默失败（先到者已占用）形成
+    // "半死"托盘实例、剪贴板历史被两个 ClipboardMonitor 重复记录、
+    // 配置 INI 与 SQLite 历史库双写竞争。
+    // 锁文件放按用户隔离的应用数据目录（非共享 Temp），避免 Linux
+    // 多用户场景下互相误拦；崩溃残留的死锁由 QLockFile 按 PID 存活
+    // 自动清理（setStaleLockTime(0)=不按文件年龄抢占活实例的锁）。
+    // ============================================================
+    const QString lockDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    QDir().mkpath(lockDir);
+    QLockFile instanceLock(lockDir + QStringLiteral("/QuickShot.lock"));
+    instanceLock.setStaleLockTime(0);
+    if (!instanceLock.tryLock(0)) {
+        if (instanceLock.error() == QLockFile::LockFailedError) {
+            LOG_WARNING("Another QuickShot instance is running, exiting");
+            QMessageBox box(QMessageBox::Warning, QStringLiteral("QuickShot"),
+                            alreadyRunningText(), QMessageBox::Ok);
+            box.exec();
+            return 0;
+        }
+        // 锁文件无法创建（只读目录等）：降级为无单实例防护继续运行，
+        // 不因基础设施故障阻止应用启动
+        LOG_WARNING(QString("Single-instance lock unavailable (error=%1), "
+                            "continuing without instance guard").arg(instanceLock.error()));
+    } else {
+        LOG_INFO("Single-instance lock acquired");
+    }
 
     // 加载全局样式表（qss），使用 em/pt 单位实现 DPI 自适应
     // 字体用 pt 随 DPI 缩放，控件尺寸用 em 相对字体，两者天然协调
