@@ -4,9 +4,7 @@
 #include "Selector.h"
 #include "../core/Hunter.h"
 #include "ScreenshotToolBar.h"
-#include "RecordingToolBar.h"
-#include "../widgets/RecordingControlWindow.h"
-#include "ScreenRecorder.h"
+#include "RecordingSession.h"
 #include "AnnotationInteractionHandler.h"
 #include "OverlayTextEdit.h"
 #include "../shortcut/IShortcutHandler.h"
@@ -55,6 +53,16 @@ public:
      * @author chiangyang
      */
     explicit SnipScreen(QWidget *parent = nullptr);
+
+    // ---------- RecordingSession 协调所需访问器 ----------
+    // 录屏编排已拆分至 RecordingSession（见 RecordingSession.h），
+    // 以下访问器供其读写宿主共享状态（选区/背景/标注管理器/工具选中标志）
+    Selector *selector() const { return m_selector; }
+    const QPixmap &background() const { return m_background; }
+    const QRect &virtualGeometry() const { return m_virtualGeometry; }
+    AnnotationInteractionHandler *annotationHandler() const { return m_annotationHandler.get(); }
+    bool annotationToolSelected() const { return m_annotationToolSelected; }
+    void setAnnotationToolSelected(bool selected) { m_annotationToolSelected = selected; }
 
 signals:
 public slots:
@@ -143,16 +151,6 @@ public slots:
     void togglePauseRecording();
 
     /**
-     * @brief 复位录制相关 UI 状态（停止/取消路径的公共 7 步）
-     *
-     * stopTimer/resetRecordBtn/hideTimerLabel/setRecording/setPaused/hide。
-     * 不含 clearMask() 与 stop()/cancel() 收尾——停止路径（控制栏按钮）有意
-     * 保持输入遮罩直到 stopped 信号触发 exit()，取消/热键停止路径自行清遮罩。
-     * @author chiangyang
-     */
-    void resetRecordingUi();
-
-    /**
      * @brief 停止录屏（全局热键入口）
      *
      * 仅在录制中生效，停止录制并保留视频文件（区别于取消录制）。
@@ -223,6 +221,43 @@ public slots:
      */
     void clearAnnotations();
 
+    /**
+     * @brief 切换到截图模式
+     *
+     * 由录屏工具栏"截图"按钮与 `·` 键触发；RecordingSession 信号接线需要。
+     * @author chiangyang
+     */
+    void switchToScreenshotMode();
+
+    /**
+     * @brief 更新工具栏和子工具栏位置
+     *
+     * 录屏工具栏/子工具栏/控制栏变化后的重定位统一入口（RecordingSession 调用）。
+     * @author chiangyang
+     */
+    void updateMenuPosition();
+
+    /**
+     * @brief 截取选区画面用于 OCR（不关闭 selector）
+     * @author chiangyang
+     */
+    QPixmap captureSelectionForOcr();
+
+    /**
+     * @brief 对图片进行 OCR 识别并显示结果
+     * @param pixmap 要识别的图片
+     * @author chiangyang
+     */
+    void performOcr(const QPixmap &pixmap);
+
+    /**
+     * @brief 执行翻译流程：截图选区 → OCR 识别 → 批量翻译 → 显示译文叠加窗口
+     *
+     * 二期翻译入口，由截图/录屏工具栏的"翻译"按钮触发；RecordingSession 信号接线需要。
+     * @author chiangyang
+     */
+    void performTranslate();
+
 protected:
     /**
      * @brief 绘制背景（截图）、标注和半透明遮罩
@@ -284,14 +319,12 @@ protected:
 private:
     // ========== 构造阶段（由构造函数按序调用）==========
     void initWindowFlags();                    // 平台相关的窗口标志与透明属性
-    void createComponents();                   // 创建选区 / 工具栏 / 录制器等核心组件
+    void createComponents();                   // 创建选区 / 截图工具栏 / 录屏编排会话等核心组件
     void setupAnnotationHost();                // 装配 AnnotationInteractionHandler 的 Host 回调
     void initScreenWatchTimer();               // macOS 副屏监视定时器（其他平台空实现）
     void connectTranslationSignals();          // 语言切换 → 工具栏文字刷新
-    void connectRecordingSignals();            // 录制控制栏与录制器信号
     void connectSelectorSignals();             // 选区信号
     void connectToolbarSignals();              // 截图工具栏信号
-    void connectRecordingToolbarSignals();     // 录屏工具栏信号
     void connectToolbarStyleSignals();         // 截图工具栏画笔 / 字号信号
     void initAnnotationShortcuts();            // 标注快捷键与 Enter 快捷键
 
@@ -399,40 +432,16 @@ private:
     void switchToRecordingMode();
 
     /**
-     * @brief 切换到截图模式
-     * @author chiangyang
-     */
-    void switchToScreenshotMode();
-
-    /**
      * @brief 更新 Selector 边框颜色
      * @author chiangyang
      */
     void updateBorderColor();
 
     /**
-     * @brief 显示录屏工具栏
-     * @author chiangyang
-     */
-    void showRecordingToolBar();
-
-    /**
-     * @brief 隐藏录屏工具栏
-     * @author chiangyang
-     */
-    void hideRecordingToolBar();
-
-    /**
      * @brief 更新当前活动工具栏的状态
      * @author chiangyang
      */
     void updateToolBarState(bool canUndo, bool canRedo);
-
-    /**
-     * @brief 更新工具栏和子工具栏位置
-     * @author chiangyang
-     */
-    void updateMenuPosition();
 
     /**
      * @brief 计算工具栏位置的辅助方法
@@ -451,33 +460,6 @@ private:
     void calculateToolbarPositions(QWidget *toolbar, QWidget *subToolbar,
                                    QWidget *recordingControl, const QRect &selection,
                                    bool alignRight);
-
-    /**
-     * @brief 截取选区画面用于 OCR（不关闭 selector）
-     * @author chiangyang
-     */
-    QPixmap captureSelectionForOcr();
-
-    /**
-     * @brief 对图片进行 OCR 识别并显示结果
-     * @param pixmap 要识别的图片
-     * @author chiangyang
-     */
-    void performOcr(const QPixmap &pixmap);
-
-    /**
-     * @brief 执行翻译流程：截图选区 → OCR 识别 → 批量翻译 → 显示译文叠加窗口
-     *
-     * 二期翻译入口，由截图/录屏工具栏的"翻译"按钮触发。
-     * 流程：
-     * 1. 截取当前选区画面（含标注）
-     * 2. 首次使用时弹出隐私提示
-     * 3. 异步 OCR 识别，获取文本与位置多边形
-     * 4. 调用 TranslateService 批量逐段翻译
-     * 5. 翻译完成后创建 TranslateOverlayWindow 在选区位置叠加显示
-     * @author chiangyang
-     */
-    void performTranslate();
 
     /**
      * @brief 检查鼠标是否在工具栏区域
@@ -521,20 +503,9 @@ private:
     void cancelTextEdit();
 
     /**
-     * @brief 渲染标注叠加图像（输出分辨率）
+     * @brief 推送标注叠加到录屏器（委托 RecordingSession）
      *
-     * 将标注管理器中的标注渲染到 outputSize 分辨率的透明图像上。
-     * 坐标映射：全局坐标 → 相对于 captureRect → 缩放到 outputSize。
-     *
-     * @return 标注叠加图像（ARGB32格式），无标注时返回空图像
-     * @author chiangyang
-     */
-    QImage renderAnnotationOverlay() const;
-
-    /**
-     * @brief 推送标注叠加到录屏器
-     *
-     * 仅在录制中时有效。调用 renderAnnotationOverlay() 并将结果传给 recorder。
+     * 仅在录制中时有效。渲染 renderAnnotationOverlay() 并推送给录制器。
      * @author chiangyang
      */
     void pushAnnotationOverlay();
@@ -578,9 +549,7 @@ private:
     Hunter m_hunter;                           ///< 猎物检测器（Hunter 实现 IPreyDetector）
     Selector *m_selector = nullptr;           ///< 选区组件
     ScreenshotToolBar *m_toolbar = nullptr;   ///< 截图工具栏
-    RecordingToolBar *m_recordingToolbar = nullptr;   ///< 录屏工具栏
-    RecordingControlWindow *m_recordingControl = nullptr; ///< 录屏控制栏
-    ScreenRecorder *m_screenRecorder = nullptr;       ///< 录屏器
+    RecordingSession *m_recordingSession = nullptr;   ///< 录屏编排协调器（工具栏/控制栏/录制器/遮罩/overlay）
 
     // ---------- 标注交互处理器（提取公共逻辑，通过 Host 回调注入差异）----------
     std::unique_ptr<AnnotationInteractionHandler> m_annotationHandler;
@@ -591,8 +560,6 @@ private:
 
     // ---------- 标注状态（SnipScreen 专有，未提取到 Handler）----------
     bool m_annotationToolSelected = false;  ///< 是否选中了标注工具（非移动/调整模式）
-    bool m_isRecordingMode = false;    ///< 是否为录屏模式
-    bool m_isRecordingCanceled = false; ///< 录制是否被取消（取消时不退出截图）
     OverlayTextEdit *m_textEdit = nullptr;  ///< 当前活动的文本编辑框（仅 Text 工具使用）
     AnnotationShortcutController *m_annotationController = nullptr;  ///< 标注快捷键控制器（策略模式，构造时创建）
 

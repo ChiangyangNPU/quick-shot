@@ -1,4 +1,7 @@
 #include "SnipScreen.h"
+#include "RecordingSession.h"
+#include "RecordingToolBar.h"
+#include "RecordingControlWindow.h"
 #include "CaptureSession.h"
 #include "PinWindow.h"
 #include "AnnotationInteractionHandler.h"
@@ -33,17 +36,6 @@
 #include <QStandardPaths>
 #include <QTimer>
 #include <memory>
-
-#ifdef Q_OS_WIN
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
-// WDA_EXCLUDEFROMCAPTURE 在 Windows 10 2004+ SDK 中定义，旧 SDK 需手动定义
-#ifndef WDA_EXCLUDEFROMCAPTURE
-#define WDA_EXCLUDEFROMCAPTURE 0x00000011
-#endif
-#endif
 
 #ifdef Q_OS_MACOS
 #include <objc/objc.h>
@@ -82,10 +74,9 @@ SnipScreen::SnipScreen(QWidget *parent)
     setupAnnotationHost();
     initScreenWatchTimer();
     connectTranslationSignals();
-    connectRecordingSignals();
+    m_recordingSession->connectSignals();
     connectSelectorSignals();
     connectToolbarSignals();
-    connectRecordingToolbarSignals();
     connectToolbarStyleSignals();
     initAnnotationShortcuts();
 }
@@ -124,16 +115,9 @@ void SnipScreen::createComponents()
     m_toolbar = new ScreenshotToolBar(this);
     m_toolbar->hide();
 
-    // 创建录屏工具栏
-    m_recordingToolbar = new RecordingToolBar(this);
-    m_recordingToolbar->hide();
-
-    // 创建录屏控制栏
-    m_recordingControl = new RecordingControlWindow(this);
-    m_recordingControl->hide();
-
-    // 创建录屏器
-    m_screenRecorder = new ScreenRecorder(this);
+    // 创建录屏编排会话（录屏工具栏/控制栏/录制器与其信号接线均在会话内）
+    m_recordingSession = new RecordingSession(this, this);
+    m_recordingSession->createComponents();
 }
 
 // ============================================================
@@ -202,103 +186,7 @@ void SnipScreen::connectTranslationSignals()
     connect(TranslationManager::instance(), &TranslationManager::languageChanged,
             [this](const QString &) {
         m_toolbar->retranslateUi();
-        m_recordingToolbar->retranslateUi();
-    });
-}
-
-// ============================================================
-// 构造阶段：录制控制栏 / 录制器信号
-// ============================================================
-
-void SnipScreen::connectRecordingSignals()
-{
-    // 录制控制信号连接
-    connect(m_recordingControl, &RecordingControlWindow::startRequested, [this]() {
-        QRect selection = m_selector->selected();
-        // 减去边框宽度，确保边框不被录入视频
-        int borderWidth = StyleManager::SNIP_BORDER_WIDTH;
-        QRect captureRect = selection.adjusted(borderWidth, borderWidth, -borderWidth, -borderWidth);
-        // 使用实际捕获大小作为输出分辨率
-        QSize resolution = captureRect.size();
-
-        // 生成默认保存路径
-        QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
-            + "/QuickShot_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hhmmss") + ".mp4";
-
-        bool ok = m_screenRecorder->start(captureRect, resolution, defaultPath, 30);
-        if (ok) {
-            m_recordingControl->setRecording(true);
-            m_recordingControl->setPaused(false);
-            // 录制中锁定选区，禁止移动/调整
-            m_selector->setStatus(SelectorStatus::Locked);
-            // 更新信息标签并显示录制时间
-            m_selector->updateInfoLabel();
-            m_selector->showTimerLabel();
-            m_recordingToolbar->startTimer();
-#ifdef Q_OS_WIN
-            // 将本窗口排除出录屏捕获：BitBlt(CAPTUREBLT) 会捕获到 SnipScreen 已绘制的标注，
-            // 若不排除，再叠加 overlay 会导致视频中出现重复标注。排除后标注仅由 overlay 合成。
-            if (!SetWindowDisplayAffinity(reinterpret_cast<HWND>(winId()), WDA_EXCLUDEFROMCAPTURE)) {
-                LOG_WARNING("[SnipScreen] SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) failed, "
-                            "recorded video may contain duplicate annotations");
-            }
-#endif
-            pushAnnotationOverlay();
-            updateInputMask();
-            // 录屏开始后禁用录屏工具栏上的截图按钮
-            m_recordingToolbar->setScreenshotButtonEnabled(false);
-            LOG_INFO(QString("[SnipScreen] Recording started: %1").arg(defaultPath));
-        }
-    });
-    connect(m_recordingControl, &RecordingControlWindow::pauseRequested, [this]() {
-        m_screenRecorder->pause();
-        m_recordingControl->setPaused(true);
-        m_recordingToolbar->pauseTimer();
-    });
-    connect(m_recordingControl, &RecordingControlWindow::resumeRequested, [this]() {
-        m_screenRecorder->resume();
-        m_recordingControl->setPaused(false);
-        m_recordingToolbar->resumeTimer();
-    });
-    connect(m_recordingControl, &RecordingControlWindow::stopRequested, [this]() {
-        // 不 clearMask：录制收尾（Finalize）期间保持输入遮罩与工具栏可见，
-        // 等待 stopped 信号触发 exit() 统一清理
-        resetRecordingUi();
-        m_screenRecorder->stop();
-        // 不在此处 exit()，等待 ScreenRecorder::stopped 信号（Finalize 完成后）
-    });
-    connect(m_recordingControl, &RecordingControlWindow::systemAudioToggled, [this](bool enabled) {
-        m_screenRecorder->setAudioEnabled(enabled);
-    });
-    connect(m_recordingControl, &RecordingControlWindow::microphoneToggled, [this](bool enabled) {
-        m_screenRecorder->setMicrophoneEnabled(enabled);
-    });
-    connect(m_screenRecorder, &ScreenRecorder::stopped, [this](const QString &outputFilePath) {
-#ifdef Q_OS_WIN
-        // 录制结束，恢复窗口捕获属性
-        SetWindowDisplayAffinity(reinterpret_cast<HWND>(winId()), WDA_NONE);
-#endif
-        // 录制结束（正常停止或取消），重新启用截图按钮
-        m_recordingToolbar->setScreenshotButtonEnabled(true);
-        if (m_isRecordingCanceled) {
-            LOG_INFO(QString("[SnipScreen] Recording canceled, output file: %1").arg(outputFilePath));
-            // 录制被取消，不退出截图，重置取消标志
-            m_isRecordingCanceled = false;
-        } else {
-            LOG_INFO(QString("[SnipScreen] Recording saved: %1").arg(outputFilePath));
-            exit();
-        }
-    });
-    connect(m_screenRecorder, &ScreenRecorder::errorOccurred, [this](const QString &message) {
-#ifdef Q_OS_WIN
-        // 录制出错，恢复窗口捕获属性
-        SetWindowDisplayAffinity(reinterpret_cast<HWND>(winId()), WDA_NONE);
-#endif
-        LOG_INFO(QString("[SnipScreen] Recording error: %1").arg(message));
-        m_recordingControl->setRecording(false);
-        m_recordingControl->setPaused(false);
-        // 录制出错，重新启用截图按钮
-        m_recordingToolbar->setScreenshotButtonEnabled(true);
+        m_recordingSession->retranslateUi();
     });
 }
 
@@ -314,7 +202,7 @@ void SnipScreen::connectSelectorSignals()
         hideToolBar();
         m_annotationHandler->manager().clear();
         m_annotationHandler->exitAnnotation();
-        if (m_recordingToolbar) m_recordingToolbar->uncheckAllAnnotationBtns();
+        m_recordingSession->uncheckAllAnnotationBtns();
     });
 
     // 选区完成时显示工具栏
@@ -386,116 +274,6 @@ void SnipScreen::connectToolbarSignals()
     // 截图工具栏翻译按钮
     connect(m_toolbar, &ScreenshotToolBar::translateRequested, [this]() {
         performTranslate();
-    });
-}
-
-// ============================================================
-// 构造阶段：录屏工具栏信号
-// ============================================================
-
-void SnipScreen::connectRecordingToolbarSignals()
-{
-    // 录屏工具栏信号连接
-    connect(m_recordingToolbar, &RecordingToolBar::toolSelected, [this](int toolId) {
-        m_annotationHandler->setTool(static_cast<AnnotationType>(toolId));
-        m_annotationToolSelected = true;
-        m_selector->setAnnotationMode(true);
-        updateInputMask();
-        LOG_INFO(QString("[SnipScreen] Recording: Annotation tool selected: ToolId=%1").arg(toolId));
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::annotationToolDeselected, [this]() {
-        m_annotationToolSelected = false;
-        m_selector->setAnnotationMode(false);
-        // 子工具栏隐藏后，重新定位控制栏
-        if (m_recordingControl && m_recordingControl->isVisible()) {
-            // 使用统一位置计算方法
-            QRect selection = m_selector->selected();
-            QWidget *subToolbar = m_recordingToolbar->getSubToolbarWindow();
-            calculateToolbarPositions(m_recordingToolbar, subToolbar, m_recordingControl, selection, false);
-        }
-        updateInputMask();
-        LOG_INFO("[SnipScreen] Recording: Annotation tool deselected");
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::screenshotRequested, this, &SnipScreen::switchToScreenshotMode);
-    connect(m_recordingToolbar, &RecordingToolBar::cancelRecordRequested, [this]() {
-        // 如果正在录制，取消录制（删除视频文件）
-        if (m_screenRecorder && m_screenRecorder->isRecording()) {
-            LOG_INFO("[SnipScreen] Cancel button pressed during recording, canceling...");
-            // 设置取消标志，stopped 信号处理时不退出截图
-            m_isRecordingCanceled = true;
-            resetRecordingUi();
-            clearMask();
-            m_screenRecorder->cancel();
-        } else {
-            exit();
-        }
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::showControlRequested, [this](bool show) {
-        if (show) {
-            m_recordingControl->updateButtonStyles();
-            m_recordingControl->show();
-            m_recordingControl->raise();
-
-            // 使用统一位置计算方法
-            QRect selection = m_selector->selected();
-            QWidget *subToolbar = m_recordingToolbar->getSubToolbarWindow();
-            calculateToolbarPositions(m_recordingToolbar, subToolbar, m_recordingControl, selection, false);
-
-            updateInputMask();
-        } else {
-            m_recordingControl->hide();
-            updateInputMask();
-        }
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::snapshotRequested, [this]() {
-        // 快照：复制当前选区画面（含标注）到剪贴板，不影响录屏状态
-        QPixmap pixmap = captureSelectionForOcr();
-        if (!pixmap.isNull()) {
-            CaptureSession::publish(pixmap);
-            LOG_INFO("[SnipScreen] Snapshot copied to clipboard");
-        }
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::undoRequested, this, &SnipScreen::undoAnnotation);
-    connect(m_recordingToolbar, &RecordingToolBar::redoRequested, this, &SnipScreen::redoAnnotation);
-    connect(m_recordingToolbar, &RecordingToolBar::clearRequested, this, &SnipScreen::clearAnnotations);
-    connect(m_recordingToolbar, &RecordingToolBar::shapeTypeChanged, [this](int type) {
-        m_annotationHandler->setShapeType(type);
-        LOG_INFO(QString("[SnipScreen] Recording: Shape type changed: %1").arg(type));
-    });
-
-    // 录屏工具栏 OCR 按钮
-    connect(m_recordingToolbar, &RecordingToolBar::ocrRequested, [this]() {
-        performOcr(captureSelectionForOcr());
-    });
-
-    // 录屏工具栏翻译按钮
-    connect(m_recordingToolbar, &RecordingToolBar::translateRequested, [this]() {
-        performTranslate();
-    });
-
-    // 录屏工具栏画笔样式信号
-    connect(m_recordingToolbar, &RecordingToolBar::penColorChanged, [this](const QColor &color) {
-        m_annotationHandler->setColor(color);
-    });
-    // 标注工具选择后，子工具栏显示完成，重新定位工具栏
-    connect(m_recordingToolbar, &RecordingToolBar::toolSelected, [this](int) {
-        QTimer::singleShot(0, this, [this]() {
-            // 使用统一位置计算方法
-            QRect selection = m_selector->selected();
-            QWidget *subToolbar = m_recordingToolbar->getSubToolbarWindow();
-            calculateToolbarPositions(m_recordingToolbar, subToolbar, m_recordingControl, selection, false);
-        });
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::penWidthChanged, [this](int width) {
-        m_annotationHandler->setPenWidth(width);
-    });
-    connect(m_recordingToolbar, &RecordingToolBar::fontSizeChanged, [this](int size) {
-        m_annotationHandler->setFontSize(size);
-    });
-
-    connect(m_recordingToolbar, &RecordingToolBar::timerUpdated, [this](const QString &text) {
-        m_selector->updateTimerText(text);
-        updateInputMask();
     });
 }
 
@@ -573,7 +351,7 @@ void SnipScreen::startCapture(bool recording) {
         return;
 
     // 设置模式
-    m_isRecordingMode = recording;
+    m_recordingSession->setMode(recording);
 
     // 清理标注状态
     m_annotationHandler->manager().clear();
@@ -582,7 +360,7 @@ void SnipScreen::startCapture(bool recording) {
     m_annotationToolSelected = false;
     m_selector->setAnnotationMode(false);
     m_toolbar->uncheckAllAnnotationBtns();
-    m_recordingToolbar->uncheckAllAnnotationBtns();
+    m_recordingSession->uncheckAllAnnotationBtns();
 
 #ifdef Q_OS_MACOS
     // macOS Sidecar/AirPlay 副屏不支持跨多屏的透明窗口：
@@ -676,14 +454,14 @@ void SnipScreen::exit() {
 
     // 隐藏工具栏
     if (m_toolbar) m_toolbar->uncheckAllAnnotationBtns();
-    if (m_recordingToolbar) m_recordingToolbar->uncheckAllAnnotationBtns();
+    m_recordingSession->uncheckAllAnnotationBtns();
     hideToolBar();
 
     // 清理标注
     m_annotationHandler->manager().clear();
     m_annotationHandler->exitAnnotation();
     m_annotationToolSelected = false;
-    m_isRecordingMode = false;
+    m_recordingSession->setMode(false);
     unsetCursor();
 
     // 关闭选区
@@ -956,58 +734,18 @@ void SnipScreen::grabActiveWindow() {
  * @author chiangyang
  */
 void SnipScreen::togglePauseRecording() {
-    if (!m_screenRecorder || !m_screenRecorder->isRecording()) {
-        LOG_INFO("[SnipScreen] togglePauseRecording: not recording, ignored");
-        return;
-    }
-    if (m_screenRecorder->isPaused()) {
-        m_screenRecorder->resume();
-        m_recordingToolbar->resumeTimer();
-        m_recordingControl->setPaused(false);
-        LOG_INFO("[SnipScreen] Recording resumed by global hotkey");
-    } else {
-        m_screenRecorder->pause();
-        m_recordingToolbar->pauseTimer();
-        m_recordingControl->setPaused(true);
-        LOG_INFO("[SnipScreen] Recording paused by global hotkey");
-    }
+    m_recordingSession->togglePause();
 }
 
 /**
- * @brief 复位录制相关 UI 状态（停止/取消路径的公共 7 步）
- *
- * stopTimer/resetRecordBtn/hideTimerLabel/setRecording/setPaused/hide。
- * 不含 clearMask() 与 stop()/cancel() 收尾——停止路径（控制栏按钮）有意
- * 保持输入遮罩直到 stopped 信号触发 exit()，取消/热键停止路径自行清遮罩。
- * @author chiangyang
- */
-void SnipScreen::resetRecordingUi() {
-    m_recordingToolbar->stopTimer();
-    m_recordingToolbar->resetRecordBtn();
-    m_selector->hideTimerLabel();
-    m_recordingControl->setRecording(false);
-    m_recordingControl->setPaused(false);
-    m_recordingControl->hide();
-}
-
-/**
- * @brief 停止录屏（全局热键入口）
+ * @brief 停止录屏（全局热键入口，委托 RecordingSession）
  *
  * 仅在录制中生效，停止录制并保留视频文件（区别于取消录制）。
  * 非录制状态为 no-op。
  * @author chiangyang
  */
 void SnipScreen::stopRecording() {
-    if (!m_screenRecorder || !m_screenRecorder->isRecording()) {
-        LOG_INFO("[SnipScreen] stopRecording: not recording, ignored");
-        return;
-    }
-    // 走正常停止路径（保留文件），区别于 ESC 的 cancel 路径（删除文件）
-    m_isRecordingCanceled = false;
-    resetRecordingUi();
-    clearMask();
-    m_screenRecorder->stop();
-    LOG_INFO("[SnipScreen] Recording stopped by global hotkey");
+    m_recordingSession->stop();
 }
 
 // ============================================================
@@ -1066,141 +804,13 @@ QPixmap SnipScreen::captureSelectionForOcr() {
 // 标注 overlay 渲染（用于录屏合成）
 // ============================================================
 
-QImage SnipScreen::renderAnnotationOverlay() const {
-    if (!m_annotationHandler->manager().hasAnnotations() && !m_annotationHandler->manager().hasMosaicStrokes())
-        return QImage();
-
-    // 使用与录屏捕获区域一致的矩形（选区减去边框），确保 overlay 坐标与捕获帧对齐，
-    // 否则 overlay 标注会相对捕获画面偏移一个边框宽度
-    const int overlayBw = StyleManager::SNIP_BORDER_WIDTH;
-    const QRect cap = m_selector->selected().adjusted(overlayBw, overlayBw, -overlayBw, -overlayBw);
-    if (cap.isEmpty()) return QImage();
-
-    if (!m_screenRecorder) return QImage();
-    const QSize outSize = m_screenRecorder->outputSize();
-    if (outSize.isEmpty()) return QImage();
-
-    QImage overlay(outSize, QImage::Format_ARGB32_Premultiplied);
-    overlay.fill(Qt::transparent);
-
-    QPainter painter(&overlay);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    qreal scaleX = static_cast<qreal>(outSize.width())  / cap.width();
-    qreal scaleY = static_cast<qreal>(outSize.height()) / cap.height();
-
-    // 全局坐标 → 输出坐标
-    painter.translate(-cap.x(), -cap.y());
-    painter.scale(scaleX, scaleY);
-
-    if (m_annotationHandler->manager().hasAnnotations())
-        m_annotationHandler->manager().draw(painter);
-
-    // 马赛克：基于选区背景做真实像素化，叠加在最上层遮挡内容
-    if (m_annotationHandler->manager().hasMosaicStrokes() && !m_background.isNull()) {
-        painter.save();
-        // 取消外层的坐标变换，直接在输出尺寸像素坐标系下操作
-        painter.setWorldTransform(QTransform());
-
-        // 1. 从全屏背景裁剪出选区，缩放到录屏输出尺寸
-        QPixmap bgSelection = m_background.copy(cap);
-        QPixmap bgScaled = bgSelection.scaled(outSize,
-                                              Qt::IgnoreAspectRatio,
-                                              Qt::SmoothTransformation);
-
-        // 2. 整体马赛克预处理：先 1/5 缩小再放大
-        const int mosaicScale = AnnotationManager::kDefaultMosaicBlockSize;
-        const QSize smallSize(qMax(1, outSize.width()  / mosaicScale),
-                              qMax(1, outSize.height() / mosaicScale));
-        QPixmap small = bgScaled.scaled(smallSize,
-                                        Qt::IgnoreAspectRatio,
-                                        Qt::SmoothTransformation);
-        QPixmap mosaicizedFull = small.scaled(outSize,
-                                              Qt::IgnoreAspectRatio,
-                                              Qt::FastTransformation);
-
-        // 3. 笔迹矩形坐标：全局 → 选区局部 → 输出尺寸像素
-        QRegion mosaicRegion;
-        const std::vector<QRect> strokes = m_annotationHandler->manager().mosaicStrokes();
-        for (const QRect &r : strokes) {
-            // 全局 -> 选区局部（cap 左上角为原点）
-            QRect local(r.x() - cap.x(), r.y() - cap.y(),
-                        r.width(), r.height());
-            // 缩放到输出像素
-            QRect outRect(qRound(local.x()      * scaleX),
-                          qRound(local.y()      * scaleY),
-                          qRound(local.width()  * scaleX),
-                          qRound(local.height() * scaleY));
-            QRect clipped = outRect.intersected(QRect(QPoint(0, 0), outSize));
-            if (!clipped.isEmpty())
-                mosaicRegion += clipped;
-        }
-
-        // 4. 仅在马赛克区域绘制预处理好的全局马赛克图（其他部分保持透明）
-        if (!mosaicRegion.isEmpty()) {
-            painter.setClipRegion(mosaicRegion);
-            painter.drawPixmap(0, 0, mosaicizedFull);
-        }
-
-        painter.restore();
-    }
-
-    painter.end();
-    return overlay.convertToFormat(QImage::Format_ARGB32);
-}
-
 void SnipScreen::pushAnnotationOverlay() {
-    if (!m_screenRecorder || !m_screenRecorder->isRecording())
-        return;
-    m_screenRecorder->setAnnotationOverlay(renderAnnotationOverlay());
+    m_recordingSession->pushAnnotationOverlay();
 }
 
 void SnipScreen::updateInputMask() {
-    // 仅在录屏中且未选中标注工具时限制输入区域
-    bool passthrough = m_isRecordingMode && m_screenRecorder
-                       && m_screenRecorder->isRecording()
-                       && !m_annotationToolSelected;
-
-    if (!passthrough) {
-        clearMask();
-        return;
-    }
-
-    QRegion mask;
-    QPoint localOffset = -m_virtualGeometry.topLeft();
-
-    // 工具栏区域（子控件 geometry() 已是父相对坐标）
-    if (m_recordingToolbar && m_recordingToolbar->isVisible()) {
-        mask += m_recordingToolbar->geometry();
-        QWidget *sub = m_recordingToolbar->getSubToolbarWindow();
-        if (sub && sub->isVisible())
-            mask += sub->geometry();
-    }
-
-    // 录制控制栏区域
-    if (m_recordingControl && m_recordingControl->isVisible()) {
-        mask += m_recordingControl->geometry();
-    }
-
-    // 选区边框（selected() 返回屏幕坐标，需转为本地坐标）
-    // 挖孔带宽度必须与实际绘制的边框一致（StyleManager::SNIP_BORDER_WIDTH），
-    // 否则边框上会留下一条隐形的事件捕获带
-    if (m_selector) {
-        QRect sel = m_selector->selected();
-        if (sel.isValid() && !sel.isEmpty()) {
-            QRect localSel = sel.translated(localOffset);
-            const int bw = StyleManager::SNIP_BORDER_WIDTH;
-            mask += QRegion(localSel).subtracted(localSel.adjusted(bw, bw, -bw, -bw));
-        }
-
-        // 信息标签和时间标签区域
-        QRegion labelGeo = m_selector->getLabelGeometry();
-        if (!labelGeo.isEmpty()) {
-            mask += labelGeo;
-        }
-    }
-
-    setMask(mask);
+    // 录屏输入遮罩逻辑在 RecordingSession（非录屏态等价于 clearMask）
+    m_recordingSession->updateInputMask();
 }
 
 /**
@@ -1596,8 +1206,8 @@ bool SnipScreen::canAnnotate() const {
  * @author chiangyang
  */
 void SnipScreen::onToolSwitch(int toolId) {
-    BaseToolBar *tb = m_isRecordingMode
-        ? static_cast<BaseToolBar*>(m_recordingToolbar)
+    BaseToolBar *tb = m_recordingSession->isMode()
+        ? static_cast<BaseToolBar*>(m_recordingSession->toolbar())
         : static_cast<BaseToolBar*>(m_toolbar);
     if (tb) tb->selectAnnotationTool(toolId);
 }
@@ -1611,7 +1221,7 @@ void SnipScreen::onToolSwitch(int toolId) {
  */
 void SnipScreen::onSwitchMode() {
     // 录屏正在录制：禁止切换，避免出现"截图工具栏已显示但录制仍在后台进行"的状态混乱
-    if (m_isRecordingMode && m_screenRecorder && m_screenRecorder->isRecording()) {
+    if (m_recordingSession->isMode() && m_recordingSession->isRecording()) {
         TranslationManager *tm = TranslationManager::instance();
         QString text = tm->get("snip.switchMode.stopRecordingHint",
                                "Please stop recording before switching");
@@ -1642,7 +1252,7 @@ void SnipScreen::onSwitchMode() {
         return;
     }
 
-    if (m_isRecordingMode) {
+    if (m_recordingSession->isMode()) {
         switchToScreenshotMode();
     } else {
         switchToRecordingMode();
@@ -1695,8 +1305,8 @@ void SnipScreen::onClear() {
  * @author chiangyang
  */
 void SnipScreen::onPenWidthChange(int delta) {
-    BaseToolBar *tb = m_isRecordingMode
-        ? static_cast<BaseToolBar*>(m_recordingToolbar)
+    BaseToolBar *tb = m_recordingSession->isMode()
+        ? static_cast<BaseToolBar*>(m_recordingSession->toolbar())
         : static_cast<BaseToolBar*>(m_toolbar);
     if (!tb) return;
     tb->setCurrentPenWidth(qBound(AnnotationShortcutController::kMinPenWidth,
@@ -1709,8 +1319,8 @@ void SnipScreen::onPenWidthChange(int delta) {
  * @author chiangyang
  */
 void SnipScreen::onCycleColor() {
-    BaseToolBar *tb = m_isRecordingMode
-        ? static_cast<BaseToolBar*>(m_recordingToolbar)
+    BaseToolBar *tb = m_recordingSession->isMode()
+        ? static_cast<BaseToolBar*>(m_recordingSession->toolbar())
         : static_cast<BaseToolBar*>(m_toolbar);
     if (tb) tb->selectNextColor();
 }
@@ -1744,14 +1354,10 @@ void SnipScreen::onCancel() {
     if (m_textEdit) {
         // 取消文本编辑，不创建标注
         cancelTextEdit();
-    } else if (m_screenRecorder && m_screenRecorder->isRecording()) {
+    } else if (m_recordingSession->isRecording()) {
         // 如果正在录制，取消录制（删除视频文件）
         LOG_INFO("[SnipScreen] ESC pressed during recording, canceling...");
-        // 设置取消标志，stopped 信号处理时不退出截图
-        m_isRecordingCanceled = true;
-        resetRecordingUi();
-        clearMask();
-        m_screenRecorder->cancel();
+        m_recordingSession->cancel();
     } else {
         exit();
     }
@@ -1962,10 +1568,11 @@ void SnipScreen::calculateToolbarPositions(QWidget *toolbar, QWidget *subToolbar
 void SnipScreen::updateMenuPosition() {
     QRect selection = m_selector->selected();
 
-    if (m_isRecordingMode) {
-        if (m_recordingToolbar && m_recordingToolbar->isVisible()) {
-            QWidget *subToolbar = m_recordingToolbar->getSubToolbarWindow();
-            calculateToolbarPositions(m_recordingToolbar, subToolbar, m_recordingControl, selection, false);
+    if (m_recordingSession->isMode()) {
+        RecordingToolBar *recordingToolbar = m_recordingSession->toolbar();
+        if (recordingToolbar && recordingToolbar->isVisible()) {
+            QWidget *subToolbar = recordingToolbar->getSubToolbarWindow();
+            calculateToolbarPositions(recordingToolbar, subToolbar, m_recordingSession->control(), selection, false);
         }
     } else {
         if (m_toolbar && m_toolbar->isVisible()) {
@@ -1992,8 +1599,8 @@ void SnipScreen::showToolBar() {
     if (selection.isEmpty())
         return;
 
-    if (m_isRecordingMode) {
-        showRecordingToolBar();
+    if (m_recordingSession->isMode()) {
+        m_recordingSession->showToolBar();
     } else {
         if (!m_toolbar)
             return;
@@ -2019,7 +1626,7 @@ void SnipScreen::hideToolBar() {
             subToolbar->hide();
         }
     }
-    hideRecordingToolBar();
+    m_recordingSession->hideToolBar();
 }
 
 // ============================================================
@@ -2032,11 +1639,7 @@ void SnipScreen::hideToolBar() {
  */
 void SnipScreen::undoAnnotation() {
     m_annotationHandler->manager().undo();
-    if (m_isRecordingMode && m_recordingToolbar) {
-        m_recordingToolbar->updateState(true, m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
-    } else if (m_toolbar) {
-        updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
-    }
+    updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
     update();
     pushAnnotationOverlay();
     LOG_INFO("[SnipScreen] Undo annotation");
@@ -2048,11 +1651,7 @@ void SnipScreen::undoAnnotation() {
  */
 void SnipScreen::redoAnnotation() {
     m_annotationHandler->manager().redo();
-    if (m_isRecordingMode && m_recordingToolbar) {
-        m_recordingToolbar->updateState(true, m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
-    } else if (m_toolbar) {
-        updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
-    }
+    updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
     update();
     pushAnnotationOverlay();
     LOG_INFO("[SnipScreen] Redo annotation");
@@ -2064,11 +1663,7 @@ void SnipScreen::redoAnnotation() {
  */
 void SnipScreen::clearAnnotations() {
     m_annotationHandler->manager().clear();
-    if (m_isRecordingMode && m_recordingToolbar) {
-        m_recordingToolbar->updateState(true, m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
-    } else if (m_toolbar) {
-        updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
-    }
+    updateToolBarState(m_annotationHandler->manager().canUndo(), m_annotationHandler->manager().canRedo());
     update();
     pushAnnotationOverlay();
     LOG_INFO("[SnipScreen] Clear all annotations");
@@ -2083,11 +1678,11 @@ void SnipScreen::clearAnnotations() {
  * @author chiangyang
  */
 void SnipScreen::switchToRecordingMode() {
-    if (m_isRecordingMode)
+    if (m_recordingSession->isMode())
         return;
 
     LOG_INFO("[SnipScreen] Switching to recording mode");
-    m_isRecordingMode = true;
+    m_recordingSession->setMode(true);
 
     // 隐藏截图工具栏
     hideToolBar();
@@ -2100,7 +1695,7 @@ void SnipScreen::switchToRecordingMode() {
         showToolBar();
         // 保留切换前已选中的标注工具
         if (m_annotationToolSelected) {
-            m_recordingToolbar->selectAnnotationTool(static_cast<int>(m_annotationHandler->tool()));
+            m_recordingSession->toolbar()->selectAnnotationTool(static_cast<int>(m_annotationHandler->tool()));
         }
     }
 
@@ -2112,14 +1707,14 @@ void SnipScreen::switchToRecordingMode() {
  * @author chiangyang
  */
 void SnipScreen::switchToScreenshotMode() {
-    if (!m_isRecordingMode)
+    if (!m_recordingSession->isMode())
         return;
 
     LOG_INFO("[SnipScreen] Switching to screenshot mode");
-    m_isRecordingMode = false;
+    m_recordingSession->setMode(false);
 
     // 隐藏录屏工具栏
-    hideRecordingToolBar();
+    m_recordingSession->hideToolBar();
 
     // 更新边框颜色
     updateBorderColor();
@@ -2141,55 +1736,12 @@ void SnipScreen::switchToScreenshotMode() {
  * @author chiangyang
  */
 void SnipScreen::updateBorderColor() {
-    if (m_isRecordingMode) {
+    if (m_recordingSession->isMode()) {
         m_selector->setBorderPen(QPen(StyleManager::getRecordBorderColor(), StyleManager::SNIP_BORDER_WIDTH, Qt::SolidLine));
     } else {
         m_selector->setBorderPen(QPen(StyleManager::getCaptureBorderColor(), StyleManager::SNIP_BORDER_WIDTH, Qt::SolidLine));
     }
     m_selector->update();
-}
-
-/**
- * @brief 显示录屏工具栏
- * @author chiangyang
- */
-void SnipScreen::showRecordingToolBar() {
-    if (!m_recordingToolbar || !m_selector)
-        return;
-
-    QRect selection = m_selector->selected();
-    if (selection.isEmpty())
-        return;
-
-    m_recordingToolbar->updateButtonStyles();
-    m_recordingToolbar->positionNearSelection(selection);
-    m_recordingToolbar->show();
-    m_recordingToolbar->raise();
-    m_recordingToolbar->update();
-    updateInputMask();
-
-    // 录制控制栏不自动显示，由"录屏"按钮控制
-
-    LOG_INFO(QString("[SnipScreen] Recording toolbar shown at (%1, %2)")
-        .arg(m_recordingToolbar->x()).arg(m_recordingToolbar->y()));
-}
-
-/**
- * @brief 隐藏录屏工具栏和控制栏
- * @author chiangyang
- */
-void SnipScreen::hideRecordingToolBar() {
-    if (m_recordingToolbar) {
-        m_recordingToolbar->hide();
-        QWidget *subToolbar = m_recordingToolbar->getSubToolbarWindow();
-        if (subToolbar) {
-            subToolbar->hide();
-        }
-    }
-    if (m_recordingControl) {
-        m_recordingControl->hide();
-    }
-    updateInputMask();
 }
 
 // ============================================================
@@ -2203,8 +1755,8 @@ void SnipScreen::hideRecordingToolBar() {
  * @author chiangyang
  */
 void SnipScreen::updateToolBarState(bool canUndo, bool canRedo) {
-    if (m_isRecordingMode && m_recordingToolbar) {
-        m_recordingToolbar->updateState(true, canUndo, canRedo);
+    if (m_recordingSession->isMode()) {
+        m_recordingSession->updateToolBarState(true, canUndo, canRedo);
     } else if (m_toolbar) {
         m_toolbar->updateState(true, canUndo, canRedo);
     }
@@ -2231,26 +1783,9 @@ bool SnipScreen::isMouseInToolBar(const QPoint &globalPos) const {
         }
     }
 
-    // 检查录屏工具栏
-    if (m_recordingToolbar && m_recordingToolbar->isVisible()) {
-        QPoint toolbarPos = m_recordingToolbar->mapFromGlobal(globalPos);
-        if (m_recordingToolbar->rect().contains(toolbarPos))
-            return true;
-
-        QWidget *subToolbar = m_recordingToolbar->getSubToolbarWindow();
-        if (subToolbar && subToolbar->isVisible()) {
-            QPoint subPos = subToolbar->mapFromGlobal(globalPos);
-            if (subToolbar->rect().contains(subPos))
-                return true;
-        }
-    }
-
-    // 检查录制控制栏
-    if (m_recordingControl && m_recordingControl->isVisible()) {
-        QPoint controlPos = m_recordingControl->mapFromGlobal(globalPos);
-        if (m_recordingControl->rect().contains(controlPos))
-            return true;
-    }
+    // 检查录屏工具栏/子工具栏/录制控制栏（编排已拆分至 RecordingSession）
+    if (m_recordingSession->isMouseInToolbars(globalPos))
+        return true;
 
     return false;
 }
@@ -2325,9 +1860,7 @@ void SnipScreen::refreshAnnotationToolDefaults() {
     if (m_toolbar) {
         m_toolbar->refreshDefaultValues();
     }
-    if (m_recordingToolbar) {
-        m_recordingToolbar->refreshDefaultValues();
-    }
+    m_recordingSession->refreshDefaultValues();
 }
 
 
@@ -2360,14 +1893,14 @@ void SnipScreen::connectToolBarToSettingsWindow(SettingsWindow *settingsWindow) 
     }
 
     // 录屏工具栏 -> SettingsWindow
-    if (m_recordingToolbar) {
-        connect(m_recordingToolbar, &RecordingToolBar::toolPenWidthChanged,
+    if (RecordingToolBar *recordingToolbar = m_recordingSession->toolbar()) {
+        connect(recordingToolbar, &RecordingToolBar::toolPenWidthChanged,
                 settingsWindow, &SettingsWindow::onToolPenWidthChanged);
-        connect(m_recordingToolbar, &RecordingToolBar::toolFontSizeChanged,
+        connect(recordingToolbar, &RecordingToolBar::toolFontSizeChanged,
                 settingsWindow, &SettingsWindow::onToolFontSizeChanged);
-        connect(m_recordingToolbar, &RecordingToolBar::toolEraserWidthChanged,
+        connect(recordingToolbar, &RecordingToolBar::toolEraserWidthChanged,
                 settingsWindow, &SettingsWindow::onToolEraserWidthChanged);
-        connect(m_recordingToolbar, &RecordingToolBar::toolMosaicSizeChanged,
+        connect(recordingToolbar, &RecordingToolBar::toolMosaicSizeChanged,
                 settingsWindow, &SettingsWindow::onToolMosaicSizeChanged);
         LOG_INFO("Recording toolbar connected to SettingsWindow");
     }

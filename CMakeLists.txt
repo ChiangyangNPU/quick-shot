@@ -209,6 +209,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/capture/Selector.h
         src/capture/SnipScreen.cpp
         src/capture/SnipScreen.h
+        src/capture/RecordingSession.cpp
+        src/capture/RecordingSession.h
 
         # 工具栏控件
         src/widgets/ScreenshotToolBar.cpp

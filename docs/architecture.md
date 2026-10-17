@@ -3231,7 +3231,8 @@ src/
 │   ├── AnnotationInteractionHandler.h/cpp  # 标注交互处理器（SnipScreen/PinWindow复用，Host回调策略模式）
 │   ├── Resizer.h         # 选区尺寸管理
 │   ├── Selector.h/cpp    # 选区组件（状态机、交互逻辑）
-│   └── SnipScreen.h/cpp  # 主窗口（协调所有功能）
+│   ├── RecordingSession.h/cpp # 录屏编排协调器（工具栏/控制栏/录制器接线、WDA排除捕获、overlay推送、输入遮罩）
+│   └── SnipScreen.h/cpp  # 主窗口（截图路径协调 + 模式切换入口）
 ├── core/                 # 核心服务
 │   ├── ConfigManager.h/cpp      # 配置管理（单例、QSettings 持久化封装）
 │   ├── DisplayInfo.h/cpp # 显示器信息（平台相关）
@@ -3311,7 +3312,8 @@ src/
 |----------|------|
 | `src/main.cpp` | 应用入口、全局初始化、ShortcutManager 注册、托盘菜单构建 |
 | `src/capture/SnipScreen.h` | 主窗口类定义（截图/录屏统一入口） |
-| `src/capture/SnipScreen.cpp` | 主窗口实现（截图/录屏/标注协调、Alt+P分页、录屏排除捕获） |
+| `src/capture/SnipScreen.cpp` | 主窗口实现（截图路径/标注协调、Alt+P分页、模式切换） |
+| `src/capture/RecordingSession.h/cpp` | 录屏编排协调器（控制栏/录制器信号接线、WDA_EXCLUDEFROMCAPTURE、overlay 推送、resetUi、输入遮罩；自 SnipScreen 拆出） |
 | `src/capture/AnnotationInteractionHandler.h` | 标注交互处理器（SnipScreen/PinWindow 复用，Host 回调策略模式） |
 | `src/capture/AnnotationInteractionHandler.cpp` | 标注交互实现（鼠标事件优先级、控制点光标、录屏同步overlay） |
 | `src/capture/Selector.h` | 选区组件（状态机、几何管理、Resizer 控制点） |
