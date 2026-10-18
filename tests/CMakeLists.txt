@@ -96,7 +96,9 @@ add_executable(SecretStoreTest SecretStoreTest.cpp
 target_include_directories(SecretStoreTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(SecretStoreTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg)
 if (APPLE)
-    target_link_libraries(SecretStoreTest PRIVATE "-framework Security")
+    target_link_libraries(SecretStoreTest PRIVATE "-framework Security")   # SecItemAdd/CopyMatching
+elseif (WIN32)
+    target_link_libraries(SecretStoreTest PRIVATE crypt32)                 # CryptProtectData/UnprotectData
 endif()
 add_test(NAME SecretStoreTest COMMAND SecretStoreTest)
 
