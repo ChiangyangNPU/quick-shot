@@ -158,6 +158,57 @@ else
     echo "已创建 Gitee Release: id=$RELEASE_ID"
 fi
 
+# ---------- 4.5 配额维护：清理旧版本附件，防止 Gitee 仓库配额超限 ----------
+# Gitee 免费仓库的 Release 附件总容量为 1GB，每个版本约 200MB（zip + dmg +
+# blockmap），不清理则从第 5 个版本起上传会被配额拒绝（实测表现为末尾的
+# blockmap 上传 step 红灯，安装包与元数据已落库但没有差量更新）。
+# 这里在创建/复用当前 Release 之后、上传附件之前，保留最近
+# KEEP_GITEE_RELEASES（默认 2）个版本的附件（当前版本必定保留），更早版本
+# 的附件逐个删除——Release 页面与更新说明保留，旧安装包仍可从 GitHub
+# Release 下载。清理失败只告警不中断：上传阶段的配额错误才是最终裁判。
+KEEP_GITEE_RELEASES="${KEEP_GITEE_RELEASES:-2}"
+PRUNE_IDS=$(api_gitee "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases?per_page=100&access_token=$GITEE_TOKEN" \
+    | python3 -c '
+import json, sys
+keep = int(sys.argv[1]) if sys.argv[1].isdigit() else 2
+current = sys.argv[2]
+try:
+    data = json.load(sys.stdin)
+    if not isinstance(data, list):
+        raise ValueError("not a list")
+except Exception as e:
+    print(f"::warning::Gitee Release list parse failed, skip quota prune: {e}", file=sys.stderr)
+    sys.exit(0)
+data.sort(key=lambda r: str(r.get("created_at", "")), reverse=True)
+keep_ids = {str(r.get("id")) for r in data[:keep]}
+keep_ids.add(current)
+for r in data:
+    if str(r.get("id")) not in keep_ids:
+        print(r.get("id"))
+' "$KEEP_GITEE_RELEASES" "$RELEASE_ID" || true)
+
+for rid in $PRUNE_IDS; do
+    [ -n "$rid" ] || continue
+    ATTACH_IDS=$(api_gitee "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$rid/attach_files?access_token=$GITEE_TOKEN" \
+        | python3 -c '
+import json, sys
+try:
+    data = json.load(sys.stdin)
+    if isinstance(data, list):
+        for a in data:
+            if a.get("id") is not None:
+                print(a.get("id"))
+except Exception:
+    pass
+' || true)
+    for aid in $ATTACH_IDS; do
+        [ -n "$aid" ] || continue
+        code=$(curl -s -A "$UA" -o /dev/null -w "%{http_code}" -X DELETE \
+            "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$rid/attach_files/$aid?access_token=$GITEE_TOKEN" || true)
+        echo "prune: release ${rid} attach ${aid} -> HTTP ${code:-000}"
+    done
+done
+
 # ---------- 5. 上传附件（大文件并行；同名同大小视为已传，支持重跑） ----------
 api_gitee "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$RELEASE_ID" > /tmp/gitee_release.json
 

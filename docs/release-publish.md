@@ -1,6 +1,6 @@
 # QuickShot 发布流程（GitHub / Gitee 双端）
 
-> 更新：2026-10-09（v0.1.0 首发实测）
+> 更新：2026-10-21（新增 Gitee 附件配额自动清理；首发实测 2026-10-09 v0.1.0）
 > 相关文档：[git-multi-remote.md](git-multi-remote.md)（双远程同步）
 
 ## 1. 总览
@@ -13,8 +13,8 @@
 | 补发通道 | 本地（`deploy/gitee/publish_gitee_release.sh`） | CI 失败/超时或想立刻发完时使用，分钟级 |
 
 CI 与本地**共用同一个脚本**（`deploy/gitee/publish_gitee_release.sh`），两条通路行为一致：
-复用/创建 Gitee Release（说明取 tag 注释）→ 传附件（失败重试）→ 按实际下载字节数逐项校验，
-可重复执行（同名同大小自动跳过）。
+复用/创建 Gitee Release（说明取 tag 注释）→ 清理旧版本附件（防止配额超限，见 §5）→
+传附件（失败重试）→ 按实际下载字节数逐项校验，可重复执行（同名同大小自动跳过）。
 
 > 为什么 CI 里失败要红灯：`GITEE_TOKEN` 缺失或上传失败会直接 `exit 1`，避免出现
 > 「CI 全绿但 Gitee 没产物」。失败时 GitHub Release 仍已发布，用本地脚本补发即可。
@@ -90,7 +90,31 @@ GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
 # 或把令牌存文件后：bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token
 ```
 
-## 5. 常见问题
+## 5. Gitee 附件配额（1GB）与自动清理
+
+Gitee 免费仓库的 **Release 附件总容量为 1GB**：每个版本上传 zip（约 86MB）+
+DMG（约 82MB）+ blockmap，合计约 170MB，累计到第 6 个版本左右就会触发配额
+拒绝——表现为末尾的 blockmap 上传失败、`gitee` job 红灯（安装包与 Release
+元数据已落库，但应用内自动更新拿不到差量包）。
+
+发布脚本在创建/复用 Release 之后、上传附件之前自动做配额维护：
+
+- 保留最近 `KEEP_GITEE_RELEASES` 个版本的附件，**默认 2**，可用环境变量覆盖；
+- 当前正在发版的 Release 始终排除在清理之外；
+- 更早版本的**附件逐个删除**，Release 页面与更新说明保留，旧安装包仍可从
+  GitHub Release 下载；
+- 清理失败只输出告警（`prune: release ... -> HTTP xxx`），不中断后续上传。
+
+CI 与本地补发共用同一脚本，两条通路都会执行清理。临时调整保留数量：
+
+```bash
+KEEP_GITEE_RELEASES=3 GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
+```
+
+需要手动清理时：Gitee 仓库 → Releases → 打开旧版本 → 删除附件（保留最近
+1–2 个版本即可）。
+
+## 6. 常见问题
 
 | 现象 | 原因与处理 |
 |------|------------|
@@ -98,6 +122,7 @@ GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
 | macOS 打包步骤 1 秒即失败 | `deploy/mac/deploy_mac.sh` 在 git 索引里丢了可执行位；工作流已改为 `bash 脚本` 调用，另请确认 `git ls-files -s` 显示 100755 |
 | CI 的 DMG 背景没有版本号 | macOS job 的 Pillow 安装失败（脚本已逐级回退 + 告警），DMG 会回退静态背景图，不影响安装包 |
 | Gitee 附件上传失败 | 单附件上限 100MB；DMG 经 ULMO 压缩约 82MB、zip 约 86MB，均在限内。大文件已改成并行上传（贴近 TMD 策略）。CI 失败/超时用本地脚本补发 |
+| Gitee 上传被配额拒绝（附件总量超 1GB） | 脚本已在上传前自动清理旧版本附件（默认保留最近 2 个，见 §5）；若仍失败，手动删除旧版本附件后按 §2 第 5 步补发 |
 | 同一版本要重发 | 得先清干净：删两端 tag 与 Release（GitHub Release 用网页删，或临时工作流 `gh release delete --cleanup-tag`；Gitee 用 `DELETE /releases/{id}` + `git push gitee :refs/tags/vX.Y.Z`），再按 §2 重新打 tag 推送 |
 | 傍晚/夜里上传特别慢 | 跨境链路按时间段波动明显（实测早上快很多）；慢时可先用本地脚本发，或次日再发 |
 | macOS 首次打开被 Gatekeeper 拦 | 未做 Apple 公证，右键 →「打开」放行；录屏/录音需在系统设置里授权 |
