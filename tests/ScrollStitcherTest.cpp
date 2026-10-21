@@ -193,10 +193,13 @@ void ScrollStitcherTest::duplicateFrameIgnored() {
 void ScrollStitcherTest::texturelessFrameRejected() {
     QImage solid(100, 150, QImage::Format_RGB32);
     solid.fill(qRgb(180, 180, 180));
+    // 第二帧换成不同灰度：画面确有变化，但纯色区域仍没有可对齐的特征
+    QImage otherSolid(100, 150, QImage::Format_RGB32);
+    otherSolid.fill(qRgb(120, 120, 120));
 
     ScrollStitcher stitcher;
     QVERIFY(stitcher.appendFrame(solid) == ScrollStitcher::AppendResult::Appended);
-    QVERIFY(stitcher.appendFrame(solid) == ScrollStitcher::AppendResult::NoMatch);
+    QVERIFY(stitcher.appendFrame(otherSolid) == ScrollStitcher::AppendResult::NoMatch);
     QCOMPARE(stitcher.stitchedLength(), 150);
 }
 

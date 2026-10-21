@@ -5,9 +5,40 @@
 
 namespace {
 ///< 视为可靠匹配的最大平均灰度差（0~255）
-constexpr int kMaxMeanFlowDiff = 12;
+constexpr int kMaxMeanFlowDiff = 3;
 ///< 模板区域的最小灰度方差（低于该值视为纯色/无纹理，不能作为对齐依据）
 constexpr double kMinTemplateVariance = 1.0;
+///< 两帧采样平均灰度差低于该值即视为画面静止（光标闪烁、提示条文字刷新等局部变化）
+constexpr double kStaticFrameDiff = 0.5;
+
+/**
+ * @brief 判断两帧是否几乎完全相同
+ *
+ * 采样比较同坐标像素：画面静止时直接判为未滚动，避免局部轻微变化被
+ * 模板匹配放大成 2~3px 的虚假滚动位移。
+ * @param a 上一帧灰度图
+ * @param b 当前帧灰度图
+ * @return 近似相同返回 true
+ * @author chiangyang
+ */
+bool framesNearlyIdentical(const QImage &a, const QImage &b) {
+    if (a.size() != b.size() || a.isNull()) {
+        return false;
+    }
+    const int colStep = qMax(1, a.width() / 240);
+    const int rowStep = qMax(1, a.height() / 60);
+    long long diff = 0;
+    int count = 0;
+    for (int y = 0; y < a.height(); y += rowStep) {
+        const uchar *lineA = a.constScanLine(y);
+        const uchar *lineB = b.constScanLine(y);
+        for (int x = 0; x < a.width(); x += colStep) {
+            diff += qAbs(int(lineA[x]) - int(lineB[x]));
+            ++count;
+        }
+    }
+    return count > 0 && double(diff) / count < kStaticFrameDiff;
+}
 ///< 小于该位移视为页面未滚动（抗抖动）
 constexpr int kMinShift = 2;
 ///< 累计像素上限（避免长图占用过多内存，约 240MB）
@@ -73,6 +104,12 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
     }
 
     QImage gray = toGray(work);
+
+    // 静止帧快路径：画面几乎没变时必然是未滚动
+    if (framesNearlyIdentical(m_lastGray, gray)) {
+        return AppendResult::Duplicate;
+    }
+
     int templateTop = 0;
     int bestDiff = 0;
     const int matchRow = findBestMatchRow(m_lastGray, gray, templateTop, bestDiff);

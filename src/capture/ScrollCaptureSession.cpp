@@ -356,17 +356,40 @@ void ScrollCaptureSession::positionHintBar() {
 
     const QSize hintSize = m_hintBar->size();
     const int gap = 10;
-    int x = m_captureRect.center().x() - hintSize.width() / 2;
-    int y = m_captureRect.bottom() + gap;
-    if (y + hintSize.height() > available.bottom()) {
-        // 下方放不下则放到选区上方
-        y = m_captureRect.top() - hintSize.height() - gap;
+    const int minX = available.left() + gap;
+    const int minY = available.top() + gap;
+    const int maxX = qMax(minX, available.right() - hintSize.width() - gap);
+    const int maxY = qMax(minY, available.bottom() - hintSize.height() - gap);
+
+    /**
+     * @brief 夹紧到可用区后放置；若仍与选区相交则放弃该候选
+     *
+     * 提示条一旦落入选区就会被抓进长图，而它的状态文字又随拼接长度变化，
+     * 会反过来干扰模板匹配，造成"没滚动但像素一直增加"的假滚动。
+     */
+    auto tryPlace = [&](int x, int y) -> bool {
+        const QRect candidate(qBound(minX, x, maxX), qBound(minY, y, maxY),
+                              hintSize.width(), hintSize.height());
+        if (candidate.intersects(m_captureRect)) {
+            return false;
+        }
+        m_hintBar->move(candidate.topLeft());
+        return true;
+    };
+
+    const int centerX = m_captureRect.center().x() - hintSize.width() / 2;
+    const int centerY = m_captureRect.center().y() - hintSize.height() / 2;
+    // 依次尝试：选区下方 → 上方 → 右侧 → 左侧，全部避开选区
+    if (tryPlace(centerX, m_captureRect.bottom() + gap)
+        || tryPlace(centerX, m_captureRect.top() - hintSize.height() - gap)
+        || tryPlace(m_captureRect.right() + gap, centerY)
+        || tryPlace(m_captureRect.left() - hintSize.width() - gap, centerY)) {
+        return;
     }
-    if (y < available.top()) {
-        y = available.top() + gap;
-    }
-    x = qBound(available.left() + gap, x, available.right() - hintSize.width() - gap);
-    m_hintBar->move(x, y);
+
+    // 选区几乎占满整屏时无处可放：退回屏幕顶部，靠平台排除捕获兜底
+    LOG_WARNING("[ScrollCapture] hint bar overlaps selection, rely on capture exclusion");
+    m_hintBar->move(qBound(minX, centerX, maxX), minY);
 }
 
 void ScrollCaptureSession::updateHintText() {
