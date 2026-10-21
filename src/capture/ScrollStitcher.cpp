@@ -1,15 +1,21 @@
 #include "ScrollStitcher.h"
+#include <QHash>
 #include <QTransform>
+#include <QVector>
 #include <QtGlobal>
 #include <cstring>
 
 namespace {
-///< 视为可靠匹配的最大平均灰度差（0~255）
-constexpr int kMaxMeanFlowDiff = 3;
-///< 模板区域的最小灰度方差（低于该值视为纯色/无纹理，不能作为对齐依据）
-constexpr double kMinTemplateVariance = 1.0;
 ///< 两帧采样平均灰度差低于该值即视为画面静止（光标闪烁、提示条文字刷新等局部变化）
 constexpr double kStaticFrameDiff = 0.5;
+///< 小于该位移视为页面未滚动（抗抖动）
+constexpr int kMinShift = 2;
+///< 允许的最快滚动：重叠行数低于该值说明位移过大，无法可靠对齐
+constexpr int kMinOverlapRows = 16;
+///< 至少需要多少行唯一内容投票，低于该值视为画面缺少可辨识特征
+constexpr int kMinAnchorVotes = 2;
+///< 回代校验时要求通过的唯一行占比
+constexpr double kMinAnchorAgreement = 0.6;
 
 /**
  * @brief 判断两帧是否几乎完全相同
@@ -39,8 +45,6 @@ bool framesNearlyIdentical(const QImage &a, const QImage &b) {
     }
     return count > 0 && double(diff) / count < kStaticFrameDiff;
 }
-///< 小于该位移视为页面未滚动（抗抖动）
-constexpr int kMinShift = 2;
 ///< 累计像素上限（避免长图占用过多内存，约 240MB）
 constexpr qint64 kMaxTotalPixels = 60LL * 1000 * 1000;
 
@@ -50,6 +54,31 @@ constexpr qint64 kMaxTotalPixels = 60LL * 1000 * 1000;
  */
 QImage toGray(const QImage &image) {
     return image.convertToFormat(QImage::Format_Grayscale8);
+}
+
+/**
+ * @brief 为灰度图的一行生成 64 位指纹
+ *
+ * 按固定步长采样列（跳过两侧边缘），用 FNV-1a 折叠该行像素。
+ * 指纹只用于判断"两行是否完全相同"，不参与相似度计算。
+ * @param gray 灰度图
+ * @param y 行号
+ * @param colStep 列采样步长
+ * @param colBegin 起始列（含）
+ * @param colEnd 结束列（不含）
+ * @return 行指纹
+ * @author chiangyang
+ */
+quint64 rowHash(const QImage &gray, int y, int colStep, int colBegin, int colEnd) {
+    constexpr quint64 kOffsetBasis = 1469598103934665603ULL;
+    constexpr quint64 kPrime = 1099511628211ULL;
+    quint64 hash = kOffsetBasis;
+    const uchar *line = gray.constScanLine(y);
+    for (int x = colBegin; x < colEnd; x += colStep) {
+        hash ^= quint64(line[x]);
+        hash *= kPrime;
+    }
+    return hash;
 }
 } // namespace
 
@@ -69,13 +98,6 @@ void ScrollStitcher::reset(Orientation orientation) {
 int ScrollStitcher::stitchedLength() const {
     // 内部统一使用转置坐标系，主方向始终是高度
     return m_stitchedLength;
-}
-
-int ScrollStitcher::templateRows(int frameHeight) {
-    int rows = qBound(24, frameHeight / 4, 120);
-    // 帧特别矮时模板最多占一半，避免模板覆盖整帧失去区分度
-    rows = qMin(rows, qMax(8, frameHeight / 2));
-    return rows;
 }
 
 ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
@@ -110,16 +132,11 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
         return AppendResult::Duplicate;
     }
 
-    int templateTop = 0;
-    int bestDiff = 0;
-    const int matchRow = findBestMatchRow(m_lastGray, gray, templateTop, bestDiff);
-    if (matchRow < 0) {
+    const int shift = findVerticalShift(m_lastGray, gray);
+    if (shift < 0) {
         return AppendResult::NoMatch;
     }
-
-    // 模板在上一帧中的位置与在当前帧中的匹配位置之差，即本次滚动位移；
-    // 模板不贴底时（底部为空白）也按同一公式换算，新增内容起点 = 帧高 - 位移
-    const int shift = templateTop - matchRow;
+    // 位移为 0 或过小：页面未滚动（或仅有抖动），不追加内容
     if (shift < kMinShift) {
         return AppendResult::Duplicate;
     }
@@ -139,118 +156,117 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
     return AppendResult::Appended;
 }
 
-int ScrollStitcher::findBestMatchRow(const QImage &prev, const QImage &next,
-                                     int &templateTop, int &bestDiff) const {
+int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next) const {
     const int width = prev.width();
     const int height = prev.height();
     if (next.width() != width || next.height() != height || width <= 0 || height <= 0) {
         return -1;
     }
 
-    const int rows = templateRows(height);
-    if (rows <= 0 || rows >= height) {
+    const int maxShift = height - kMinOverlapRows;
+    if (maxShift < kMinShift) {
         return -1;
     }
 
-    // 采样步长：每帧最多约 240 列、24 行参与比较，兼顾精度与耗时
+    // 采样步长：每帧最多约 240 列参与指纹计算，兼顾精度与耗时
     const int colStep = qMax(1, width / 240);
-    const int rowStep = qMax(1, rows / 24);
-    // 跳过两侧各 3% 的列：滚动条、窗口阴影等边缘元素随滚动变化，会干扰模板匹配
+    // 跳过两侧各 3% 的列：滚动条、窗口阴影等边缘元素随滚动变化，会干扰定位
     const int edgeInset = width >= 40 ? int(width * 0.03) : 0;
     const int colBegin = edgeInset;
     const int colEnd = width - edgeInset;
+    if (colEnd <= colBegin) {
+        return -1;
+    }
+
+    QVector<quint64> prevRows(height);
+    QVector<quint64> nextRows(height);
+    for (int y = 0; y < height; ++y) {
+        prevRows[y] = rowHash(prev, y, colStep, colBegin, colEnd);
+        nextRows[y] = rowHash(next, y, colStep, colBegin, colEnd);
+    }
+
+    // 统计指纹在各自帧内的出现次数：只有唯一的行才有"辨识度"
+    QHash<quint64, int> prevCount;
+    QHash<quint64, int> nextCount;
+    for (int y = 0; y < height; ++y) {
+        ++prevCount[prevRows[y]];
+        ++nextCount[nextRows[y]];
+    }
+
+    // 当前帧中唯一行 → 行号（用于锚点配对）
+    QHash<quint64, int> nextIndex;
+    for (int y = 0; y < height; ++y) {
+        if (nextCount.value(nextRows[y]) == 1) {
+            nextIndex.insert(nextRows[y], y);
+        }
+    }
 
     /**
-     * @brief 计算指定起始行的模板区域灰度方差（纹理强度）
-     * @param top 模板起始行
-     * @return 方差；0 表示纯色
+     * @brief 锚点投票
+     *
+     * 位移 = 该行在上一帧的行号 - 在当前帧的行号。只在两帧中都唯一
+     * 出现的行才投票：空白行、重复排版行会因计数 > 1 被排除；
+     * 固定表头/底栏的行虽然唯一，但位移恒为 0，同样不计入。
      */
-    auto regionVariance = [&](int top) -> double {
-        double sum = 0.0;
-        double sumSq = 0.0;
-        int count = 0;
-        for (int r = 0; r < rows; r += rowStep) {
-            const uchar *line = prev.constScanLine(top + r);
-            for (int c = colBegin; c < colEnd; c += colStep) {
-                const double v = line[c];
-                sum += v;
-                sumSq += v * v;
-                ++count;
-            }
+    QHash<int, int> votes;
+    int anchorTotal = 0;
+    for (int p = 0; p < height; ++p) {
+        const quint64 hash = prevRows[p];
+        if (prevCount.value(hash) != 1) {
+            continue;
         }
-        if (count == 0) return 0.0;
-        const double mean = sum / count;
-        return sumSq / count - mean * mean;
-    };
-
-    // 自适应模板：从帧底往上扫描，选取第一段纹理足够的内容。
-    // 白底文档、大面积留白页面的底部常为空白，固定取底部会导致整帧被判为无匹配。
-    // 上限限制在帧高 35% 以上，避免模板落到顶部固定表头区域。
-    const int maxTemplateTop = height - rows;
-    const int minTemplateTop = qMax(0, int(height * 0.35));
-    const int templateStep = qMax(4, rows / 8);
-    templateTop = -1;
-    for (int top = maxTemplateTop; top >= minTemplateTop; top -= templateStep) {
-        if (regionVariance(top) >= kMinTemplateVariance) {
-            templateTop = top;
-            break;
+        const auto it = nextIndex.constFind(hash);
+        if (it == nextIndex.constEnd()) {
+            continue;
+        }
+        ++anchorTotal;
+        const int shift = p - it.value();
+        if (shift >= kMinShift && shift <= maxShift) {
+            ++votes[shift];
         }
     }
-    if (templateTop < 0) {
-        return -1;  // 整帧无可用纹理（纯色画面），无法定位重叠
-    }
 
-    // 页面向上滚动时，同一内容在当前帧中的位置比上一帧更靠上；
-    // 上限含 templateTop 本身，未滚动时才能匹配到原位置并判为 Duplicate
-    const int maxRow = qMin(height - rows, templateTop);
-    if (maxRow < 0) {
+    // 唯一行太少：整幅画面都是纯色或重复排版，无法定位
+    if (anchorTotal < kMinAnchorVotes) {
         return -1;
     }
 
-    auto evaluate = [&](int startRow) -> double {
-        long long diff = 0;
-        int count = 0;
-        for (int r = 0; r < rows; r += rowStep) {
-            const uchar *tail = prev.constScanLine(templateTop + r);
-            const uchar *head = next.constScanLine(startRow + r);
-            for (int c = colBegin; c < colEnd; c += colStep) {
-                diff += qAbs(int(tail[c]) - int(head[c]));
-                ++count;
-            }
-        }
-        return count > 0 ? double(diff) / count : 1e18;
-    };
-
-    // 粗扫（步长 3）定位大致位置，再在邻域内逐行精扫
-    // 精扫半径取 2 倍粗扫步长：粗扫最优点可能偏离真实匹配点若干行（纹理非单调），
-    // 半径过小会错过真正的精确匹配位置
-    constexpr int kCoarseStep = 3;
-    double best = 1e18;
-    int bestRow = -1;
-    for (int row = 0; row <= maxRow; row += kCoarseStep) {
-        const double diff = evaluate(row);
-        if (diff < best) {
-            best = diff;
-            bestRow = row;
-        }
-    }
-    if (bestRow >= 0) {
-        const int lo = qMax(0, bestRow - 2 * kCoarseStep);
-        const int hi = qMin(maxRow, bestRow + 2 * kCoarseStep);
-        for (int row = lo; row <= hi; ++row) {
-            const double diff = evaluate(row);
-            if (diff < best) {
-                best = diff;
-                bestRow = row;
-            }
+    int bestShift = -1;
+    int bestVotes = 0;
+    for (auto it = votes.constBegin(); it != votes.constEnd(); ++it) {
+        if (it.value() > bestVotes) {
+            bestVotes = it.value();
+            bestShift = it.key();
         }
     }
 
-    bestDiff = bestRow >= 0 ? int(best) : -1;
-    if (bestRow < 0 || best > kMaxMeanFlowDiff) {
+    // 没有任何非零位移获得足够票数：页面没有真正滚动
+    if (bestShift < 0 || bestVotes < kMinAnchorVotes) {
+        return 0;
+    }
+
+    // 回代校验：上一帧的行在向上移动后应落在当前帧更低的位置；跳过静止行（表头/底栏）
+    int agree = 0;
+    int total = 0;
+    for (int p = 0; p < height; ++p) {
+        const quint64 hash = prevRows[p];
+        if (prevCount.value(hash) != 1 || nextRows[p] == hash) {
+            continue;
+        }
+        const int target = p - bestShift;
+        if (target < 0) {
+            continue;
+        }
+        ++total;
+        if (nextRows[target] == hash) {
+            ++agree;
+        }
+    }
+
+    if (total < kMinAnchorVotes || double(agree) / total < kMinAnchorAgreement) {
         return -1;
     }
-    return bestRow;
+    return bestShift;
 }
 
 bool ScrollStitcher::appendRows(const QImage &frame, int startRow) {

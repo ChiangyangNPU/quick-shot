@@ -2,12 +2,13 @@
  * @file ScrollStitcherTest.cpp
  * @brief 滚动截图拼接器单元测试
  *
- * 覆盖垂直/水平拼接、重复帧丢弃、无纹理画面拒绝、最大长度限制。
+ * 覆盖垂直/水平拼接、固定表头与底栏、重复帧丢弃、无纹理画面拒绝、最大长度限制。
  * 纯 QImage 计算，无 GUI 依赖，使用 QTEST_GUILESS_MAIN。
  * @author chiangyang
  */
 #include <QtTest>
 #include <QImage>
+#include <QPainter>
 #include <cstring>
 
 #include "capture/ScrollStitcher.h"
@@ -96,6 +97,15 @@ private slots:
     void whitePageStitch();
 
     /**
+     * @brief 固定表头与底栏不干扰定位
+     *
+     * 每帧顶部、底部各有一段固定内容，只有中间区域随滚动变化；
+     * 位移仍应正确求出，长图持续增长（不会因静止行卡住）。
+     * @author chiangyang
+     */
+    void fixedHeaderFooterStitch();
+
+    /**
      * @brief 未滚动时重复帧应被丢弃
      * @author chiangyang
      */
@@ -178,6 +188,40 @@ void ScrollStitcherTest::whitePageStitch() {
 
     QCOMPARE(stitcher.stitchedLength(), frameH + 5 * step);
     QVERIFY(imagesEqual(stitcher.result(), slice(doc, 0, 0, frameW, frameH + 5 * step)));
+}
+
+void ScrollStitcherTest::fixedHeaderFooterStitch() {
+    const int frameW = 120;
+    const int frameH = 160;
+    const int step = 40;
+    const int headerH = 20;
+    const int footerH = 15;
+    const int contentH = frameH - headerH - footerH;
+
+    const QImage header = makeDocument(frameW, headerH);
+    const QImage footer = makeSparseDocument(frameW, footerH);
+    const QImage doc = makeDocument(frameW, 420);
+
+    // 固定表头/底栏 + 中间滚动内容
+    auto makeFrame = [&](int offset) {
+        QImage frame(frameW, frameH, QImage::Format_RGB32);
+        QPainter painter(&frame);
+        painter.drawImage(0, 0, header);
+        painter.drawImage(0, headerH, doc.copy(0, offset, frameW, contentH));
+        painter.drawImage(0, headerH + contentH, footer);
+        return frame;
+    };
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(makeFrame(0))
+            == ScrollStitcher::AppendResult::Appended);
+
+    for (int i = 1; i < 5; ++i) {
+        QCOMPARE(stitcher.appendFrame(makeFrame(i * step)),
+                 ScrollStitcher::AppendResult::Appended);
+        // 表头/底栏始终静止，若被当作定位依据会算成 0 位移而卡住
+        QCOMPARE(stitcher.stitchedLength(), frameH + i * step);
+    }
 }
 
 void ScrollStitcherTest::duplicateFrameIgnored() {

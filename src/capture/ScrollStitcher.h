@@ -118,27 +118,18 @@ public:
 
 private:
     /**
-     * @brief 模板行数（随帧高自适应，限制在 24~120 像素）
-     * @param frameHeight 帧高
-     * @return 模板行数
-     * @author chiangyang
-     */
-    static int templateRows(int frameHeight);
-
-    /**
-     * @brief 在当前帧中搜索与上一帧模板匹配的起始行
+     * @brief 通过行指纹投票求两帧之间的滚动位移
      *
-     * 模板位置自适应：从帧底往上扫描，选取第一段纹理足够的内容，
-     * 避免白底文档、大面积留白页面因底部无特征被判为无法匹配。
+     * 为每行像素生成 64 位指纹，只让在两帧中均唯一出现的行参与投票：
+     * 空白行、重复排版行会自然失去投票权，固定表头/底栏因位移为 0
+     * 被排除，避免其干扰定位。得票最多的位移再回代校验一致性。
+     *
      * @param prev 上一帧灰度图（转置坐标系）
      * @param next 当前帧灰度图（转置坐标系）
-     * @param templateTop 输出模板在上一帧中的起始行
-     * @param bestDiff 输出最佳匹配的平均灰度差
-     * @return 匹配起始行；-1 表示无可靠匹配
+     * @return 内容上移的像素数；0 表示未滚动；-1 表示无法可靠定位
      * @author chiangyang
      */
-    int findBestMatchRow(const QImage &prev, const QImage &next,
-                         int &templateTop, int &bestDiff) const;
+    int findVerticalShift(const QImage &prev, const QImage &next) const;
 
     /**
      * @brief 将新内容追加为一段条带（转置坐标系）
