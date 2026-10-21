@@ -88,7 +88,7 @@ void SettingsGeneralTab::setupUi() {
 
     // OCR Language
     QHBoxLayout *ocrLayout = new QHBoxLayout();
-    lblOcrLanguage = new QLabel(TranslationManager::instance()->get("ocr.language", "OCR Language:"), this);
+    lblOcrLanguage = new QLabel(TranslationManager::instance()->get("ocr.language", "Text Recognition Language:"), this);
     cmbOcrLanguage = new QComboBox(this);
     StyleManager::useHighlightOnlyPopup(cmbOcrLanguage);
     cmbOcrLanguage->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
@@ -341,7 +341,7 @@ void SettingsGeneralTab::retranslateUi() {
     if (btnClearLogFile) btnClearLogFile->setText(tm->get("logPrint.clearLogFile", "Clear Logs"));
 
     // OCR Language
-    if (lblOcrLanguage) lblOcrLanguage->setText(tm->get("ocr.language", "OCR Language:"));
+    if (lblOcrLanguage) lblOcrLanguage->setText(tm->get("ocr.language", "Text Recognition Language:"));
     if (gpuAccelCheck) gpuAccelCheck->setText(tm->get("ocr.gpuAccel", "GPU Acceleration"));
     if (cmbOcrLanguage) {
         int ocrCurrentIndex = cmbOcrLanguage->currentIndex();

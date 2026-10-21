@@ -471,7 +471,7 @@ void OcrResultDialog::retranslateUi() {
 
     QLabel *titleLabel = findChild<QLabel*>("titleLabel");
     if (titleLabel) {
-        titleLabel->setText(tm->get("ocr.title", "OCR Result"));
+        titleLabel->setText(tm->get("ocr.title", "Text Recognition Result"));
     }
     if (m_copyButton) {
         m_copyButton->setText(tm->get("ocr.copy", "Copy"));
