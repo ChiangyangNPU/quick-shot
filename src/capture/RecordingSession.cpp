@@ -368,6 +368,10 @@ void RecordingSession::showControlForGif() {
 void RecordingSession::hideToolBar() {
     if (m_toolbar) {
         m_toolbar->hide();
+        // 工具栏隐藏时控制栏同步关闭，录屏按钮必须一并恢复未选中：
+        // 否则按钮保持高亮，下次进入录屏模式时 toggled 不会再触发，
+        // 点击该按钮也只会先取消选中、再点一次才能重新打开控制栏
+        m_toolbar->resetRecordBtn();
         QWidget *subToolbar = m_toolbar->getSubToolbarWindow();
         if (subToolbar) {
             subToolbar->hide();
