@@ -5,6 +5,8 @@
 #include <QVBoxLayout>
 #include <QCheckBox>
 
+class QComboBox;
+
 /**
  * @brief 录屏控制窗口类
  * 
@@ -63,6 +65,20 @@ public:
      */
     void setPaused(bool paused);
 
+    /**
+     * @brief 获取当前选择的输出格式
+     * @return "mp4" 或 "gif"
+     * @author chiangyang
+     */
+    QString selectedFormat() const;
+
+    /**
+     * @brief 设置输出格式（同时写入配置）
+     * @param format "mp4" 或 "gif"
+     * @author chiangyang
+     */
+    void setSelectedFormat(const QString &format);
+
 protected:
     /**
      * @brief 绘制事件：主动绘制圆角矩形背景
@@ -115,11 +131,22 @@ private:
      */
     void setupUi();
 
+    /**
+     * @brief 根据当前格式与录制状态更新音频选项可用性
+     *
+     * GIF 无音轨，选择 GIF 时取消勾选并禁用音频复选框。
+     * @author chiangyang
+     */
+    void updateAudioAvailability();
+
     // 控制按钮
     QPushButton *btnStart = nullptr;
     QPushButton *btnPause = nullptr;
     QPushButton *btnResume = nullptr;
     QPushButton *btnStop = nullptr;
+
+    // 输出格式选择（MP4 / GIF）
+    QComboBox *m_formatCombo = nullptr;
 
     // 音频录制选项
     QCheckBox *chkSystemAudio = nullptr;

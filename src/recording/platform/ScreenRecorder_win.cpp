@@ -698,15 +698,20 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
     PlatformImpl *pImpl = getPlatformImpl();
 
     impl->worker = std::thread([impl, pImpl]() {
-        LOG_INFO("Initialize COM and Media Foundation");
-        HRESULT hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-        HRESULT hrMf = MFStartup(MF_VERSION);
-        if (!hrOk(hrMf)) {
-            LOG_ERROR("Screen recording initialization failed: " + hresultToString(hrMf));
-            emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.initFailed", "Screen recording initialization failed"));
-            impl->running = false;
-            if (SUCCEEDED(hrCo)) CoUninitialize();
-            return;
+        const bool gifMode = impl->gifMode;
+        HRESULT hrCo = E_FAIL;
+        HRESULT hrMf = E_FAIL;
+        if (!gifMode) {
+            LOG_INFO("Initialize COM and Media Foundation");
+            hrCo = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+            hrMf = MFStartup(MF_VERSION);
+            if (!hrOk(hrMf)) {
+                LOG_ERROR("Screen recording initialization failed: " + hresultToString(hrMf));
+                emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.initFailed", "Screen recording initialization failed"));
+                impl->running = false;
+                if (SUCCEEDED(hrCo)) CoUninitialize();
+                return;
+            }
         }
 
         const QRect cap = impl->captureRectPx;
@@ -714,8 +719,9 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
         const int fps = impl->fps;
         pImpl->frameDuration100ns = 10000000LL / fps;
 
-        const bool wantSysAudio = impl->systemAudioEnabled;
-        const bool wantMicAudio = impl->microphoneEnabled;
+        // GIF 无音轨，忽略音频开关
+        const bool wantSysAudio = !gifMode && impl->systemAudioEnabled;
+        const bool wantMicAudio = !gifMode && impl->microphoneEnabled;
 
         // Initialize audio capture before creating sink writer (need format info)
         bool hasSysAudio = false;
@@ -747,48 +753,66 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
             }
         }
 
-        QString absPath = QDir::toNativeSeparators(QFileInfo(impl->outputFilePath).absoluteFilePath());
-        std::wstring outPath = absPath.toStdWString();
-        DeleteFileW(outPath.c_str());
-        LOG_INFO("Delete existing output file if it exists");
-
-        HRESULT hrWriter = S_OK;
-        LOG_INFO("Create H.264 media sink");
+        const int gifDelayCs = qMax(1, 100 / fps);
         const bool hasAudio = (hasSysAudio || hasMicAudio);
-        const WAVEFORMATEX *audioFmt = hasSysAudio ? &pImpl->systemAudioFmt : (hasMicAudio ? &pImpl->micAudioFmt : nullptr);
-        bool ok = createSinkWriter(&pImpl->writer, &pImpl->videoStreamIndex,
-                                    &pImpl->audioStreamIndex,
-                                    outPath.c_str(), out, fps, MFVideoFormat_H264, 6000000,
-                                    hasAudio, audioFmt, &hrWriter);
-        if (!ok) {
-            LOG_WARNING("H.264 media sink creation failed, trying WMV format: " + hresultToString(hrWriter));
-            QString fallbackPathQt = absPath;
-            if (fallbackPathQt.endsWith(".mp4", Qt::CaseInsensitive)) {
-                fallbackPathQt.chop(4);
-                fallbackPathQt += ".wmv";
+        if (!gifMode) {
+            QString absPath = QDir::toNativeSeparators(QFileInfo(impl->outputFilePath).absoluteFilePath());
+            std::wstring outPath = absPath.toStdWString();
+            DeleteFileW(outPath.c_str());
+            LOG_INFO("Delete existing output file if it exists");
+
+            HRESULT hrWriter = S_OK;
+            LOG_INFO("Create H.264 media sink");
+            const WAVEFORMATEX *audioFmt = hasSysAudio ? &pImpl->systemAudioFmt : (hasMicAudio ? &pImpl->micAudioFmt : nullptr);
+            bool ok = createSinkWriter(&pImpl->writer, &pImpl->videoStreamIndex,
+                                        &pImpl->audioStreamIndex,
+                                        outPath.c_str(), out, fps, MFVideoFormat_H264, 6000000,
+                                        hasAudio, audioFmt, &hrWriter);
+            if (!ok) {
+                LOG_WARNING("H.264 media sink creation failed, trying WMV format: " + hresultToString(hrWriter));
+                QString fallbackPathQt = absPath;
+                if (fallbackPathQt.endsWith(".mp4", Qt::CaseInsensitive)) {
+                    fallbackPathQt.chop(4);
+                    fallbackPathQt += ".wmv";
+                } else {
+                    fallbackPathQt += ".wmv";
+                }
+
+                std::wstring fallbackPath = fallbackPathQt.toStdWString();
+                DeleteFileW(fallbackPath.c_str());
+
+                HRESULT hrWriter2 = S_OK;
+                LOG_INFO("Create WMV media sink");
+                ok = createSinkWriter(&pImpl->writer, &pImpl->videoStreamIndex,
+                                       &pImpl->audioStreamIndex,
+                                       fallbackPath.c_str(), out, fps, MFVideoFormat_WMV3, 4000000,
+                                       hasAudio, audioFmt, &hrWriter2);
+                if (ok) {
+                    impl->outputFilePath = fallbackPathQt;
+                    LOG_INFO("WMV media sink creation successful, using WMV format");
+                } else {
+                    const QString detail1 = hresultToString(hrWriter);
+                    const QString detail2 = hresultToString(hrWriter2);
+                    QString hint = QStringLiteral("Failed to create video file: \n- MP4/H.264: %1\n- WMV fallback: %2").arg(detail1, detail2);
+                    hint += QStringLiteral("\nPossible reasons: System lacks H.264/MP4 encoding components (e.g., Windows N/KN without Media Feature Pack), or no permission to save path.");
+                    LOG_ERROR("Media sink creation failed: " + hint);
+                    emit impl->recorder->errorOccurred(hint);
+                    cleanupAudioCapture(&pImpl->systemAudioClient, &pImpl->systemCaptureClient,
+                                         &pImpl->systemAudioEvent, nullptr, nullptr);
+                    cleanupAudioCapture(&pImpl->micAudioClient, &pImpl->micCaptureClient,
+                                         &pImpl->micAudioEvent, nullptr, nullptr);
+                    MFShutdown();
+                    impl->running = false;
+                    if (SUCCEEDED(hrCo)) CoUninitialize();
+                    return;
+                }
             } else {
-                fallbackPathQt += ".wmv";
+                LOG_INFO("H.264 media sink creation successful");
             }
 
-            std::wstring fallbackPath = fallbackPathQt.toStdWString();
-            DeleteFileW(fallbackPath.c_str());
-
-            HRESULT hrWriter2 = S_OK;
-            LOG_INFO("Create WMV media sink");
-            ok = createSinkWriter(&pImpl->writer, &pImpl->videoStreamIndex,
-                                   &pImpl->audioStreamIndex,
-                                   fallbackPath.c_str(), out, fps, MFVideoFormat_WMV3, 4000000,
-                                   hasAudio, audioFmt, &hrWriter2);
-            if (ok) {
-                impl->outputFilePath = fallbackPathQt;
-                LOG_INFO("WMV media sink creation successful, using WMV format");
-            } else {
-                const QString detail1 = hresultToString(hrWriter);
-                const QString detail2 = hresultToString(hrWriter2);
-                QString hint = QStringLiteral("Failed to create video file: \n- MP4/H.264: %1\n- WMV fallback: %2").arg(detail1, detail2);
-                hint += QStringLiteral("\nPossible reasons: System lacks H.264/MP4 encoding components (e.g., Windows N/KN without Media Feature Pack), or no permission to save path.");
-                LOG_ERROR("Media sink creation failed: " + hint);
-                emit impl->recorder->errorOccurred(hint);
+            if (!pImpl->writer) {
+                LOG_ERROR("Failed to create video file");
+                emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.createFileFailed", "Failed to create video file"));
                 cleanupAudioCapture(&pImpl->systemAudioClient, &pImpl->systemCaptureClient,
                                      &pImpl->systemAudioEvent, nullptr, nullptr);
                 cleanupAudioCapture(&pImpl->micAudioClient, &pImpl->micCaptureClient,
@@ -799,20 +823,17 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
                 return;
             }
         } else {
-            LOG_INFO("H.264 media sink creation successful");
-        }
-
-        if (!pImpl->writer) {
-            LOG_ERROR("Failed to create video file");
-            emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.createFileFailed", "Failed to create video file"));
-            cleanupAudioCapture(&pImpl->systemAudioClient, &pImpl->systemCaptureClient,
-                                 &pImpl->systemAudioEvent, nullptr, nullptr);
-            cleanupAudioCapture(&pImpl->micAudioClient, &pImpl->micCaptureClient,
-                                 &pImpl->micAudioEvent, nullptr, nullptr);
-            MFShutdown();
-            impl->running = false;
-            if (SUCCEEDED(hrCo)) CoUninitialize();
-            return;
+            // GIF 模式：创建 GIF 编码器（10fps 时每帧延迟 10cs）
+            LOG_INFO(QString("Initialize GIF encoder, frame delay=%1cs, size=%2x%3")
+                     .arg(gifDelayCs).arg(out.width()).arg(out.height()));
+            impl->gifEncoder = std::make_unique<GifEncoder>();
+            if (!impl->gifEncoder->open(impl->outputFilePath, out)) {
+                LOG_ERROR("Failed to create GIF file: " + impl->outputFilePath);
+                emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.createFileFailed", "Failed to create video file"));
+                impl->gifEncoder.reset();
+                impl->running = false;
+                return;
+            }
         }
 
         // Record start time for audio timestamp synchronization
@@ -887,51 +908,63 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
                 }
             }
 
-            IMFMediaBuffer *buffer = nullptr;
-            HRESULT hr = MFCreateMemoryBuffer(static_cast<DWORD>(impl->frameBuffer.size()), &buffer);
-            if (!hrOk(hr)) {
-                LOG_ERROR("Failed to create media buffer: " + hresultToString(hr));
-                break;
-            }
+            if (gifMode) {
+                // GIF 模式：直接把合成后的帧交给编码器
+                const QImage frameImage(reinterpret_cast<const uchar *>(impl->frameBuffer.constData()),
+                                        out.width(), out.height(), stride, QImage::Format_RGB32);
+                if (!impl->gifEncoder || !impl->gifEncoder->addFrame(frameImage, gifDelayCs)) {
+                    LOG_ERROR("Failed to write GIF frame");
+                    emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.writeFailed", "Failed to write video"));
+                    break;
+                }
+                frameCount++;
+            } else {
+                IMFMediaBuffer *buffer = nullptr;
+                HRESULT hr = MFCreateMemoryBuffer(static_cast<DWORD>(impl->frameBuffer.size()), &buffer);
+                if (!hrOk(hr)) {
+                    LOG_ERROR("Failed to create media buffer: " + hresultToString(hr));
+                    break;
+                }
 
-            BYTE *dst = nullptr;
-            DWORD maxLen = 0;
-            DWORD curLen = 0;
-            hr = buffer->Lock(&dst, &maxLen, &curLen);
-            if (!hrOk(hr)) {
-                LOG_ERROR("Failed to lock buffer: " + hresultToString(hr));
+                BYTE *dst = nullptr;
+                DWORD maxLen = 0;
+                DWORD curLen = 0;
+                hr = buffer->Lock(&dst, &maxLen, &curLen);
+                if (!hrOk(hr)) {
+                    LOG_ERROR("Failed to lock buffer: " + hresultToString(hr));
+                    safeRelease(buffer);
+                    break;
+                }
+
+                memcpy(dst, impl->frameBuffer.constData(), impl->frameBuffer.size());
+                buffer->Unlock();
+                buffer->SetCurrentLength(static_cast<DWORD>(impl->frameBuffer.size()));
+
+                IMFSample *sample = nullptr;
+                hr = MFCreateSample(&sample);
+                if (!hrOk(hr)) {
+                    LOG_ERROR("Failed to create media sample: " + hresultToString(hr));
+                    safeRelease(buffer);
+                    break;
+                }
+
+                sample->AddBuffer(buffer);
                 safeRelease(buffer);
-                break;
+
+                sample->SetSampleTime(ts);
+                sample->SetSampleDuration(pImpl->frameDuration100ns);
+
+                hr = pImpl->writer->WriteSample(pImpl->videoStreamIndex, sample);
+                safeRelease(sample);
+                if (!hrOk(hr)) {
+                    LOG_ERROR("Failed to write video: " + hresultToString(hr));
+                    emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.writeFailed", "Failed to write video"));
+                    break;
+                }
+
+                ts += pImpl->frameDuration100ns;
+                frameCount++;
             }
-
-            memcpy(dst, impl->frameBuffer.constData(), impl->frameBuffer.size());
-            buffer->Unlock();
-            buffer->SetCurrentLength(static_cast<DWORD>(impl->frameBuffer.size()));
-
-            IMFSample *sample = nullptr;
-            hr = MFCreateSample(&sample);
-            if (!hrOk(hr)) {
-                LOG_ERROR("Failed to create media sample: " + hresultToString(hr));
-                safeRelease(buffer);
-                break;
-            }
-
-            sample->AddBuffer(buffer);
-            safeRelease(buffer);
-
-            sample->SetSampleTime(ts);
-            sample->SetSampleDuration(pImpl->frameDuration100ns);
-
-            hr = pImpl->writer->WriteSample(pImpl->videoStreamIndex, sample);
-            safeRelease(sample);
-            if (!hrOk(hr)) {
-                LOG_ERROR("Failed to write video: " + hresultToString(hr));
-                emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.writeFailed", "Failed to write video"));
-                break;
-            }
-
-            ts += pImpl->frameDuration100ns;
-            frameCount++;
 
             if (frameCount % 100 == 0) {
                 auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now() - startTime).count();
@@ -944,6 +977,17 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
         }
 
         LOG_INFO("Recording loop ended, total frames: " + QString::number(frameCount));
+
+        if (gifMode && impl->gifEncoder) {
+            if (impl->canceled.load()) {
+                LOG_INFO("GIF recording canceled, deleting file");
+                impl->gifEncoder->abort();
+            } else {
+                LOG_INFO("Finalizing GIF, encoded frames: " + QString::number(impl->gifEncoder->frameCount()));
+                impl->gifEncoder->close();
+            }
+            impl->gifEncoder.reset();
+        }
 
         // Stop audio thread first
         pImpl->audioRunning = false;
@@ -969,9 +1013,11 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
         safeRelease(pImpl->writer);
         pImpl->writer = nullptr;
 
-        LOG_INFO("Shutdown Media Foundation and COM");
-        MFShutdown();
-        if (SUCCEEDED(hrCo)) CoUninitialize();
+        if (!gifMode) {
+            LOG_INFO("Shutdown Media Foundation and COM");
+            MFShutdown();
+            if (SUCCEEDED(hrCo)) CoUninitialize();
+        }
 
         const QString outFile = impl->outputFilePath;
         impl->running = false;

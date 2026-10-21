@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QPainter>
 #include "../log/Logger.h"
 #include "../core/TranslationManager.h"
 
@@ -42,6 +43,22 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
         impl->frameBuffer.resize(stride * out.height());
         LOG_INFO("Initialize frame buffer, size: " + QString::number(impl->frameBuffer.size()));
 
+        const bool gifMode = impl->gifMode;
+        const int gifDelayCs = qMax(1, 100 / fps);
+        if (gifMode) {
+            LOG_INFO(QString("Initialize GIF encoder, frame delay=%1cs, size=%2x%3")
+                     .arg(gifDelayCs).arg(out.width()).arg(out.height()));
+            impl->gifEncoder = std::make_unique<GifEncoder>();
+            if (!impl->gifEncoder->open(impl->outputFilePath, out)) {
+                LOG_ERROR("Failed to create GIF file: " + impl->outputFilePath);
+                emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.createFileFailed", "Failed to create video file"));
+                impl->gifEncoder.reset();
+                XCloseDisplay(display);
+                impl->running = false;
+                return;
+            }
+        }
+
         LOG_INFO("Start recording loop");
         int frameCount = 0;
         auto startTime = std::chrono::steady_clock::now();
@@ -76,6 +93,29 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
                 XDestroyImage(image);
             }
 
+            // 合成标注叠加到帧缓冲
+            {
+                QMutexLocker lock(&impl->annotationMutex);
+                if (!impl->annotationOverlay.isNull()) {
+                    QImage frameImage(reinterpret_cast<uchar *>(impl->frameBuffer.data()),
+                                      out.width(), out.height(), stride, QImage::Format_RGB32);
+                    QPainter fp(&frameImage);
+                    fp.setCompositionMode(QPainter::CompositionMode_SourceOver);
+                    fp.drawImage(0, 0, impl->annotationOverlay);
+                    fp.end();
+                }
+            }
+
+            if (gifMode) {
+                QImage frameImage(reinterpret_cast<const uchar *>(impl->frameBuffer.constData()),
+                                  out.width(), out.height(), stride, QImage::Format_RGB32);
+                if (!impl->gifEncoder || !impl->gifEncoder->addFrame(frameImage, gifDelayCs)) {
+                    LOG_ERROR("Failed to write GIF frame");
+                    emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.writeFailed", "Failed to write video"));
+                    break;
+                }
+            }
+
             frameCount++;
 
             if (frameCount % 100 == 0) {
@@ -86,6 +126,17 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
 
             nextTick += std::chrono::milliseconds(1000 / fps);
             std::this_thread::sleep_until(nextTick);
+        }
+
+        if (gifMode && impl->gifEncoder) {
+            if (impl->canceled.load()) {
+                LOG_INFO("GIF recording canceled, deleting file");
+                impl->gifEncoder->abort();
+            } else {
+                LOG_INFO("Finalizing GIF, encoded frames: " + QString::number(impl->gifEncoder->frameCount()));
+                impl->gifEncoder->close();
+            }
+            impl->gifEncoder.reset();
         }
 
         if (display) {

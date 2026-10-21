@@ -3,6 +3,7 @@
 #include "Logger.h"
 #include "TranslationManager.h"
 #include "Annotation.h"
+#include "../recording/ScreenRecorder.h"
 using namespace ToolIds;
 #include <QApplication>
 #include <QHBoxLayout>
@@ -104,6 +105,14 @@ void ScreenshotToolBar::createActionButtons() {
         emit translateRequested();
     });
     m_primaryLayout->addWidget(m_translateBtn);
+
+    // GIF 录制按钮（操作区）：切到录屏模式并预选 GIF 格式
+    m_gifBtn = makeActionButton({&m_gifBtn, "record.gif", ":/icons/gif.svg"}, [this]() {
+        LOG_INFO("ScreenshotToolBar: GIF recording requested");
+        emit gifRecordRequested();
+    });
+    m_gifBtn->setVisible(ScreenRecorder::isGifSupported());
+    m_primaryLayout->addWidget(m_gifBtn);
 
     // 添加分隔符
     addSeparator(m_primaryLayout);

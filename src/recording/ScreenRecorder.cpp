@@ -51,7 +51,8 @@ bool ScreenRecorder::isPaused() const {
     return m_impl->paused.load();
 }
 
-bool ScreenRecorder::start(const QRect &captureRectPx, const QSize &outputSizePx, const QString &outputFilePath, int fps) {
+bool ScreenRecorder::start(const QRect &captureRectPx, const QSize &outputSizePx, const QString &outputFilePath,
+                           int fps, OutputFormat format) {
     if (isRecording()) {
         LOG_WARNING("Already recording, cannot start new recording");
         return false;
@@ -90,15 +91,19 @@ bool ScreenRecorder::start(const QRect &captureRectPx, const QSize &outputSizePx
     m_impl->outputSizePx = outSize;
     m_impl->outputFilePath = outputFilePath;
     m_impl->fps = fps <= 0 ? 30 : fps;
+    m_impl->gifMode = (format == OutputFormat::Gif);
 
-    LOG_INFO(QString("Start recording: area=%1x%2+%3+%4, output=%5x%6, fps=%7, save path=%8")
+    LOG_INFO(QString("Start recording: area=%1x%2+%3+%4, output=%5x%6, fps=%7, format=%8, save path=%9")
              .arg(captureRectPx.width()).arg(captureRectPx.height())
              .arg(captureRectPx.x()).arg(captureRectPx.y())
              .arg(outSize.width()).arg(outSize.height())
-             .arg(m_impl->fps).arg(outputFilePath));
+             .arg(m_impl->fps)
+             .arg(m_impl->gifMode ? "gif" : "video")
+             .arg(outputFilePath));
 
     m_impl->running = true;
     m_impl->paused = false;
+    m_impl->canceled = false;
 
     screenRecorderImplStart(m_impl);
 
@@ -195,6 +200,22 @@ void ScreenRecorder::setAudioDevice(int index) {
  */
 bool ScreenRecorder::isAvailable() const {
     return screenRecorderImplIsAvailable();
+}
+
+/**
+ * @brief 当前平台是否支持 GIF 录制
+ *
+ * Windows / Linux 通过逐帧截取 + 内存编码实现 GIF；macOS 的录制管线由系统
+ * ScreenCaptureKit 直接写文件，没有可用的帧缓冲，暂不支持。
+ * @return 支持返回 true
+ * @author chiangyang
+ */
+bool ScreenRecorder::isGifSupported() {
+#if defined(Q_OS_MACOS)
+    return false;
+#else
+    return true;
+#endif
 }
 
 void ScreenRecorder::setAnnotationOverlay(const QImage &overlay) {

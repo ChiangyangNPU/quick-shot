@@ -64,6 +64,14 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
     impl->worker = std::thread([impl, dpr]() {
         LOG_INFO("Starting ScreenCaptureKit recording");
 
+        // macOS 的系统录制管线直接写视频文件，暂不支持 GIF 输出
+        if (impl->gifMode) {
+            LOG_ERROR("GIF recording is not supported on macOS");
+            emit impl->recorder->errorOccurred(TranslationManager::instance()->get("record.error.gifUnsupported", "GIF recording is not supported on this platform"));
+            impl->running = false;
+            return;
+        }
+
         const QRect cap = impl->captureRectPx;
         const QSize out = impl->outputSizePx;
         const int fps = impl->fps;

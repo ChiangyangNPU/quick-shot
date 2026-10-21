@@ -232,6 +232,14 @@ signals:
     void recordRequested();
 
     /**
+     * @brief 请求开始 GIF 录制
+     *
+     * 截图工具栏与录屏工具栏共用：点击后打开录制控制栏并预选 GIF 格式。
+     * @author chiangyang
+     */
+    void gifRecordRequested();
+
+    /**
      * @brief 请求截图
      * @author chiangyang
      */

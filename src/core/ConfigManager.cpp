@@ -137,6 +137,7 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "record/saveDir", QStandardPaths::writableLocation(QStandardPaths::MoviesLocation) },
         { "record/systemAudio", false },
         { "record/microphone", false },
+        { "record/format", "mp4" },
 
         // History
         { "history/thumbnailSize", 200 },

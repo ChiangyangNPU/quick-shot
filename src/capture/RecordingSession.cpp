@@ -63,11 +63,22 @@ void RecordingSession::connectSignals() {
         // 使用实际捕获大小作为输出分辨率
         QSize resolution = captureRect.size();
 
-        // 生成默认保存路径
+        // 生成默认保存路径（GIF 模式使用 .gif 扩展名与 10fps）
+        const bool gifFormat = (m_control->selectedFormat() == QLatin1String("gif"));
+        const QString extension = gifFormat ? QStringLiteral(".gif") : QStringLiteral(".mp4");
+        const int recordFps = gifFormat ? 10 : 30;
         QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::MoviesLocation)
-            + "/QuickShot_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hhmmss") + ".mp4";
+            + "/QuickShot_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hhmmss") + extension;
 
-        bool ok = m_recorder->start(captureRect, resolution, defaultPath, 30);
+        if (gifFormat) {
+            // GIF 无音轨，强制关闭音频采集
+            m_recorder->setAudioEnabled(false);
+            m_recorder->setMicrophoneEnabled(false);
+        }
+
+        bool ok = m_recorder->start(captureRect, resolution, defaultPath, recordFps,
+                                    gifFormat ? ScreenRecorder::OutputFormat::Gif
+                                              : ScreenRecorder::OutputFormat::Video);
         if (ok) {
             m_control->setRecording(true);
             m_control->setPaused(false);
@@ -87,8 +98,9 @@ void RecordingSession::connectSignals() {
 #endif
             pushAnnotationOverlay();
             updateInputMask();
-            // 录屏开始后禁用录屏工具栏上的截图按钮
+            // 录屏开始后禁用录屏工具栏上的截图与 GIF 按钮
             m_toolbar->setScreenshotButtonEnabled(false);
+            m_toolbar->setGifButtonEnabled(false);
             LOG_INFO(QString("[SnipScreen] Recording started: %1").arg(defaultPath));
         }
     });
@@ -124,6 +136,7 @@ void RecordingSession::connectSignals() {
 #endif
         // 录制结束（正常停止或取消），重新启用截图按钮
         m_toolbar->setScreenshotButtonEnabled(true);
+        m_toolbar->setGifButtonEnabled(true);
         if (m_isRecordingCanceled) {
             LOG_INFO(QString("[SnipScreen] Recording canceled, output file: %1").arg(outputFilePath));
             // 录制被取消，不退出截图，重置取消标志
@@ -143,6 +156,7 @@ void RecordingSession::connectSignals() {
         m_control->setPaused(false);
         // 录制出错，重新启用截图按钮
         m_toolbar->setScreenshotButtonEnabled(true);
+        m_toolbar->setGifButtonEnabled(true);
     });
 
     // ---------- 录屏工具栏：标注工具 ----------
@@ -211,6 +225,9 @@ void RecordingSession::connectSignals() {
             updateInputMask();
         }
     });
+    connect(m_toolbar, &RecordingToolBar::gifRecordRequested, [this]() {
+        showControlForGif();
+    });
     connect(m_toolbar, &RecordingToolBar::snapshotRequested, [this]() {
         // 快照：复制当前选区画面（含标注）到剪贴板，不影响录屏状态
         QPixmap pixmap = m_host->captureSelectionForOcr();
@@ -267,6 +284,7 @@ void RecordingSession::uncheckAllAnnotationBtns() {
 
 void RecordingSession::retranslateUi() {
     if (m_toolbar) m_toolbar->retranslateUi();
+    if (m_control) m_control->retranslateUi();
 }
 
 void RecordingSession::refreshDefaultValues() {
@@ -323,6 +341,28 @@ void RecordingSession::showToolBar() {
 
     LOG_INFO(QString("[SnipScreen] Recording toolbar shown at (%1, %2)")
         .arg(m_toolbar->x()).arg(m_toolbar->y()));
+}
+
+/**
+ * @brief 打开录制控制栏并预选 GIF 格式
+ *
+ * 截屏工具栏与录屏工具栏的 GIF 按钮共用入口。打开后用户点击控制栏里的
+ * 「开始」即按 GIF 格式录制。
+ * @author chiangyang
+ */
+void RecordingSession::showControlForGif() {
+    if (!m_control || !m_toolbar) {
+        return;
+    }
+    m_control->setSelectedFormat(QStringLiteral("gif"));
+    // 录屏按钮置为选中（已选中时不会重复触发），保持工具栏状态一致
+    m_toolbar->setRecordButtonChecked(true);
+    m_control->updateButtonStyles();
+    m_control->show();
+    m_control->raise();
+    m_host->updateMenuPosition();
+    updateInputMask();
+    LOG_INFO("[SnipScreen] GIF recording control opened");
 }
 
 void RecordingSession::hideToolBar() {

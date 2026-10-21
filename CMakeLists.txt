@@ -254,6 +254,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp
         src/recording/ScreenRecorder.h
+        src/recording/GifEncoder.cpp
+        src/recording/GifEncoder.h
         src/widgets/RecordingControlWindow.cpp
         src/widgets/RecordingControlWindow.h
         src/log/Logger.cpp

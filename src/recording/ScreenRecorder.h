@@ -11,7 +11,10 @@
 #include <QMutex>
 
 #include <atomic>
+#include <memory>
 #include <thread>
+
+#include "GifEncoder.h"
 
 class ScreenRecorder;
 
@@ -42,6 +45,9 @@ public:
         bool systemAudioEnabled = false;     ///< 是否启用系统音频
         bool microphoneEnabled = false;      ///< 是否启用麦克风
 
+        bool gifMode = false;                         ///< 是否输出 GIF（而非视频）
+        std::unique_ptr<GifEncoder> gifEncoder;       ///< GIF 编码器（仅 GIF 模式使用）
+
         ScreenRecorder *recorder = nullptr;  ///< 录屏器实例指针
     };
 
@@ -66,6 +72,15 @@ public:
     };
 
     /**
+     * @brief 录制输出格式枚举
+     * @author chiangyang
+     */
+    enum class OutputFormat {
+        Video,  ///< 视频文件（MP4）
+        Gif     ///< GIF 动图
+    };
+
+    /**
      * @brief 构造函数
      * @param parent 父对象
      * @author chiangyang
@@ -84,10 +99,22 @@ public:
      * @param outputSizePx 输出尺寸（物理像素）
      * @param outputFilePath 输出文件路径
      * @param fps 帧率
+     * @param format 输出格式（视频或 GIF）
      * @return 是否成功开始录制
      * @author chiangyang
      */
-    bool start(const QRect &captureRectPx, const QSize &outputSizePx, const QString &outputFilePath, int fps = 30);
+    bool start(const QRect &captureRectPx, const QSize &outputSizePx, const QString &outputFilePath,
+               int fps = 30, OutputFormat format = OutputFormat::Video);
+
+    /**
+     * @brief 当前平台是否支持 GIF 录制
+     *
+     * Windows / Linux 复用逐帧截取管线，支持 GIF；macOS 使用系统录制管线，
+     * 暂不产出可编码的帧缓冲，因此不支持。
+     * @return 支持返回 true
+     * @author chiangyang
+     */
+    static bool isGifSupported();
 
     /**
      * @brief 暂停录制

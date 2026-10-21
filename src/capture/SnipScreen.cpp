@@ -266,6 +266,14 @@ void SnipScreen::connectToolbarSignals()
     // 截图工具栏的录屏按钮 → 切换到录屏模式
     connect(m_toolbar, &ScreenshotToolBar::recordRequested, this, &SnipScreen::switchToRecordingMode);
 
+    // 截图工具栏的 GIF 按钮 → 切到录屏模式并打开控制栏预选 GIF
+    connect(m_toolbar, &ScreenshotToolBar::gifRecordRequested, [this]() {
+        switchToRecordingMode();
+        if (m_recordingSession->isMode()) {
+            m_recordingSession->showControlForGif();
+        }
+    });
+
     // 截图工具栏 OCR 按钮
     connect(m_toolbar, &ScreenshotToolBar::ocrRequested, [this]() {
         performOcr(captureSelectionForOcr());

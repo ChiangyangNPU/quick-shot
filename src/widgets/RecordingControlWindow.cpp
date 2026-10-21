@@ -1,5 +1,6 @@
 #include "RecordingControlWindow.h"
 #include <QApplication>
+#include <QComboBox>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QSpacerItem>
@@ -7,6 +8,7 @@
 #include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
+#include "../recording/ScreenRecorder.h"
 
 /**
  * @brief 构造函数
@@ -89,6 +91,21 @@ void RecordingControlWindow::setupUi() {
     m_mainLayout->addWidget(btnResume);
     m_mainLayout->addWidget(btnStop);
 
+    // 输出格式选择（MP4 / GIF），选择结果持久化到配置
+    m_formatCombo = new QComboBox(this);
+    m_formatCombo->addItem("MP4", QStringLiteral("mp4"));
+    if (ScreenRecorder::isGifSupported()) {
+        m_formatCombo->addItem("GIF", QStringLiteral("gif"));
+    }
+    m_formatCombo->setStyleSheet(StyleManager::getComboBoxStyle());
+    connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        ConfigManager::instance()->setValue("record/format", selectedFormat());
+        LOG_INFO(QString("RecordingControlWindow: output format=%1").arg(selectedFormat()));
+        updateAudioAvailability();
+    });
+    m_mainLayout->addWidget(m_formatCombo);
+    setSelectedFormat(ConfigManager::instance()->value("record/format", "mp4").toString());
+
     // 音频录制选项
     chkSystemAudio = new QCheckBox(this);
     chkMicrophone = new QCheckBox(this);
@@ -137,6 +154,12 @@ void RecordingControlWindow::retranslateUi() {
     btnPause->setText(tm->get("record.pause", "Pause"));
     btnResume->setText(tm->get("record.resume", "Resume"));
     btnStop->setText(tm->get("record.stop", "Stop"));
+    if (m_formatCombo) {
+        const int mp4Index = m_formatCombo->findData(QStringLiteral("mp4"));
+        if (mp4Index >= 0) m_formatCombo->setItemText(mp4Index, tm->get("record.format.mp4", "MP4"));
+        const int gifIndex = m_formatCombo->findData(QStringLiteral("gif"));
+        if (gifIndex >= 0) m_formatCombo->setItemText(gifIndex, tm->get("record.format.gif", "GIF"));
+    }
     if (chkSystemAudio) {
         chkSystemAudio->setText(tm->get("record.systemAudio", "System Audio"));
     }
@@ -157,13 +180,9 @@ void RecordingControlWindow::updateButtonStates(bool isRecording, bool isPaused)
         btnPause->setEnabled(false);
         btnResume->setEnabled(false);
         btnStop->setEnabled(false);
-        if (chkSystemAudio) chkSystemAudio->setEnabled(true);
-        if (chkMicrophone) chkMicrophone->setEnabled(true);
     } else {
         btnStart->setEnabled(false);
         btnStop->setEnabled(true);
-        if (chkSystemAudio) chkSystemAudio->setEnabled(false);
-        if (chkMicrophone) chkMicrophone->setEnabled(false);
 
         if (isPaused) {
             btnPause->setEnabled(false);
@@ -173,6 +192,10 @@ void RecordingControlWindow::updateButtonStates(bool isRecording, bool isPaused)
             btnResume->setEnabled(false);
         }
     }
+    if (m_formatCombo) {
+        m_formatCombo->setEnabled(!isRecording);
+    }
+    updateAudioAvailability();
 }
 
 /**
@@ -195,6 +218,65 @@ void RecordingControlWindow::setPaused(bool paused) {
     LOG_INFO(QString("RecordingControlWindow: setPaused=%1").arg(paused));
     m_isPaused = paused;
     updateButtonStates(m_isRecording, paused);
+}
+
+/**
+ * @brief 获取当前选择的输出格式
+ * @return "mp4" 或 "gif"
+ * @author chiangyang
+ */
+QString RecordingControlWindow::selectedFormat() const {
+    if (!m_formatCombo) {
+        return QStringLiteral("mp4");
+    }
+    const QString value = m_formatCombo->currentData().toString();
+    return value.isEmpty() ? QStringLiteral("mp4") : value;
+}
+
+/**
+ * @brief 设置输出格式（同时写入配置）
+ *
+ * 若当前平台不支持 GIF，则回退到 MP4。
+ * @param format "mp4" 或 "gif"
+ * @author chiangyang
+ */
+void RecordingControlWindow::setSelectedFormat(const QString &format) {
+    if (!m_formatCombo) {
+        return;
+    }
+    int index = m_formatCombo->findData(format);
+    if (index < 0) {
+        index = m_formatCombo->findData(QStringLiteral("mp4"));
+    }
+    if (index < 0) {
+        return;
+    }
+    m_formatCombo->setCurrentIndex(index);
+    ConfigManager::instance()->setValue("record/format", selectedFormat());
+    updateAudioAvailability();
+}
+
+/**
+ * @brief 根据当前格式与录制状态更新音频选项可用性
+ *
+ * GIF 无音轨：选择 GIF 时取消勾选并禁用音频复选框。
+ * @author chiangyang
+ */
+void RecordingControlWindow::updateAudioAvailability() {
+    const bool gifSelected = (selectedFormat() == QStringLiteral("gif"));
+    const bool canEdit = !m_isRecording && !gifSelected;
+    if (chkSystemAudio) {
+        if (gifSelected) {
+            chkSystemAudio->setChecked(false);
+        }
+        chkSystemAudio->setEnabled(canEdit);
+    }
+    if (chkMicrophone) {
+        if (gifSelected) {
+            chkMicrophone->setChecked(false);
+        }
+        chkMicrophone->setEnabled(canEdit);
+    }
 }
 
 /**
@@ -266,6 +348,9 @@ void RecordingControlWindow::updateButtonStyles() {
     }
     if (chkMicrophone) {
         chkMicrophone->setStyleSheet(StyleManager::getCheckBoxStyle());
+    }
+    if (m_formatCombo) {
+        m_formatCombo->setStyleSheet(StyleManager::getComboBoxStyle());
     }
 
     // 调整窗口大小

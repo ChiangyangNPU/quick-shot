@@ -15,7 +15,7 @@
  * 在选区完成后显示，定位在选区附近。
  *
  * 工具栏布局：
- * 一级工具栏：录屏 | 截图 | 矩形 | 椭圆 | 箭头 | 画笔 | 直线 | 文本 | 马赛克 | 橡皮擦 | 撤销 | 重做 | 清除 | OCR | 快照 | 取消
+ * 一级工具栏：录屏 | 截图 | 矩形 | 椭圆 | 箭头 | 画笔 | 直线 | 文本 | 马赛克 | 橡皮擦 | 撤销 | 重做 | 清除 | OCR | 快照 | GIF | 取消
  * 子工具栏：形状选择 | 线宽/字体大小 | 颜色选择
  *
  * 信号：
@@ -69,6 +69,29 @@ public:
      * @author chiangyang
      */
     void setScreenshotButtonEnabled(bool enabled);
+
+    /**
+     * @brief 设置 GIF 按钮的启用状态
+     * @param enabled true 启用，false 禁用（置灰）
+     * @author chiangyang
+     */
+    void setGifButtonEnabled(bool enabled);
+
+    /**
+     * @brief 设置录屏按钮的选中状态
+     *
+     * 选中时会触发 showControlRequested(true) 打开录制控制栏。
+     * @param checked true 选中，false 取消选中
+     * @author chiangyang
+     */
+    void setRecordButtonChecked(bool checked);
+
+    /**
+     * @brief 录屏按钮是否处于选中状态
+     * @return true 表示已选中
+     * @author chiangyang
+     */
+    bool isRecordButtonChecked() const;
 
     /**
      * @brief 开始计时
@@ -125,6 +148,7 @@ private:
 
     // ---------- 按钮指针 ----------
     QPushButton *m_recordBtn = nullptr;      ///< 录屏按钮（checkable）
+    QPushButton *m_gifBtn = nullptr;         ///< GIF 录制按钮
     QPushButton *m_screenshotBtn = nullptr;  ///< 截图按钮
     QPushButton *m_snapshotBtn = nullptr;    ///< 快照按钮
     QPushButton *m_cancelBtn = nullptr;      ///< 取消按钮

@@ -13,7 +13,7 @@
  * 在选区完成后显示，定位在选区附近。
  *
  * 工具栏布局：
- * 一级工具栏：录屏 | 矩形 | 椭圆 | 箭头 | 画笔 | 直线 | 文本 | 马赛克 | 橡皮擦 | 撤销 | 重做 | 清除 | OCR | 复制 | 保存 | 贴图 | 关闭
+ * 一级工具栏：录屏 | 矩形 | 椭圆 | 箭头 | 画笔 | 直线 | 文本 | 马赛克 | 橡皮擦 | 撤销 | 重做 | 清除 | OCR | 翻译 | GIF | 复制 | 保存 | 贴图 | 关闭
  * 子工具栏：形状选择 | 线宽/字体大小 | 颜色选择
  *
  * 信号：
@@ -97,6 +97,7 @@ private:
 
     // ---------- 按钮指针 ----------
     QPushButton *m_recordBtn = nullptr;  ///< 录屏按钮
+    QPushButton *m_gifBtn = nullptr;     ///< GIF 录制按钮
     QPushButton *m_copyBtn = nullptr;    ///< 复制按钮
     QPushButton *m_saveBtn = nullptr;    ///< 保存按钮
     QPushButton *m_pinBtn = nullptr;     ///< 贴图按钮

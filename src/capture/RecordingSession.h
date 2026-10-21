@@ -71,6 +71,15 @@ public:
     void showToolBar();               ///< 显示录屏工具栏（选区旁定位）
     void hideToolBar();               ///< 隐藏录屏工具栏、子工具栏与控制栏
 
+    /**
+     * @brief 打开录制控制栏并预选 GIF 格式
+     *
+     * 截屏工具栏与录屏工具栏的 GIF 按钮共用入口：录屏按钮置为选中以保持
+     * 工具栏状态一致，在控制栏中再点击「开始」即开始录制 GIF。
+     * @author chiangyang
+     */
+    void showControlForGif();
+
     // ---------- 录制生命周期（全局热键与 UI 入口共用） ----------
     void togglePause();               ///< 暂停/恢复（非录制态 no-op）
     void stop();                      ///< 停止并保留文件（非录制态 no-op）

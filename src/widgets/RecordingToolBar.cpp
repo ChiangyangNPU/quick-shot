@@ -2,6 +2,7 @@
 #include "StyleManager.h"
 #include "Logger.h"
 #include "TranslationManager.h"
+#include "../recording/ScreenRecorder.h"
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -135,6 +136,14 @@ void RecordingToolBar::createActionButtons() {
     });
     m_primaryLayout->addWidget(m_snapshotBtn);
 
+    // GIF 录制按钮（操作区）：打开录制控制栏并预选 GIF 格式
+    m_gifBtn = makeActionButton({&m_gifBtn, "record.gif", ":/icons/gif.svg"}, [this]() {
+        LOG_INFO("RecordingToolBar: GIF recording requested");
+        emit gifRecordRequested();
+    });
+    m_gifBtn->setVisible(ScreenRecorder::isGifSupported());
+    m_primaryLayout->addWidget(m_gifBtn);
+
     addSeparator(m_primaryLayout);
 
     m_cancelBtn = makeActionButton({&m_cancelBtn, "cancel", ":/icons/close.svg", /*closeStyle=*/true}, [this]() {
@@ -218,6 +227,40 @@ void RecordingToolBar::setScreenshotButtonEnabled(bool enabled) {
         m_screenshotBtn->setEnabled(enabled);
         LOG_INFO(QString("RecordingToolBar: Screenshot button %1").arg(enabled ? "enabled" : "disabled"));
     }
+}
+
+/**
+ * @brief 设置 GIF 按钮的启用状态
+ * @param enabled true 启用，false 禁用（置灰）
+ * @author chiangyang
+ */
+void RecordingToolBar::setGifButtonEnabled(bool enabled) {
+    if (m_gifBtn) {
+        m_gifBtn->setEnabled(enabled);
+        LOG_INFO(QString("RecordingToolBar: GIF button %1").arg(enabled ? "enabled" : "disabled"));
+    }
+}
+
+/**
+ * @brief 设置录屏按钮的选中状态
+ *
+ * 选中时会触发 toggled 信号，进而打开录制控制栏。
+ * @param checked true 选中，false 取消选中
+ * @author chiangyang
+ */
+void RecordingToolBar::setRecordButtonChecked(bool checked) {
+    if (m_recordBtn && m_recordBtn->isChecked() != checked) {
+        m_recordBtn->setChecked(checked);
+    }
+}
+
+/**
+ * @brief 录屏按钮是否处于选中状态
+ * @return true 表示已选中
+ * @author chiangyang
+ */
+bool RecordingToolBar::isRecordButtonChecked() const {
+    return m_recordBtn && m_recordBtn->isChecked();
 }
 
 /**
