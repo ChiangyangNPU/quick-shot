@@ -76,6 +76,12 @@ signals:
     void pinRequested();
 
     /**
+     * @brief 请求滚动截图（长截图，默认垂直方向）
+     * @author chiangyang
+     */
+    void scrollCaptureRequested();
+
+    /**
      * @brief 请求关闭截图
      * @author chiangyang
      */
@@ -98,6 +104,7 @@ private:
     // ---------- 按钮指针 ----------
     QPushButton *m_recordBtn = nullptr;  ///< 录屏按钮
     QPushButton *m_gifBtn = nullptr;     ///< GIF 录制按钮
+    QPushButton *m_scrollBtn = nullptr;  ///< 滚动截图按钮
     QPushButton *m_copyBtn = nullptr;    ///< 复制按钮
     QPushButton *m_saveBtn = nullptr;    ///< 保存按钮
     QPushButton *m_pinBtn = nullptr;     ///< 贴图按钮

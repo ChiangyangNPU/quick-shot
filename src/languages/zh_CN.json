@@ -357,5 +357,12 @@
   "update.macInstallerReady": "安装包已下载",
   "update.macInstallGuide": "安装包已保存到：\n%1\n\n点击「退出并打开安装包」将退出程序并挂载安装包，把 QuickShot 拖入「应用程序」即完成更新。",
   "update.macExitAndOpen": "退出并打开安装包",
+  "scroll.button": "长截图",
+  "scroll.vertical": "垂直滚动截图",
+  "scroll.horizontal": "水平滚动截图",
+  "scroll.status": "滚动页面采集｜已拼接 %1 px｜Enter 完成，Esc 取消",
+  "scroll.finish": "完成",
+  "scroll.cancel": "取消",
+  "scroll.hint": "滚动页面开始采集｜Enter 完成，Esc 取消",
   "update.later": "稍后"
 }

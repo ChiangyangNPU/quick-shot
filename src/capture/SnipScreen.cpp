@@ -1,5 +1,6 @@
 #include "SnipScreen.h"
 #include "RecordingSession.h"
+#include "ScrollCaptureSession.h"
 #include "RecordingToolBar.h"
 #include "RecordingControlWindow.h"
 #include "CaptureSession.h"
@@ -118,6 +119,14 @@ void SnipScreen::createComponents()
     // 创建录屏编排会话（录屏工具栏/控制栏/录制器与其信号接线均在会话内）
     m_recordingSession = new RecordingSession(this, this);
     m_recordingSession->createComponents();
+
+    // 创建滚动截图会话：完成时长图交给 PinWindow 承载，结束后统一退出截图
+    m_scrollSession = new ScrollCaptureSession(this, this);
+    connect(m_scrollSession, &ScrollCaptureSession::completed,
+            this, [this](const QPixmap &pixmap, const QPoint &pos) {
+        pinPixmap(pixmap, pos, /*fitToScreen=*/true);
+    });
+    connect(m_scrollSession, &ScrollCaptureSession::finished, this, &SnipScreen::exit);
 }
 
 // ============================================================
@@ -283,6 +292,11 @@ void SnipScreen::connectToolbarSignals()
     connect(m_toolbar, &ScreenshotToolBar::translateRequested, [this]() {
         performTranslate();
     });
+
+    // 截图工具栏长截图按钮 → 默认进入垂直滚动截图（水平用 H 键）
+    connect(m_toolbar, &ScreenshotToolBar::scrollCaptureRequested, [this]() {
+        startScrollCapture(0);
+    });
 }
 
 // ============================================================
@@ -321,15 +335,32 @@ void SnipScreen::initAnnotationShortcuts()
     m_annotationController = new AnnotationShortcutController(this, this);
 
     // Enter/Return：复制并退出（截图模式专属，不属于通用标注快捷键集合，PinWindow 不需要）
+    // 滚动截图进行中时，Enter 改为确认拼接（滚动中宿主已隐藏，按键由提示条窗口处理，
+    // 此判断用于会话尚未完全隐藏时的兜底）
     connect(new QShortcut(Qt::Key_Return, this), &QShortcut::activated, [this]() {
-        if (m_selector->status() == SelectorStatus::Captured) {
+        if (m_scrollSession && m_scrollSession->isActive()) {
+            m_scrollSession->finish();
+        } else if (m_selector->status() == SelectorStatus::Captured) {
             copy();
         }
     });
     connect(new QShortcut(Qt::Key_Enter, this), &QShortcut::activated, [this]() {
-        if (m_selector->status() == SelectorStatus::Captured) {
+        if (m_scrollSession && m_scrollSession->isActive()) {
+            m_scrollSession->finish();
+        } else if (m_selector->status() == SelectorStatus::Captured) {
             copy();
         }
+    });
+
+    // V/H：垂直 / 水平滚动截图（选区完成后生效；V、H 与现有快捷键无冲突）
+    // 文本编辑框存在时放行按键（避免抢走 v/h 文本输入）
+    connect(new QShortcut(Qt::Key_V, this), &QShortcut::activated, [this]() {
+        if (m_textEdit) return;
+        startScrollCapture(0);
+    });
+    connect(new QShortcut(Qt::Key_H, this), &QShortcut::activated, [this]() {
+        if (m_textEdit) return;
+        startScrollCapture(1);
     });
 }
 
@@ -351,6 +382,33 @@ void SnipScreen::start() {
  */
 void SnipScreen::startRecording() {
     startCapture(true);
+}
+
+/**
+ * @brief 开始滚动截图（长截图）
+ * @param orientation 0=垂直滚动，1=水平滚动
+ * @author chiangyang
+ */
+void SnipScreen::startScrollCapture(int orientation) {
+    // 仅在截图模式、选区完成后可用；录屏模式与未选区状态一律忽略
+    if (!isVisible() || m_recordingSession->isMode()) {
+        LOG_INFO("[SnipScreen] startScrollCapture ignored: not in screenshot mode");
+        return;
+    }
+    const SelectorStatus status = m_selector->status();
+    if (status != SelectorStatus::Captured && status != SelectorStatus::Locked) {
+        LOG_INFO("[SnipScreen] startScrollCapture ignored: selection not captured");
+        return;
+    }
+    if (m_scrollSession->isActive()) {
+        return;
+    }
+
+    const auto direction = orientation == 1 ? ScrollStitcher::Orientation::Horizontal
+                                            : ScrollStitcher::Orientation::Vertical;
+    if (!m_scrollSession->start(direction)) {
+        LOG_WARNING("[SnipScreen] startScrollCapture failed: invalid selection");
+    }
 }
 
 /**
@@ -450,6 +508,11 @@ void SnipScreen::startCapture(bool recording) {
  * @author chiangyang
  */
 void SnipScreen::exit() {
+    // 滚动截图会话强制收尾（完成/取消路径已清理，此处覆盖直接退出等其他路径）
+    if (m_scrollSession) {
+        m_scrollSession->shutdown();
+    }
+
 #ifdef Q_OS_MACOS
     // 停止跨屏检测定时器
     m_screenWatchTimer->stop();
@@ -558,25 +621,55 @@ void SnipScreen::save() {
  */
 void SnipScreen::pin() {
     auto [pixmap, pos] = snip();
+    pinPixmap(pixmap, pos, /*fitToScreen=*/false);
 
+    // 发送信号
+
+    exit();
+}
+
+/**
+ * @brief 创建贴图窗口（pin / 滚动截图长图共用出口）
+ * @param pixmap 要贴图的图像
+ * @param pos 目标左上角全局坐标
+ * @param fitToScreen 是否按屏幕可用高度等比缩小初始窗口
+ * @author chiangyang
+ */
+void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToScreen) {
     // 检查截图是否有效
     if (pixmap.isNull() || pixmap.width() < 4 || pixmap.height() < 4) {
-        LOG_WARNING(QString("[SnipScreen] pin: invalid pixmap, size=%1x%2, ignored")
+        LOG_WARNING(QString("[SnipScreen] pinPixmap: invalid pixmap, size=%1x%2, ignored")
             .arg(pixmap.width()).arg(pixmap.height()));
         return;
     }
 
+    // 长截图可能远超屏幕高度：按当前屏幕可用高度等比缩小初始显示窗口，
+    // PinWindow 内部仍保留原图，复制/保存不受影响
+    QSize windowSize = pixmap.size();
+    if (fitToScreen) {
+        QScreen *screen = QGuiApplication::screenAt(pos);
+        if (!screen) screen = QGuiApplication::primaryScreen();
+        if (screen) {
+            const int maxHeight = qMax(100, int(screen->availableGeometry().height() * 0.9));
+            if (windowSize.height() > maxHeight) {
+                const qreal scale = qreal(maxHeight) / windowSize.height();
+                windowSize.setHeight(maxHeight);
+                windowSize.setWidth(qMax(1, qRound(windowSize.width() * scale)));
+            }
+        }
+    }
+
     // 获取虚拟桌面几何，用于限制窗口位置
     QRect virtualGeo = QGuiApplication::primaryScreen()->virtualGeometry();
-    
+
     // 确保位置在有效范围内
     QPoint safePos = pos;
     if (safePos.x() < virtualGeo.left()) safePos.setX(virtualGeo.left());
     if (safePos.y() < virtualGeo.top()) safePos.setY(virtualGeo.top());
-    
+
     // 确保窗口右/下边界不超出虚拟桌面
-    int maxX = virtualGeo.right() - pixmap.width();
-    int maxY = virtualGeo.bottom() - pixmap.height();
+    int maxX = virtualGeo.right() - windowSize.width();
+    int maxY = virtualGeo.bottom() - windowSize.height();
     if (safePos.x() > maxX && maxX >= virtualGeo.left()) safePos.setX(maxX);
     if (safePos.y() > maxY && maxY >= virtualGeo.top()) safePos.setY(maxY);
 
@@ -591,20 +684,16 @@ void SnipScreen::pin() {
         s_firstToolbarPin = false;
         pinWindow->showOperationHint();
     }
-    QRect targetRect(safePos, pixmap.size());
+    QRect targetRect(safePos, windowSize);
     LOG_INFO(QString("[SnipScreen] pin: creating PinWindow at (%1,%2) size %3x%4")
-        .arg(safePos.x()).arg(safePos.y()).arg(pixmap.width()).arg(pixmap.height()));
+        .arg(safePos.x()).arg(safePos.y()).arg(windowSize.width()).arg(windowSize.height()));
     pinWindow->setGeometry(targetRect);
-    
+
     // 延迟显示，确保事件循环稳定后再展示
     QTimer::singleShot(0, pinWindow, [pinWindow]() {
         pinWindow->show();
         pinWindow->raise();
     });
-
-    // 发送信号
-
-    exit();
 }
 
 /**
@@ -1356,7 +1445,10 @@ void SnipScreen::cancelTextEdit() {
 }
 
 void SnipScreen::onCancel() {
-    if (m_textEdit) {
+    if (m_scrollSession && m_scrollSession->isActive()) {
+        // 滚动截图进行中：仅取消本次长截图（宿主已隐藏，该分支为兜底）
+        m_scrollSession->cancel();
+    } else if (m_textEdit) {
         // 取消文本编辑，不创建标注
         cancelTextEdit();
     } else if (m_recordingSession->isRecording()) {

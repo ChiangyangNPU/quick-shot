@@ -23,6 +23,7 @@
     <file alias="translate.svg">../icons/translate.svg</file>
     <file alias="record.svg">../icons/record.svg</file>
     <file alias="gif.svg">../icons/gif.svg</file>
+    <file alias="scroll.svg">../icons/scroll.svg</file>
     <file alias="pin.svg">../icons/pin.svg</file>
     <file alias="copy.svg">../icons/copy.svg</file>
     <file alias="save.svg">../icons/save.svg</file>

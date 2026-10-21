@@ -357,5 +357,12 @@
   "update.macInstallerReady": "Installer downloaded",
   "update.macInstallGuide": "The installer has been saved to:\n%1\n\nClick \"Quit and open installer\" to quit and mount it, then drag QuickShot into Applications to finish updating.",
   "update.macExitAndOpen": "Quit and open installer",
+  "scroll.button": "Scroll Capture",
+  "scroll.vertical": "Vertical Scroll Capture",
+  "scroll.horizontal": "Horizontal Scroll Capture",
+  "scroll.status": "Scroll the page · Captured %1 px · Enter to finish, Esc to cancel",
+  "scroll.finish": "Finish",
+  "scroll.cancel": "Cancel",
+  "scroll.hint": "Scroll the page to capture · Enter to finish, Esc to cancel",
   "update.later": "Later"
 }

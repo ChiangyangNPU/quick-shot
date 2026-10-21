@@ -118,3 +118,10 @@ add_executable(AnnotationManagerTest AnnotationManagerTest.cpp
 target_include_directories(AnnotationManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(AnnotationManagerTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
 add_test(NAME AnnotationManagerTest COMMAND AnnotationManagerTest)
+
+# ---- ScrollStitcher：滚动截图拼接（纯 QImage 算法，无 GUI 依赖）----
+add_executable(ScrollStitcherTest ScrollStitcherTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/ScrollStitcher.cpp)
+target_include_directories(ScrollStitcherTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ScrollStitcherTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
+add_test(NAME ScrollStitcherTest COMMAND ScrollStitcherTest)

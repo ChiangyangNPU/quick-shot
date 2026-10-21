@@ -357,5 +357,12 @@
   "update.macInstallerReady": "설치 파일이 다운로드되었습니다",
   "update.macInstallGuide": "설치 파일 저장 위치:\n%1\n\n\"종료 후 설치 파일 열기\"를 클릭하면 앱이 종료되고 마운트됩니다. QuickShot을 \"응용 프로그램\"으로 드래그하여 업데이트를 완료하세요.",
   "update.macExitAndOpen": "종료 후 설치 파일 열기",
+  "scroll.button": "긴 스크린샷",
+  "scroll.vertical": "세로 스크롤 캡처",
+  "scroll.horizontal": "가로 스크롤 캡처",
+  "scroll.status": "페이지를 스크롤하여 캡처｜%1 px 연결됨｜Enter 완료, Esc 취소",
+  "scroll.finish": "완료",
+  "scroll.cancel": "취소",
+  "scroll.hint": "페이지를 스크롤하여 캡처｜Enter 완료, Esc 취소",
   "update.later": "나중에"
 }

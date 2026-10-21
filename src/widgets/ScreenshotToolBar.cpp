@@ -114,6 +114,13 @@ void ScreenshotToolBar::createActionButtons() {
     m_gifBtn->setVisible(ScreenRecorder::isGifSupported());
     m_primaryLayout->addWidget(m_gifBtn);
 
+    // 滚动截图按钮（长截图）：默认垂直方向，水平方向用 H 快捷键
+    m_scrollBtn = makeActionButton({&m_scrollBtn, "scroll.button", ":/icons/scroll.svg"}, [this]() {
+        LOG_INFO("ScreenshotToolBar: Scroll capture requested");
+        emit scrollCaptureRequested();
+    });
+    m_primaryLayout->addWidget(m_scrollBtn);
+
     // 添加分隔符
     addSeparator(m_primaryLayout);
 

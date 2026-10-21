@@ -357,5 +357,12 @@
   "update.macInstallerReady": "インストーラーをダウンロードしました",
   "update.macInstallGuide": "インストーラーの保存先：\n%1\n\n「終了してインストーラーを開く」をクリックするとアプリを終了してマウントします。QuickShot を「アプリケーション」にドラッグして更新を完了してください。",
   "update.macExitAndOpen": "終了してインストーラーを開く",
+  "scroll.button": "長いスクリーンショット",
+  "scroll.vertical": "縦スクロール撮影",
+  "scroll.horizontal": "横スクロール撮影",
+  "scroll.status": "ページをスクロールして撮影｜%1 px 連結済み｜Enter で完了、Esc でキャンセル",
+  "scroll.finish": "完了",
+  "scroll.cancel": "キャンセル",
+  "scroll.hint": "ページをスクロールして撮影｜Enter で完了、Esc でキャンセル",
   "update.later": "後で"
 }

@@ -17,6 +17,7 @@
 class PinWindow;
 class SettingsWindow;
 class AnnotationShortcutController;
+class ScrollCaptureSession;
 
 /**
  * @brief 截图主界面
@@ -83,6 +84,16 @@ public slots:
      * @author chiangyang
      */
     void startRecording();
+
+    /**
+     * @brief 开始滚动截图（长截图）
+     *
+     * 以当前选区为取景范围，隐藏遮罩后定时抓帧并拼接。
+     * 工具栏"长截图"按钮与 V/H 快捷键共用此入口。
+     * @param orientation 0=垂直滚动，1=水平滚动
+     * @author chiangyang
+     */
+    void startScrollCapture(int orientation);
 
     /**
      * @brief 退出截图
@@ -523,6 +534,19 @@ private:
 #endif
 
     /**
+     * @brief 生成贴图窗口（pin / 滚动截图长图共用出口）
+     *
+     * 负责有效性校验、位置边界钳制、剪贴板与历史记录分发，
+     * 以及创建并延迟显示 PinWindow。
+     * @param pixmap 要贴图的图像（物理像素、dpr=1）
+     * @param pos 目标左上角全局坐标
+     * @param fitToScreen true=超出屏幕可用高度时按比例缩小初始窗口，
+     *                    避免长截图超出屏幕（复制/保存仍为原图）
+     * @author chiangyang
+     */
+    void pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToScreen = false);
+
+    /**
      * @brief 更新输入遮罩，使非交互区域鼠标事件穿透到桌面
      *
      * 录屏中未选中标注工具时，只保留工具栏、控制栏和选区边框接收事件，
@@ -550,6 +574,7 @@ private:
     Selector *m_selector = nullptr;           ///< 选区组件
     ScreenshotToolBar *m_toolbar = nullptr;   ///< 截图工具栏
     RecordingSession *m_recordingSession = nullptr;   ///< 录屏编排协调器（工具栏/控制栏/录制器/遮罩/overlay）
+    ScrollCaptureSession *m_scrollSession = nullptr;  ///< 滚动截图会话（抓帧/拼接/提示条）
 
     // ---------- 标注交互处理器（提取公共逻辑，通过 Host 回调注入差异）----------
     std::unique_ptr<AnnotationInteractionHandler> m_annotationHandler;
