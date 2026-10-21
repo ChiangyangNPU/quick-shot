@@ -25,6 +25,7 @@ struct ToolSettings {
     int fontSize = 28;             ///< 字体大小（默认中间值）
     bool penWidthModified = false; ///< 画笔粗细是否被用户修改过
     bool fontSizeModified = false; ///< 字体大小是否被用户修改过
+    bool dashed = false;           ///< 是否使用虚线线型（每个工具独立记忆）
 };
 
 /**
@@ -180,6 +181,13 @@ signals:
      * @author chiangyang
      */
     void penColorChanged(const QColor &color);
+
+    /**
+     * @brief 线型（实线/虚线）变更
+     * @param dashed true=虚线，false=实线
+     * @author chiangyang
+     */
+    void penStyleChanged(bool dashed);
 
     /**
      * @brief 字体大小变更
@@ -463,6 +471,7 @@ protected:
         QHBoxLayout *layout = nullptr;            ///< 变体布局
         QSlider *slider = nullptr;                ///< 线宽或字号滑块
         QComboBox *shapeCombo = nullptr;          ///< 形状下拉框（仅 Rectangle 变体）
+        QPushButton *styleBtn = nullptr;          ///< 线型切换按钮（实线/虚线，仅带描边的变体）
         QList<QPushButton*> colorBtns;            ///< 颜色按钮列表（NoColor 变体为空）
         QPushButton *selectedColorBtn = nullptr;  ///< 当前选中颜色按钮
         bool built = false;                       ///< 是否已完成构建
@@ -521,6 +530,46 @@ protected:
 private:
     SubToolVariantData m_subVariants[VariantCount];  ///< 4 种子工具栏变体（常驻，切换时不销毁）
     SubToolVariant m_activeSubVariant = VariantCount;///< 当前激活变体，VariantCount 表示未激活
+
+    /**
+     * @brief 创建线型切换按钮（实线/虚线）
+     *
+     * 按钮为 checkable，点击后把状态写入当前工具的 ToolSettings，
+     * 并发射 penStyleChanged 通知宿主。
+     * @param parent 父控件
+     * @return 创建好的切换按钮
+     * @author chiangyang
+     */
+    QPushButton *makeLineStyleButton(QWidget *parent);
+
+    /**
+     * @brief 刷新线型按钮的文案与提示
+     * @param btn 线型切换按钮
+     * @param dashed 当前是否为虚线
+     * @author chiangyang
+     */
+    void updateLineStyleButtonText(QPushButton *btn, bool dashed);
+
+    /**
+     * @brief 从配置读取指定工具的线型偏好
+     *
+     * 持久化键按工具区分（矩形/椭圆/箭头/画笔/直线），未配置时返回实线。
+     * @param toolId 工具 ID（ToolId 枚举值）
+     * @return true=虚线，false=实线
+     * @author chiangyang
+     */
+    bool loadDashedSetting(int toolId) const;
+
+    /**
+     * @brief 将指定工具的线型偏好写入配置
+     *
+     * 与 SettingsStyleTab 的画笔默认值一样落在 ConfigManager（INI），
+     * 重启后各工具仍保持上次选择的实线/虚线。
+     * @param toolId 工具 ID（ToolId 枚举值）
+     * @param dashed true=虚线，false=实线
+     * @author chiangyang
+     */
+    void saveDashedSetting(int toolId, bool dashed) const;
 
     QPushButton *m_selectedColorBtn = nullptr;
     QSlider *m_penWidthSlider = nullptr;       ///< 当前子工具栏的画笔宽度滑块（变体切换时重绑定）

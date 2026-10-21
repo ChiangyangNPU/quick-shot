@@ -712,6 +712,10 @@ void PinWindow::connectToolBarSignals() {
     connect(m_toolBar, &PinAnnotationToolBar::penWidthChanged, this, [this](int width) {
         m_annotationHandler->setPenWidth(width);
     });
+    connect(m_toolBar, &PinAnnotationToolBar::penStyleChanged, this, [this](bool dashed) {
+        m_annotationHandler->setDashed(dashed);
+        LOG_INFO(QString("[PinWindow] Pen style changed: %1").arg(dashed ? "Dashed" : "Solid"));
+    });
     connect(m_toolBar, &PinAnnotationToolBar::fontSizeChanged, this, [this](int size) {
         m_annotationHandler->setFontSize(size);
     });

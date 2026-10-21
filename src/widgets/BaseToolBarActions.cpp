@@ -112,6 +112,8 @@ void BaseToolBar::createAnnotationTools() {
             ts.penWidth = StyleManager::getDefaultPenWidth();
         }
         ts.fontSize = StyleManager::getDefaultFontSize();
+        // 线型偏好按工具从配置恢复（实线/虚线），未配置时为实线
+        ts.dashed = loadDashedSetting(def.toolId);
         ts.penWidthModified = false;
         ts.fontSizeModified = false;
         m_toolSettings[def.toolId] = ts;

@@ -73,6 +73,8 @@
   "shape.rect": "사각형",
   "shape.ellipse": "타원",
   "shape.triangle": "삼각형",
+  "lineStyle.solid": "실선",
+  "lineStyle.dashed": "점선",
   "record": "녹화",
   "record.start": "시작",
   "record.pause": "일시정지",

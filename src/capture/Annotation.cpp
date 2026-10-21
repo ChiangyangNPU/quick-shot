@@ -30,7 +30,7 @@ Qt::CursorShape Annotation::controlPointCursor(int index) const {
 void Annotation::draw(QPainter &painter) const {
         painter.save();
         painter.setRenderHint(QPainter::Antialiasing, true);
-        QPen pen(m_color, m_penWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        QPen pen(m_color, m_penWidth, m_penStyle, Qt::RoundCap, Qt::RoundJoin);
         painter.setPen(pen);
         painter.setBrush(Qt::NoBrush);
         drawAnnotation(painter);

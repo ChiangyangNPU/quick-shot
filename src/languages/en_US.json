@@ -73,6 +73,8 @@
   "shape.rect": "Rectangle",
   "shape.ellipse": "Ellipse",
   "shape.triangle": "Triangle",
+  "lineStyle.solid": "Solid",
+  "lineStyle.dashed": "Dashed",
   "record": "Record",
   "record.start": "Start",
   "record.pause": "Pause",

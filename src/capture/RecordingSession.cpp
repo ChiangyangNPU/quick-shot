@@ -175,6 +175,10 @@ void RecordingSession::connectSignals() {
     connect(m_toolbar, &RecordingToolBar::penWidthChanged, [this](int width) {
         m_host->annotationHandler()->setPenWidth(width);
     });
+    connect(m_toolbar, &RecordingToolBar::penStyleChanged, [this](bool dashed) {
+        m_host->annotationHandler()->setDashed(dashed);
+        LOG_INFO(QString("[RecordingSession] Pen style changed: %1").arg(dashed ? "Dashed" : "Solid"));
+    });
     connect(m_toolbar, &RecordingToolBar::fontSizeChanged, [this](int size) {
         m_host->annotationHandler()->setFontSize(size);
     });

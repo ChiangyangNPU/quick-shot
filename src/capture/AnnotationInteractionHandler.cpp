@@ -505,41 +505,43 @@ void AnnotationInteractionHandler::createAnnotation(const QPoint &start) {
     m_annotationAnchor = start;
 
     std::unique_ptr<Annotation> annotation;
+    // 当前线型：实线 / 虚线（仅作用于几何标注与画笔）
+    const Qt::PenStyle penStyle = m_currentDashed ? Qt::DashLine : Qt::SolidLine;
 
     if (m_currentTool == AnnotationType::Rectangle) {
         switch (m_currentShapeType) {
             case 1:
-                annotation = std::make_unique<RectAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<RectAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             case 2:
-                annotation = std::make_unique<EllipseAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<EllipseAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             case 3:
-                annotation = std::make_unique<TriangleAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<TriangleAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             default:
-                annotation = std::make_unique<RectAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<RectAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
         }
     } else {
         switch (m_currentTool) {
             case AnnotationType::Ellipse:
-                annotation = std::make_unique<EllipseAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<EllipseAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             case AnnotationType::Arrow:
-                annotation = std::make_unique<ArrowAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<ArrowAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             case AnnotationType::Pen:
-                annotation = std::make_unique<PenAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<PenAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             case AnnotationType::Line:
-                annotation = std::make_unique<LineAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<LineAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
             case AnnotationType::Text:
                 return;  // 文本工具由 createTextEdit 处理
             case AnnotationType::Mosaic:
                 return;  // 马赛克工具由 mosaicAt 处理
             default:
-                annotation = std::make_unique<RectAnnotation>(start, m_currentColor, m_currentPenWidth);
+                annotation = std::make_unique<RectAnnotation>(start, m_currentColor, m_currentPenWidth, penStyle);
                 break;
         }
     }

@@ -150,6 +150,12 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "style/defaultFontSize", StyleManager::DEFAULT_FONT_SIZE },
         { "style/defaultEraserWidth", StyleManager::DEFAULT_ERASER_WIDTH },
         { "style/defaultMosaicSize", StyleManager::DEFAULT_MOSAIC_SIZE },
+        // 各标注工具的线型偏好（true=虚线，false=实线）
+        { "style/dashedRectangle", false },
+        { "style/dashedEllipse", false },
+        { "style/dashedArrow", false },
+        { "style/dashedPen", false },
+        { "style/dashedLine", false },
 
         // Translate
         { "translate/enabled", true },

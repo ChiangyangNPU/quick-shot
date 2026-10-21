@@ -93,12 +93,14 @@ public:
      * @param start 起始点
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
     explicit Annotation(AnnotationType type, const QPoint &start,
-                        const QColor &color = Qt::red, int penWidth = 3)
+                        const QColor &color = Qt::red, int penWidth = 3,
+                        Qt::PenStyle penStyle = Qt::SolidLine)
         : m_type(type), m_start(start), m_end(start),
-          m_color(color), m_penWidth(penWidth) {}
+          m_color(color), m_penWidth(penWidth), m_penStyle(penStyle) {}
 
     /**
      * @brief 虚析构函数
@@ -243,6 +245,13 @@ public:
     int penWidth() const { return m_penWidth; }
 
     /**
+     * @brief 获取画笔线型
+     * @return 线型（Qt::SolidLine 实线 / Qt::DashLine 虚线）
+     * @author chiangyang
+     */
+    Qt::PenStyle penStyle() const { return m_penStyle; }
+
+    /**
      * @brief 绘制标注
      *
      * 模板方法：设置画笔后调用 drawAnnotation() 完成具体绘制。
@@ -289,6 +298,7 @@ protected:
     QPoint m_end;            ///< 结束点
     QColor m_color;          ///< 画笔颜色
     int m_penWidth;          ///< 画笔宽度
+    Qt::PenStyle m_penStyle; ///< 画笔线型（实线/虚线）
 };
 
 // ============================================================
@@ -308,10 +318,12 @@ public:
      * @param start 起始点（矩形一角）
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
-    explicit RectAnnotation(const QPoint &start, const QColor &color, int penWidth)
-        : Annotation(AnnotationType::Rectangle, start, color, penWidth) {}
+    explicit RectAnnotation(const QPoint &start, const QColor &color, int penWidth,
+                            Qt::PenStyle penStyle = Qt::SolidLine)
+        : Annotation(AnnotationType::Rectangle, start, color, penWidth, penStyle) {}
 
 protected:
     /**
@@ -380,10 +392,12 @@ public:
      * @param start 起始点（椭圆外接矩形一角）
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
-    explicit EllipseAnnotation(const QPoint &start, const QColor &color, int penWidth)
-        : Annotation(AnnotationType::Ellipse, start, color, penWidth) {}
+    explicit EllipseAnnotation(const QPoint &start, const QColor &color, int penWidth,
+                               Qt::PenStyle penStyle = Qt::SolidLine)
+        : Annotation(AnnotationType::Ellipse, start, color, penWidth, penStyle) {}
 
 protected:
     /**
@@ -450,10 +464,12 @@ public:
      * @param start 起始点（三角形外接矩形一角）
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
-    explicit TriangleAnnotation(const QPoint &start, const QColor &color, int penWidth)
-        : Annotation(AnnotationType::Rectangle, start, color, penWidth),
+    explicit TriangleAnnotation(const QPoint &start, const QColor &color, int penWidth,
+                                Qt::PenStyle penStyle = Qt::SolidLine)
+        : Annotation(AnnotationType::Rectangle, start, color, penWidth, penStyle),
           m_vertices({ start, start, start }) {}
 
     /**
@@ -573,10 +589,12 @@ public:
      * @param start 直线起点
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
-    explicit LineAnnotation(const QPoint &start, const QColor &color, int penWidth)
-        : Annotation(AnnotationType::Line, start, color, penWidth) {}
+    explicit LineAnnotation(const QPoint &start, const QColor &color, int penWidth,
+                            Qt::PenStyle penStyle = Qt::SolidLine)
+        : Annotation(AnnotationType::Line, start, color, penWidth, penStyle) {}
 
 protected:
     /**
@@ -636,10 +654,12 @@ public:
      * @param start 箭头起点
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
-    explicit ArrowAnnotation(const QPoint &start, const QColor &color, int penWidth)
-        : Annotation(AnnotationType::Arrow, start, color, penWidth) {}
+    explicit ArrowAnnotation(const QPoint &start, const QColor &color, int penWidth,
+                             Qt::PenStyle penStyle = Qt::SolidLine)
+        : Annotation(AnnotationType::Arrow, start, color, penWidth, penStyle) {}
 
     /**
      * @brief 计算箭头头部三角形的三个顶点
@@ -704,10 +724,12 @@ public:
      * @param start 起始点
      * @param color 画笔颜色
      * @param penWidth 画笔宽度
+     * @param penStyle 画笔线型（实线/虚线），默认实线
      * @author chiangyang
      */
-    explicit PenAnnotation(const QPoint &start, const QColor &color, int penWidth)
-        : Annotation(AnnotationType::Pen, start, color, penWidth) {}
+    explicit PenAnnotation(const QPoint &start, const QColor &color, int penWidth,
+                           Qt::PenStyle penStyle = Qt::SolidLine)
+        : Annotation(AnnotationType::Pen, start, color, penWidth, penStyle) {}
 
     /**
      * @brief 添加路径点

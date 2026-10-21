@@ -73,6 +73,8 @@
   "shape.rect": "矩形",
   "shape.ellipse": "椭圆",
   "shape.triangle": "三角形",
+  "lineStyle.solid": "实线",
+  "lineStyle.dashed": "虚线",
   "record": "录屏",
   "record.start": "开始",
   "record.pause": "暂停",

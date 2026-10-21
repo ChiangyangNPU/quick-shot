@@ -189,6 +189,11 @@ void BaseToolBar::retranslateUi() {
         rect.shapeCombo->setItemText(2, tm->get("shape.triangle", "Triangle"));
         adjustShapeComboPopupWidth(rect.shapeCombo);
     }
+    // 线型切换按钮文案（Rectangle / ColorPen 变体）
+    for (SubToolVariant v : {VariantRectangle, VariantColorPen}) {
+        QPushButton *btn = m_subVariants[v].styleBtn;
+        if (btn) updateLineStyleButtonText(btn, btn->isChecked());
+    }
 }
 
 // ============================================================
@@ -282,6 +287,8 @@ void BaseToolBar::showSubTools(int toolId) {
         emit penColorChanged(ts.color);
         LOG_INFO(QString("Emit pen color signal: rgb(%1,%2,%3)")
             .arg(ts.color.red()).arg(ts.color.green()).arg(ts.color.blue()));
+        emit penStyleChanged(ts.dashed);
+        LOG_INFO(QString("Emit pen style signal: %1").arg(ts.dashed ? "Dashed" : "Solid"));
         if (newVariant == VariantRectangle) {
             // 矩形工具默认形状类型 1 = Rectangle
             emit shapeTypeChanged(1);
@@ -404,6 +411,10 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
             data.layout->addWidget(data.slider);
             m_penWidthSlider = data.slider;
 
+            // --- 线型切换（实线/虚线） ---
+            data.styleBtn = makeLineStyleButton(data.window);
+            data.layout->addWidget(data.styleBtn);
+
             // --- 颜色面板 ---
             addColorPalette(data.layout);
             break;
@@ -421,6 +432,10 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
             });
             data.layout->addWidget(data.slider);
             m_penWidthSlider = data.slider;
+
+            // --- 线型切换（实线/虚线） ---
+            data.styleBtn = makeLineStyleButton(data.window);
+            data.layout->addWidget(data.styleBtn);
 
             // --- 颜色面板 ---
             addColorPalette(data.layout);
@@ -559,6 +574,104 @@ void BaseToolBar::syncVariantState(SubToolVariant v, int toolId) {
         data.shapeCombo->setCurrentIndex(0);
         data.shapeCombo->blockSignals(false);
     }
+
+    // 线型切换按钮（只带描边的变体）
+    if (data.styleBtn) {
+        data.styleBtn->blockSignals(true);
+        data.styleBtn->setChecked(ts.dashed);
+        updateLineStyleButtonText(data.styleBtn, ts.dashed);
+        data.styleBtn->blockSignals(false);
+    }
+}
+
+// ============================================================
+// 线型切换按钮
+// ============================================================
+
+/**
+ * @brief 获取指定工具线型偏好的配置键
+ *
+ * 三角形与矩形共用 RECTANGLE 工具，故只有 5 个工具键；
+ * 文本/马赛克/橡皮擦不支持虚线，返回空键表示不持久化。
+ * @param toolId 工具 ID（ToolId 枚举值）
+ * @return 配置键，不支持时返回空字符串
+ * @author chiangyang
+ */
+static QString dashedConfigKey(int toolId) {
+    switch (toolId) {
+        case ToolIds::RECTANGLE: return "style/dashedRectangle";
+        case ToolIds::ELLIPSE:   return "style/dashedEllipse";
+        case ToolIds::ARROW:     return "style/dashedArrow";
+        case ToolIds::PEN:       return "style/dashedPen";
+        case ToolIds::LINE:      return "style/dashedLine";
+        default:                 return QString();
+    }
+}
+
+/**
+ * @brief 从配置读取指定工具的线型偏好
+ * @param toolId 工具 ID（ToolId 枚举值）
+ * @return true=虚线，false=实线（不支持或未配置时为实线）
+ * @author chiangyang
+ */
+bool BaseToolBar::loadDashedSetting(int toolId) const {
+    const QString key = dashedConfigKey(toolId);
+    if (key.isEmpty()) return false;
+    return ConfigManager::instance()->value(key, false).toBool();
+}
+
+/**
+ * @brief 将指定工具的线型偏好写入配置
+ * @param toolId 工具 ID（ToolId 枚举值）
+ * @param dashed true=虚线，false=实线
+ * @author chiangyang
+ */
+void BaseToolBar::saveDashedSetting(int toolId, bool dashed) const {
+    const QString key = dashedConfigKey(toolId);
+    if (key.isEmpty()) return;
+    ConfigManager::instance()->setValue(key, dashed);
+}
+
+/**
+ * @brief 创建线型切换按钮（实线/虚线）
+ *
+ * 按钮为 checkable：未勾选显示「实线」，勾选显示「虚线」。
+ * 点击时把状态写入当前工具的 ToolSettings 并发射 penStyleChanged，
+ * 使 SnipScreen / PinWindow / RecordingSession 同步当前线型。
+ * @param parent 父控件
+ * @return 创建好的切换按钮
+ * @author chiangyang
+ */
+QPushButton *BaseToolBar::makeLineStyleButton(QWidget *parent) {
+    QPushButton *btn = new QPushButton(parent);
+    btn->setCheckable(true);
+    btn->setCursor(Qt::PointingHandCursor);
+    btn->setStyleSheet(StyleManager::getActionButtonStyle());
+    updateLineStyleButtonText(btn, false);
+    connect(btn, &QPushButton::toggled, this, [this, btn](bool checked) {
+        if (m_currentToolId < 0) return;
+        m_toolSettings[m_currentToolId].dashed = checked;
+        saveDashedSetting(m_currentToolId, checked);
+        updateLineStyleButtonText(btn, checked);
+        LOG_INFO(QString("Line style changed: %1").arg(checked ? "Dashed" : "Solid"));
+        emit penStyleChanged(checked);
+    });
+    return btn;
+}
+
+/**
+ * @brief 刷新线型按钮的文案与提示
+ * @param btn 线型切换按钮
+ * @param dashed 当前是否为虚线
+ * @author chiangyang
+ */
+void BaseToolBar::updateLineStyleButtonText(QPushButton *btn, bool dashed) {
+    if (!btn) return;
+    TranslationManager *tm = TranslationManager::instance();
+    const QString text = dashed ? tm->get("lineStyle.dashed", "Dashed")
+                                : tm->get("lineStyle.solid", "Solid");
+    btn->setText(text);
+    btn->setToolTip(text);
 }
 
 // ============================================================

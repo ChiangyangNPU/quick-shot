@@ -268,6 +268,21 @@ public:
     void setPenWidth(int width) { m_currentPenWidth = width; }
 
     /**
+     * @brief 当前是否使用虚线线型
+     * @return true=虚线，false=实线
+     * @author chiangyang
+     */
+    bool isDashed() const { return m_currentDashed; }
+
+    /**
+     * @brief 设置当前线型（实线/虚线）
+     * @param dashed true=虚线，false=实线
+     * @note 仅影响矩形/椭圆/三角形/箭头/画笔/直线，文本与马赛克不受影响
+     * @author chiangyang
+     */
+    void setDashed(bool dashed) { m_currentDashed = dashed; }
+
+    /**
      * @brief 获取当前文本字号
      * @return 字号（像素）
      * @author chiangyang
@@ -367,6 +382,7 @@ private:
     AnnotationType m_currentTool = AnnotationType::Rectangle;  ///< 当前标注工具
     QColor m_currentColor = Qt::red;         ///< 当前画笔颜色
     int m_currentPenWidth = 5;               ///< 当前画笔宽度
+    bool m_currentDashed = false;            ///< 当前线型是否为虚线
     int m_currentFontSize = 16;              ///< 当前字体大小
     int m_currentShapeType = 1;              ///< 当前形状类型（1=矩形, 2=椭圆, 3=三角形）
 

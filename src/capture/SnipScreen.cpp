@@ -292,6 +292,10 @@ void SnipScreen::connectToolbarStyleSignals()
         m_annotationHandler->setPenWidth(width);
         LOG_INFO(QString("[SnipScreen] Pen width changed: %1").arg(width));
     });
+    connect(m_toolbar, &ScreenshotToolBar::penStyleChanged, [this](bool dashed) {
+        m_annotationHandler->setDashed(dashed);
+        LOG_INFO(QString("[SnipScreen] Pen style changed: %1").arg(dashed ? "Dashed" : "Solid"));
+    });
     connect(m_toolbar, &ScreenshotToolBar::fontSizeChanged, [this](int size) {
         m_annotationHandler->setFontSize(size);
         LOG_INFO(QString("[SnipScreen] Font size changed: %1").arg(size));

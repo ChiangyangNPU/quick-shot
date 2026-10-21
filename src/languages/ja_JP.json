@@ -73,6 +73,8 @@
   "shape.rect": "矩形",
   "shape.ellipse": "楕円",
   "shape.triangle": "三角形",
+  "lineStyle.solid": "実線",
+  "lineStyle.dashed": "破線",
   "record": "録画",
   "record.start": "開始",
   "record.pause": "一時停止",
