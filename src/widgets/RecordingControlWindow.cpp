@@ -1,6 +1,8 @@
 #include "RecordingControlWindow.h"
 #include <QApplication>
+#include <QAbstractItemView>
 #include <QComboBox>
+#include <QFontMetrics>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QSpacerItem>
@@ -92,12 +94,17 @@ void RecordingControlWindow::setupUi() {
     m_mainLayout->addWidget(btnStop);
 
     // 输出格式选择（MP4 / GIF），选择结果持久化到配置
+    // 构建步骤与 BaseToolBar 的形状下拉框（矩形/椭圆/三角形）保持一致：
+    // 建控件 → 填条目 → setCurrentIndex → 设样式 → 按文本算最小宽度 → 高亮弹窗 → 入布局
     m_formatCombo = new QComboBox(this);
     m_formatCombo->addItem("MP4", QStringLiteral("mp4"));
     if (ScreenRecorder::isGifSupported()) {
         m_formatCombo->addItem("GIF", QStringLiteral("gif"));
     }
+    m_formatCombo->setCurrentIndex(0);
     m_formatCombo->setStyleSheet(StyleManager::getComboBoxStyle());
+    updateFormatComboWidth();
+    StyleManager::useHighlightOnlyPopup(m_formatCombo);
     connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
         ConfigManager::instance()->setValue("record/format", selectedFormat());
         LOG_INFO(QString("RecordingControlWindow: output format=%1").arg(selectedFormat()));
@@ -165,6 +172,31 @@ void RecordingControlWindow::retranslateUi() {
     }
     if (chkMicrophone) {
         chkMicrophone->setText(tm->get("record.microphone", "Microphone"));
+    }
+    // 条目文本变化后重新计算宽度，避免被省略为 "..."
+    updateFormatComboWidth();
+}
+
+/**
+ * @brief 按条目文本重算格式下拉框最小宽度
+ *
+ * 与 BaseToolBar 的 adjustShapeComboPopupWidth 保持一致：
+ * 文本宽 + 3 个字符宽（QSS 内边距 + 下拉箭头区 + 边框），
+ * 弹窗视图宽度同样不小于本体，否则弹窗条目也会被省略。
+ * @author chiangyang
+ */
+void RecordingControlWindow::updateFormatComboWidth() {
+    if (!m_formatCombo) return;
+    int maxItemWidth = 0;
+    const QFontMetrics fm(m_formatCombo->font());
+    for (int i = 0; i < m_formatCombo->count(); ++i) {
+        maxItemWidth = qMax(maxItemWidth, fm.horizontalAdvance(m_formatCombo->itemText(i)));
+    }
+    const int minComboWidth = maxItemWidth + qRound(fm.horizontalAdvance('M') * 3.0);
+    m_formatCombo->setMinimumWidth(minComboWidth);
+    if (QAbstractItemView *view = m_formatCombo->view()) {
+        view->setMinimumWidth(qMax(maxItemWidth + qRound(fm.horizontalAdvance('M') * 2.0),
+                                   minComboWidth));
     }
 }
 

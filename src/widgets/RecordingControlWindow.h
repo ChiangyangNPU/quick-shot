@@ -139,6 +139,17 @@ private:
      */
     void updateAudioAvailability();
 
+    /**
+     * @brief 按条目文本重算格式下拉框最小宽度
+     *
+     * QComboBox 默认不把样式表内边距与下拉箭头计入宽度，
+     * 宽度不足时条目文本会被省略为 "..."。与 BaseToolBar 的
+     * adjustShapeComboPopupWidth 采用同一算法：文本宽 + 3 个字符宽的内边距。
+     * 语言切换（setItemText）后需重新调用。
+     * @author chiangyang
+     */
+    void updateFormatComboWidth();
+
     // 控制按钮
     QPushButton *btnStart = nullptr;
     QPushButton *btnPause = nullptr;
