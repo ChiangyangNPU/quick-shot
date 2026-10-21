@@ -360,9 +360,9 @@
   "scroll.button": "长截图",
   "scroll.vertical": "垂直滚动截图",
   "scroll.horizontal": "水平滚动截图",
-  "scroll.status": "滚动页面采集｜已拼接 %1 px｜Enter 完成，Esc 取消",
+  "scroll.status": "已拼接 %1 px",
   "scroll.finish": "完成",
   "scroll.cancel": "取消",
-  "scroll.hint": "滚动页面开始采集｜Enter 完成，Esc 取消",
+  "scroll.hint": "滚动页面开始采集",
   "update.later": "稍后"
 }

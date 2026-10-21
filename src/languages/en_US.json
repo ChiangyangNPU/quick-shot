@@ -360,9 +360,9 @@
   "scroll.button": "Scroll Capture",
   "scroll.vertical": "Vertical Scroll Capture",
   "scroll.horizontal": "Horizontal Scroll Capture",
-  "scroll.status": "Scroll the page · Captured %1 px · Enter to finish, Esc to cancel",
+  "scroll.status": "Captured %1 px",
   "scroll.finish": "Finish",
   "scroll.cancel": "Cancel",
-  "scroll.hint": "Scroll the page to capture · Enter to finish, Esc to cancel",
+  "scroll.hint": "Scroll the page to start",
   "update.later": "Later"
 }

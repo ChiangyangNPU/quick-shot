@@ -360,9 +360,9 @@
   "scroll.button": "長いスクリーンショット",
   "scroll.vertical": "縦スクロール撮影",
   "scroll.horizontal": "横スクロール撮影",
-  "scroll.status": "ページをスクロールして撮影｜%1 px 連結済み｜Enter で完了、Esc でキャンセル",
+  "scroll.status": "%1 px 連結済み",
   "scroll.finish": "完了",
   "scroll.cancel": "キャンセル",
-  "scroll.hint": "ページをスクロールして撮影｜Enter で完了、Esc でキャンセル",
+  "scroll.hint": "ページをスクロールして撮影",
   "update.later": "後で"
 }

@@ -360,9 +360,9 @@
   "scroll.button": "長截圖",
   "scroll.vertical": "垂直捲動截圖",
   "scroll.horizontal": "水平捲動截圖",
-  "scroll.status": "捲動頁面擷取｜已拼接 %1 px｜Enter 完成，Esc 取消",
+  "scroll.status": "已拼接 %1 px",
   "scroll.finish": "完成",
   "scroll.cancel": "取消",
-  "scroll.hint": "捲動頁面開始擷取｜Enter 完成，Esc 取消",
+  "scroll.hint": "捲動頁面開始擷取",
   "update.later": "稍後"
 }
