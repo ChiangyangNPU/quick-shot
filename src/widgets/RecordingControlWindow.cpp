@@ -5,7 +5,6 @@
 #include <QFontMetrics>
 #include <QPainter>
 #include <QPaintEvent>
-#include <QSpacerItem>
 #include "../core/ConfigManager.h"
 #include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
@@ -41,7 +40,8 @@ RecordingControlWindow::RecordingControlWindow(QWidget *parent) : QWidget(parent
  * 导致圆角矩形没有底色。这里用 QPainter 主动绘制圆角矩形背景，
  * 既保证圆角外区域透明（不露出直角底层），又保证圆角内有底色。
  *
- * 半径与 QSS 中的 border-radius: 0.24em 一致，按当前字体 em 高度换算。
+ * 半径复用工具栏统一算法（StyleManager::toolbarCornerRadius），
+ * 保证与截图/录屏工具栏的圆角观感一致。
  * @param event 绘制事件
  * @author chiangyang
  */
@@ -51,7 +51,7 @@ void RecordingControlWindow::paintEvent(QPaintEvent *event) {
     painter.setRenderHint(QPainter::Antialiasing);
     painter.setPen(Qt::NoPen);
     painter.setBrush(StyleManager::getRecordControlBgColor());
-    int radius = qRound(fontMetrics().height() * 0.24);
+    const int radius = StyleManager::toolbarCornerRadius(this);
     painter.drawRoundedRect(rect(), radius, radius);
 }
 
@@ -64,10 +64,10 @@ void RecordingControlWindow::setupUi() {
     setStyleSheet(StyleManager::getWindowStyle());
     setAttribute(Qt::WA_StyledBackground);
 
-    // 创建主布局
+    // 创建主布局（边距与间距对齐 BaseToolBar::initShell：8/4/8/4、spacing 4）
     m_mainLayout = new QHBoxLayout(this);
-    m_mainLayout->setContentsMargins(5, 5, 5, 5);
-    m_mainLayout->setSpacing(5);
+    m_mainLayout->setContentsMargins(8, 4, 8, 4);
+    m_mainLayout->setSpacing(4);
 
     // 创建控制按钮
     btnStart = new QPushButton(this);
@@ -113,6 +113,9 @@ void RecordingControlWindow::setupUi() {
     m_mainLayout->addWidget(m_formatCombo);
     setSelectedFormat(ConfigManager::instance()->value("record/format", "mp4").toString());
 
+    // 输出格式与音频选项之间加竖线分隔符（与工具栏的 toolbarSeparator 一致）
+    addSeparator();
+
     // 音频录制选项
     chkSystemAudio = new QCheckBox(this);
     chkMicrophone = new QCheckBox(this);
@@ -137,18 +140,24 @@ void RecordingControlWindow::setupUi() {
     m_mainLayout->addWidget(chkSystemAudio);
     m_mainLayout->addWidget(chkMicrophone);
 
-    // 添加分隔符
-    m_mainLayout->addSpacerItem(new QSpacerItem(20, 20, QSizePolicy::Fixed, QSizePolicy::Minimum));
-
     // 分辨率选择已移除，输出分辨率自动匹配选区大小
-
-    // 添加分隔符
-    m_mainLayout->addSpacerItem(new QSpacerItem(20, 20, QSizePolicy::Fixed, QSizePolicy::Minimum));
-
-
 
     // 初始状态
     updateButtonStates(false, false);
+}
+
+/**
+ * @brief 在主布局中添加垂直分隔线
+ *
+ * 对象名与颜色和 BaseToolBar::addSeparator 保持一致，
+ * 宽度/高度交由全局 app.qss 的 QWidget#toolbarSeparator 规则控制。
+ * @author chiangyang
+ */
+void RecordingControlWindow::addSeparator() {
+    QWidget *separator = new QWidget(this);
+    separator->setObjectName("toolbarSeparator");
+    separator->setStyleSheet("background-color: rgba(0, 0, 0, 40);");
+    m_mainLayout->addWidget(separator);
 }
 
 /**

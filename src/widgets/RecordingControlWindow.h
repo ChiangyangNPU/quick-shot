@@ -132,6 +132,15 @@ private:
     void setupUi();
 
     /**
+     * @brief 在主布局中添加垂直分隔线
+     *
+     * 与 BaseToolBar::addSeparator 使用同一对象名与颜色，
+     * 保证录屏控制栏与截图/录屏工具栏的视觉风格一致。
+     * @author chiangyang
+     */
+    void addSeparator();
+
+    /**
      * @brief 根据当前格式与录制状态更新音频选项可用性
      *
      * GIF 无音轨，选择 GIF 时取消勾选并禁用音频复选框。

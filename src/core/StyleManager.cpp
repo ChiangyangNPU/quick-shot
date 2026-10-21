@@ -636,7 +636,7 @@ QString StyleManager::getMenuStyle() {
 }
 
 QString StyleManager::getWindowStyle() {
-        return QString("background-color: %1; border-radius: 0.24em; color: %2;")
+        return QString("background-color: %1; border-radius: 0.3em; color: %2;")
             .arg(color(StyleColorId::RecordControlBg).name())
             .arg(color(StyleColorId::ToolbarText).name());
 }
