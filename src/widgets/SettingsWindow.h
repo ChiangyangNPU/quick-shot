@@ -381,6 +381,18 @@ private:
      */
     void updateControlWidths();
 
+    /**
+     * @brief 按当前选项卡内容调整窗口高度（可选动画）
+     *
+     * fitWindowHeight() 的实际实现。槽 fitWindowHeight() 保持无参签名以兼容
+     * contentHeightChanged() 这类无参信号连接，内部固定走动画；
+     * 首次显示与初始化校准等不该有动画的场景直接调用本方法并传 false。
+     * @param animated 是否使用高度动画（false 时立即设置目标高度）
+     * @note 目标高度与当前高度相同时直接返回，避免启动无意义的动画。
+     * @author chiangyang
+     */
+    void applyTabHeight(bool animated);
+
     // ---- 颜色配置（数据驱动，元数据表归 StyleManager 所有） ----
     // 颜色配置元数据表（settingsKey/translationKey/defaultText/defaultColor）定义在
     // StyleManager::colorSettingTable()（core 层单一数据源），SettingsWindow 只消费它，
@@ -389,6 +401,7 @@ private:
 
     // 拖动相关
     bool m_isDragging = false;   ///< 是否正在拖动窗口
+    bool m_firstShow = true;     ///< 是否尚未完成首次显示（用于首次显示时同步定高）
     QPoint m_dragStartPos;       ///< 拖动起始位置（全局坐标）
     QPoint m_widgetStartPos;     ///< 窗口起始位置（全局坐标）
 

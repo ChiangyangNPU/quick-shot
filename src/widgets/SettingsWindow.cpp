@@ -88,9 +88,11 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimati
                 this, &SettingsWindow::onDpiChanged, Qt::UniqueConnection);
     }
 
-    // 延迟调用 onTabChanged 确保布局完成后再调整高度
+    // 延迟调用以确保布局完成后再调整高度
+    // 这里属于初始化校准（懒加载下窗口刚由托盘点击创建），不使用动画，
+    // 避免首次显示后再出现一次高度动画；用户可见的选项卡切换仍走动画路径
     QTimer::singleShot(100, this, [this]() {
-        onTabChanged(tabWidget->currentIndex());
+        applyTabHeight(false);
     });
 }
 
@@ -104,6 +106,18 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimati
  */
 void SettingsWindow::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
+
+    // 首次显示时同步设定当前选项卡对应的高度（无动画）
+    // 懒加载下窗口是托盘点击瞬间才构造的，构造函数里的 100ms 初始化校准
+    // 来不及在 show() 之前执行，此时 Qt 会先按 QTabWidget 所有页面的最大
+    // sizeHint 显示窗口，随后再由高度动画收缩，表现为首次打开时高度先拉伸一下。
+    // 这里在首次显示、窗口尚未绘制前直接定高，消除该跳变。
+    if (m_firstShow) {
+        m_firstShow = false;
+        LOG_INFO("SettingsWindow: first show, applying initial height without animation");
+        applyTabHeight(false);
+    }
+
     // 重新绑定当前屏幕的 DPI 变化信号（窗口可能已移动到其他屏幕）
     if (QScreen *screen = this->screen()) {
         connect(screen, &QScreen::logicalDotsPerInchChanged,
@@ -466,11 +480,23 @@ void SettingsWindow::onTabChanged(int index) {
 /**
  * @brief 按当前选项卡内容重新自适应窗口高度
  *
- * 先让当前页缩放回其 sizeHint 自然高度（adjustSize()），
- * 再读取内容真实所需高度，把窗口高度动画到对应值。
+ * 保持无参槽签名，兼容 contentHeightChanged() 这类无参信号连接；
+ * 用户手动切换选项卡时走带高度动画的适配路径。
  * @author chiangyang
  */
 void SettingsWindow::fitWindowHeight() {
+    applyTabHeight(true);
+}
+
+/**
+ * @brief 按当前选项卡内容调整窗口高度（可选动画）
+ *
+ * 先让当前页缩放回其 sizeHint 自然高度（adjustSize()），
+ * 再读取内容真实所需高度，按 animated 决定是动画过渡还是立即设置。
+ * @param animated 是否使用高度动画（false 时立即设置目标高度）
+ * @author chiangyang
+ */
+void SettingsWindow::applyTabHeight(bool animated) {
     QWidget *currentTab = tabWidget->currentWidget();
     if (!currentTab) return;
 
@@ -487,8 +513,21 @@ void SettingsWindow::fitWindowHeight() {
     int tabBarExtra = 50;
     int targetHeight = tabHeight + tabBarExtra;
 
+    int currentHeight = this->height();
+
     if (heightAnimation && heightAnimation->state() == QPropertyAnimation::Running) {
         heightAnimation->stop();
+    }
+
+    // 高度已经正确时直接返回，避免首次显示/初始化校准后启动无意义的动画
+    if (currentHeight == targetHeight) {
+        return;
+    }
+
+    if (!animated) {
+        // 无动画路径：立即把窗口高度设为目标值
+        setAnimatedHeight(targetHeight);
+        return;
     }
 
     if (!heightAnimation) {
@@ -496,7 +535,6 @@ void SettingsWindow::fitWindowHeight() {
         heightAnimation->setEasingCurve(QEasingCurve::InOutQuad);
     }
 
-    int currentHeight = this->height();
     heightAnimation->setStartValue(currentHeight);
     heightAnimation->setEndValue(targetHeight);
     heightAnimation->setDuration(400);
