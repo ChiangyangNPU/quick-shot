@@ -6,6 +6,8 @@
 namespace {
 ///< 视为可靠匹配的最大平均灰度差（0~255）
 constexpr int kMaxMeanFlowDiff = 12;
+///< 模板区域的最小灰度方差（低于该值视为纯色/无纹理，不能作为对齐依据）
+constexpr double kMinTemplateVariance = 1.0;
 ///< 小于该位移视为页面未滚动（抗抖动）
 constexpr int kMinShift = 2;
 ///< 累计像素上限（避免长图占用过多内存，约 240MB）
@@ -71,18 +73,20 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
     }
 
     QImage gray = toGray(work);
+    int templateTop = 0;
     int bestDiff = 0;
-    const int matchRow = findBestMatchRow(m_lastGray, gray, bestDiff);
+    const int matchRow = findBestMatchRow(m_lastGray, gray, templateTop, bestDiff);
     if (matchRow < 0) {
         return AppendResult::NoMatch;
     }
 
-    const int rows = templateRows(work.height());
-    const int startRow = matchRow + rows;                 // 当前帧中新内容的起始行
-    const int shift = work.height() - startRow;           // 新增像素数
+    // 模板在上一帧中的位置与在当前帧中的匹配位置之差，即本次滚动位移；
+    // 模板不贴底时（底部为空白）也按同一公式换算，新增内容起点 = 帧高 - 位移
+    const int shift = templateTop - matchRow;
     if (shift < kMinShift) {
         return AppendResult::Duplicate;
     }
+    const int startRow = work.height() - shift;           // 当前帧中新内容的起始行
 
     if (m_stitchedLength + shift > m_maxLength) {
         return AppendResult::LimitReached;
@@ -98,7 +102,8 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
     return AppendResult::Appended;
 }
 
-int ScrollStitcher::findBestMatchRow(const QImage &prev, const QImage &next, int &bestDiff) const {
+int ScrollStitcher::findBestMatchRow(const QImage &prev, const QImage &next,
+                                     int &templateTop, int &bestDiff) const {
     const int width = prev.width();
     const int height = prev.height();
     if (next.width() != width || next.height() != height || width <= 0 || height <= 0) {
@@ -118,35 +123,58 @@ int ScrollStitcher::findBestMatchRow(const QImage &prev, const QImage &next, int
     const int colBegin = edgeInset;
     const int colEnd = width - edgeInset;
 
-    // 模板纹理检查：纯色区域任意位置都"匹配"，会导致错位追加，直接判为无匹配
-    double sum = 0.0;
-    double sumSq = 0.0;
-    int sampleCount = 0;
-    for (int r = 0; r < rows; r += rowStep) {
-        const uchar *line = prev.constScanLine(height - rows + r);
-        for (int c = colBegin; c < colEnd; c += colStep) {
-            const double v = line[c];
-            sum += v;
-            sumSq += v * v;
-            ++sampleCount;
+    /**
+     * @brief 计算指定起始行的模板区域灰度方差（纹理强度）
+     * @param top 模板起始行
+     * @return 方差；0 表示纯色
+     */
+    auto regionVariance = [&](int top) -> double {
+        double sum = 0.0;
+        double sumSq = 0.0;
+        int count = 0;
+        for (int r = 0; r < rows; r += rowStep) {
+            const uchar *line = prev.constScanLine(top + r);
+            for (int c = colBegin; c < colEnd; c += colStep) {
+                const double v = line[c];
+                sum += v;
+                sumSq += v * v;
+                ++count;
+            }
+        }
+        if (count == 0) return 0.0;
+        const double mean = sum / count;
+        return sumSq / count - mean * mean;
+    };
+
+    // 自适应模板：从帧底往上扫描，选取第一段纹理足够的内容。
+    // 白底文档、大面积留白页面的底部常为空白，固定取底部会导致整帧被判为无匹配。
+    // 上限限制在帧高 35% 以上，避免模板落到顶部固定表头区域。
+    const int maxTemplateTop = height - rows;
+    const int minTemplateTop = qMax(0, int(height * 0.35));
+    const int templateStep = qMax(4, rows / 8);
+    templateTop = -1;
+    for (int top = maxTemplateTop; top >= minTemplateTop; top -= templateStep) {
+        if (regionVariance(top) >= kMinTemplateVariance) {
+            templateTop = top;
+            break;
         }
     }
-    if (sampleCount > 0) {
-        const double mean = sum / sampleCount;
-        const double variance = sumSq / sampleCount - mean * mean;
-        if (variance < 4.0) {
-            return -1;  // 标准差 < 2，视为无纹理
-        }
+    if (templateTop < 0) {
+        return -1;  // 整帧无可用纹理（纯色画面），无法定位重叠
     }
 
-    // 在当前帧内滑动搜索模板：小步滚动时匹配位置会靠近帧尾，因此不能只搜顶部
-    const int maxRow = height - rows;
+    // 页面向上滚动时，同一内容在当前帧中的位置比上一帧更靠上；
+    // 上限含 templateTop 本身，未滚动时才能匹配到原位置并判为 Duplicate
+    const int maxRow = qMin(height - rows, templateTop);
+    if (maxRow < 0) {
+        return -1;
+    }
 
     auto evaluate = [&](int startRow) -> double {
         long long diff = 0;
         int count = 0;
         for (int r = 0; r < rows; r += rowStep) {
-            const uchar *tail = prev.constScanLine(height - rows + r);
+            const uchar *tail = prev.constScanLine(templateTop + r);
             const uchar *head = next.constScanLine(startRow + r);
             for (int c = colBegin; c < colEnd; c += colStep) {
                 diff += qAbs(int(tail[c]) - int(head[c]));

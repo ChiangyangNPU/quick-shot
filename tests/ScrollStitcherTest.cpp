@@ -33,6 +33,27 @@ QImage makeDocument(int width, int height) {
 }
 
 /**
+ * @brief 生成白底稀疏纹理的"文档"图（模拟白底网页：少量文字行 + 大片留白）
+ * @param width 宽度
+ * @param height 高度
+ * @return 文档图像
+ * @author chiangyang
+ */
+QImage makeSparseDocument(int width, int height) {
+    QImage image(width, height, QImage::Format_RGB32);
+    image.fill(qRgb(255, 255, 255));
+    for (int y = 0; y < height; ++y) {
+        // 每 23 行中只有 5 行有内容，其余为纯白留白
+        if (y % 23 >= 5) continue;
+        for (int x = 0; x < width; ++x) {
+            const int v = (y * 37 + x * 11 + (y * y) / 17) % 180;
+            image.setPixel(x, y, qRgb(v / 2, v / 2, v / 2));
+        }
+    }
+    return image;
+}
+
+/**
  * @brief 从文档中截取一帧
  * @author chiangyang
  */
@@ -67,6 +88,12 @@ private slots:
      * @author chiangyang
      */
     void horizontalStitch();
+
+    /**
+     * @brief 白底稀疏纹理页面：模板自适应上移，底部留白时仍能正确拼接
+     * @author chiangyang
+     */
+    void whitePageStitch();
 
     /**
      * @brief 未滚动时重复帧应被丢弃
@@ -130,6 +157,27 @@ void ScrollStitcherTest::horizontalStitch() {
     QCOMPARE(stitcher.stitchedLength(), expectedLength);
     QCOMPARE(stitcher.result().size(), QSize(expectedLength, frameH));
     QVERIFY(imagesEqual(stitcher.result(), slice(doc, 0, 0, expectedLength, frameH)));
+}
+
+void ScrollStitcherTest::whitePageStitch() {
+    const int frameW = 120;
+    const int frameH = 150;
+    const int step = 50;
+    const QImage doc = makeSparseDocument(frameW, 440);
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(slice(doc, 0, 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+
+    int offset = 0;
+    for (int i = 1; i < 6; ++i) {
+        offset += step;
+        QVERIFY(stitcher.appendFrame(slice(doc, 0, offset, frameW, frameH))
+                == ScrollStitcher::AppendResult::Appended);
+    }
+
+    QCOMPARE(stitcher.stitchedLength(), frameH + 5 * step);
+    QVERIFY(imagesEqual(stitcher.result(), slice(doc, 0, 0, frameW, frameH + 5 * step)));
 }
 
 void ScrollStitcherTest::duplicateFrameIgnored() {

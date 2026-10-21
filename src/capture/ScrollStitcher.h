@@ -126,14 +126,19 @@ private:
     static int templateRows(int frameHeight);
 
     /**
-     * @brief 在当前帧中搜索与上一帧尾部模板匹配的起始行
+     * @brief 在当前帧中搜索与上一帧模板匹配的起始行
+     *
+     * 模板位置自适应：从帧底往上扫描，选取第一段纹理足够的内容，
+     * 避免白底文档、大面积留白页面因底部无特征被判为无法匹配。
      * @param prev 上一帧灰度图（转置坐标系）
      * @param next 当前帧灰度图（转置坐标系）
+     * @param templateTop 输出模板在上一帧中的起始行
      * @param bestDiff 输出最佳匹配的平均灰度差
      * @return 匹配起始行；-1 表示无可靠匹配
      * @author chiangyang
      */
-    int findBestMatchRow(const QImage &prev, const QImage &next, int &bestDiff) const;
+    int findBestMatchRow(const QImage &prev, const QImage &next,
+                         int &templateTop, int &bestDiff) const;
 
     /**
      * @brief 将新内容追加为一段条带（转置坐标系）
