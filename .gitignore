@@ -54,9 +54,6 @@ qrc_*.cpp
 .DS_Store
 Thumbs.db
 
-# Trae/AI temporary files
-.trae/
-
 # 发布脚本下载的 GitHub Release 产物（deploy/gitee/publish_gitee_release.sh）
 release-download/
 
