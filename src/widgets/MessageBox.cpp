@@ -187,6 +187,8 @@ bool MessageBox::question(QWidget *parent, const QString &title, const QString &
 void MessageBox::applyProjectStyle() {
     setStyleSheet(StyleManager::getMessageBoxStyle());
     setWindowIcon(StyleManager::loadAppIcon());
+    // 系统标题栏浅色/深色随主题
+    StyleManager::applyDarkTitleBar(winId());
 }
 
 /**

@@ -68,6 +68,7 @@ signals:
     void tabWidgetBgChanged(const QColor &color);
     void tabWidgetBgColorChanged();
     void toolbarButtonStyleChanged(const QString &style);
+    void themeChanged(const QString &theme);
     void defaultPenWidthChanged(int width);
     void defaultFontSizeChanged(int size);
     void defaultEraserWidthChanged(int width);
@@ -76,6 +77,7 @@ signals:
 private slots:
     void onResetStyle();
     void onToolbarButtonStyleChanged(int index);
+    void onThemeChanged(int index);
 
 private:
     void setupUi();
@@ -85,8 +87,18 @@ private:
     void updateColorButton(QPushButton *btn, const QColor &color);
     void applyColorChange(StyleManager::StyleColorId id);
     void applyColorPostUpdate(StyleManager::StyleColorCategory category, const QColor &newColor);
+
+    /**
+     * @brief 重设本选项卡内下拉框/SpinBox/重置按钮的样式
+     * @note 主题切换或重置后调用，使输入控件立即呈现新主题配色
+     * @author chiangyang
+     */
+    void reapplyInputStyles();
     void saveStyleSettings();
 
+    QGroupBox *m_themeGroup;        ///< 外观主题设置组
+    QLabel *lblTheme;               ///< 主题标签
+    QComboBox *cmbTheme;            ///< 主题下拉框（浅色/深色）
     QGroupBox *borderGroup;         ///< 边框颜色设置组
     QGroupBox *toolbarGroup;        ///< 工具栏样式设置组
     QGroupBox *tabGroup;            ///< 选项卡样式设置组

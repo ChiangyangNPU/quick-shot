@@ -147,6 +147,7 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
 
         // Style 标量项（颜色键由颜色表驱动）
         { "style/toolbarButtonStyle", StyleManager::DEFAULT_TOOLBAR_BUTTON_STYLE },
+        { "style/theme", StyleManager::DEFAULT_THEME },
         { "style/defaultPenWidth", StyleManager::DEFAULT_PEN_WIDTH },
         { "style/defaultFontSize", StyleManager::DEFAULT_FONT_SIZE },
         { "style/defaultEraserWidth", StyleManager::DEFAULT_ERASER_WIDTH },
@@ -193,8 +194,9 @@ void ConfigManager::writeDefaults(QSettings *settings, bool onlyIfMissing) {
         setValueIf(item.configKey, item.defaultValue);
     }
     // 颜色默认值：遍历颜色配置表（单一数据源）
+    // HexArgb 保留 alpha，与主题色板写入格式一致（QColor("#AARRGGBB") 读取兼容）
     for (const auto &s : StyleManager::colorSettingTable()) {
-        setValueIf(QString("style/%1").arg(s.settingsKey), s.defaultColor.name());
+        setValueIf(QString("style/%1").arg(s.settingsKey), s.defaultColor.name(QColor::HexArgb));
     }
 }
 

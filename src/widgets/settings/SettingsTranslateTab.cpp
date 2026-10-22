@@ -285,6 +285,20 @@ void SettingsTranslateTab::onTranslateSettingChanged() {
 void SettingsTranslateTab::refreshStyles() {
     if (m_translateEngineGroup) m_translateEngineGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_translateOptionsGroup) m_translateOptionsGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+
+    // 输入控件配色随主题刷新（主题切换时经 SettingsWindow::refreshAllStyles 调用）
+    const QString comboStyle = StyleManager::getSettingsComboBoxStyle();
+    if (m_translateEngineCombo) m_translateEngineCombo->setStyleSheet(comboStyle);
+    if (m_translateLangCombo) m_translateLangCombo->setStyleSheet(comboStyle);
+    const QString editStyle = StyleManager::getPathEditStyle();
+    if (m_mymemoryEmailEdit) m_mymemoryEmailEdit->setStyleSheet(editStyle);
+    if (m_baiduAppIdEdit) m_baiduAppIdEdit->setStyleSheet(editStyle);
+    if (m_baiduKeyEdit) m_baiduKeyEdit->setStyleSheet(editStyle);
+    if (m_deeplKeyEdit) m_deeplKeyEdit->setStyleSheet(editStyle);
+    if (m_libreUrlEdit) m_libreUrlEdit->setStyleSheet(editStyle);
+    const QString checkStyle = StyleManager::getSettingsCheckBoxStyle();
+    if (m_translateEnabledCheck) m_translateEnabledCheck->setStyleSheet(checkStyle);
+    if (m_translatePrivacyCheck) m_translatePrivacyCheck->setStyleSheet(checkStyle);
 }
 
 void SettingsTranslateTab::applyTabBackground(const QColor &color) {

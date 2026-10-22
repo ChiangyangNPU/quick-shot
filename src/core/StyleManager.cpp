@@ -20,6 +20,11 @@
 
 #include "Logger.h"
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#include <dwmapi.h>
+#endif
+
 // .cpp 级循环依赖：ConfigManager.cpp 会 include StyleManager.h（用 DEFAULT_* 播种），
 // 此文件 include ConfigManager.h（initFromConfig 用 value() 读取持久化）。
 // 头文件间仅前向声明 class ConfigManager，见 StyleManager.h 顶部注释。
@@ -27,6 +32,7 @@
 
 // 静态成员变量初始化
 QString StyleManager::s_toolbarButtonStyle = "text";                    ///< 工具栏按钮当前样式（文字模式）
+QString StyleManager::s_theme = "light";                                ///< 当前主题（浅色）
 int StyleManager::s_defaultPenWidth = 5;                                      ///< 画笔默认粗细
 int StyleManager::s_defaultFontSize = 28;                                     ///< 文本默认字号
 int StyleManager::s_defaultEraserWidth = 5;                                   ///< 橡皮擦默认粗细
@@ -55,6 +61,23 @@ const QColor StyleManager::DEFAULT_TAB_BUTTON_SELECTED_TEXT_COLOR = QColor("#000
 const QColor StyleManager::DEFAULT_HANDLE_CIRCLE_COLOR = QColor("#2563EB");            ///< 角手柄圆形默认颜色
 const QColor StyleManager::DEFAULT_HANDLE_CLOSE_COLOR = QColor("#DC2626");             ///< 角手柄关闭按钮默认颜色
 const QString StyleManager::DEFAULT_TOOLBAR_BUTTON_STYLE = "text";              ///< 工具栏按钮默认样式（文字模式）
+const QString StyleManager::DEFAULT_THEME = "light";                            ///< 默认主题（浅色）
+
+/**
+ * @brief 颜色转 QSS 字符串（保留 alpha 通道）
+ * @param c 颜色
+ * @return alpha<255 时输出 rgba(r,g,b,a)，否则输出 #rrggbb
+ * @note QColor::name() 会丢弃 alpha，深色主题色板大量依赖半透明色，
+ *       所有拼 QSS 处必须经此工具，否则深色样式串失效
+ * @author chiangyang
+ */
+static QString qssColor(const QColor &c) {
+    if (c.alpha() < 255) {
+        return QString("rgba(%1,%2,%3,%4)")
+            .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha());
+    }
+    return c.name();
+}
 
 // ============ 颜色存取（表驱动） ============
 // 21 个颜色的当前值按 StyleColorId 枚举顺序存放于 Meyers 单例，
@@ -231,6 +254,120 @@ StyleManager::colorSettingTable() {
 }
 
 /**
+ * @brief 主题色板（按 StyleColorId 枚举顺序返回 21 项预设颜色）
+ * @param dark true 返回深色色板，false 返回浅色色板（即各项 DEFAULT_*）
+ * @return 21 项颜色的数组
+ * @note 浅色直接取 colorSettingTable() 的默认色；深色为 HUD 风格预设
+ *       （参考滚动截图提示条配色）。截屏/录屏边框、角手柄、关闭按钮等
+ *       屏幕叠加物/红色语义不随主题变化，保持默认色。
+ * @author chiangyang
+ */
+static std::array<QColor, StyleManager::kStyleColorCount> themePalette(bool dark) {
+    std::array<QColor, StyleManager::kStyleColorCount> palette{};
+    const auto& table = StyleManager::colorSettingTable();
+    for (int i = 0; i < StyleManager::kStyleColorCount; ++i) {
+        palette[static_cast<size_t>(i)] = table[static_cast<size_t>(i)].defaultColor;
+    }
+    if (!dark) {
+        return palette;
+    }
+    using Id = StyleManager::StyleColorId;
+    // HUD 底板与按钮填充（rgba(22,22,26,248) 底板 + 半透明白填充）
+    palette[static_cast<size_t>(Id::ToolbarBg)]             = QColor(22, 22, 26, 248);
+    palette[static_cast<size_t>(Id::SubToolbarBg)]          = QColor(22, 22, 26, 248);
+    palette[static_cast<size_t>(Id::RecordControlBg)]       = QColor(22, 22, 26, 248);
+    palette[static_cast<size_t>(Id::ToolbarBtn)]            = QColor(255, 255, 255, 48);
+    palette[static_cast<size_t>(Id::ToolbarText)]           = QColor("#f2f2f2");
+    palette[static_cast<size_t>(Id::ToolbarButtonHover)]    = QColor(255, 255, 255, 78);
+    palette[static_cast<size_t>(Id::ToolbarButtonDisabled)] = QColor(255, 255, 255, 20);
+    // ToolbarButtonChecked 保留 #0078d7（深色下蓝色高亮清晰）
+    palette[static_cast<size_t>(Id::SettingButtonBg)]       = QColor(255, 255, 255, 48);
+    palette[static_cast<size_t>(Id::SettingButtonText)]     = QColor("#f2f2f2");
+    palette[static_cast<size_t>(Id::TabWidgetBg)]           = QColor("#1a1a1e");
+    palette[static_cast<size_t>(Id::TabButtonBg)]           = QColor(255, 255, 255, 30);
+    palette[static_cast<size_t>(Id::TabButtonText)]         = QColor("#f2f2f2");
+    palette[static_cast<size_t>(Id::TabButtonSelectedBg)]   = QColor("#23232a");
+    palette[static_cast<size_t>(Id::TabButtonSelectedText)] = QColor("#ffffff");
+    // 屏幕叠加物/红色语义不随主题：CaptureBorder/RecordBorder/HandleCircle/
+    // HandleClose/CloseButtonBg/CloseButtonHover 保持默认色
+    return palette;
+}
+
+/**
+ * @brief 获取当前主题标识
+ * @author chiangyang
+ */
+QString StyleManager::theme() {
+    return s_theme;
+}
+
+/**
+ * @brief 设置当前主题标识（仅更新标量，不写配置、不铺色板）
+ * @author chiangyang
+ */
+void StyleManager::setTheme(const QString &theme) {
+    s_theme = (theme == QLatin1String("dark")) ? QStringLiteral("dark") : DEFAULT_THEME;
+}
+
+/**
+ * @brief 获取当前主题模式枚举
+ * @author chiangyang
+ */
+StyleManager::ThemeMode StyleManager::themeMode() {
+    return (s_theme == QLatin1String("dark")) ? ThemeMode::Dark : ThemeMode::Light;
+}
+
+/**
+ * @brief 应用主题：批量覆盖颜色表并持久化全部颜色键与主题键
+ * @author chiangyang
+ */
+void StyleManager::applyTheme(const QString &theme, ConfigManager* cm) {
+    const bool dark = (theme == QLatin1String("dark"));
+    s_theme = dark ? QStringLiteral("dark") : DEFAULT_THEME;
+
+    const auto palette = themePalette(dark);
+    const auto& table = colorSettingTable();
+    for (int i = 0; i < kStyleColorCount; ++i) {
+        const auto& s = table[static_cast<size_t>(i)];
+        const QColor& c = palette[static_cast<size_t>(i)];
+        s.setter(c);
+        if (cm) {
+            // HexArgb 保留 alpha（QColor("#AARRGGBB") 读取端兼容）
+            cm->setValue(QString("style/%1").arg(s.settingsKey), c.name(QColor::HexArgb));
+        }
+    }
+    if (cm) {
+        cm->setValue("style/theme", s_theme);
+    }
+    LOG_INFO(QString("Theme applied: %1").arg(s_theme));
+}
+
+/**
+ * @brief 工具栏 SVG 图标染色色
+ * @author chiangyang
+ */
+QColor StyleManager::toolbarIconTint() {
+    return (themeMode() == ThemeMode::Dark) ? QColor("#f2f2f2") : QColor();
+}
+
+void StyleManager::applyDarkTitleBar(WId windowId) {
+#ifdef Q_OS_WIN
+    if (!windowId) {
+        return;
+    }
+    const HWND hwnd = reinterpret_cast<HWND>(windowId);
+    const BOOL dark = (themeMode() == ThemeMode::Dark) ? TRUE : FALSE;
+    // DWMWA_USE_IMMERSIVE_DARK_MODE：Windows 11/10 20H1+ 官方属性值为 20，
+    // Windows 10 1809~1909 的旧属性值为 19，两个都尝试以兼容旧系统
+    if (FAILED(DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark)))) {
+        DwmSetWindowAttribute(hwnd, 19, &dark, sizeof(dark));
+    }
+#else
+    Q_UNUSED(windowId);
+#endif
+}
+
+/**
  * @brief 从配置初始化样式（依赖注入）
  * @param cm ConfigManager 指针；nullptr 时重置为默认值
  *
@@ -248,7 +385,7 @@ void StyleManager::initFromConfig(ConfigManager* cm) {
     // 遍历颜色表恢复全部持久化颜色（缺键时回落默认色）
     for (const auto& s : colorSettingTable()) {
         s.setter(QColor(cm->value(
-            QString("style/%1").arg(s.settingsKey), s.defaultColor.name()).toString()));
+            QString("style/%1").arg(s.settingsKey), s.defaultColor.name(QColor::HexArgb)).toString()));
     }
 
     // 标注工具默认值（带边界 clamp，与 ConfigManager 原 getDefault* 一致）
@@ -259,6 +396,9 @@ void StyleManager::initFromConfig(ConfigManager* cm) {
 
     // 工具栏按钮样式
     setToolbarButtonStyle(cm->value("style/toolbarButtonStyle", DEFAULT_TOOLBAR_BUTTON_STYLE).toString());
+
+    // 主题标量（颜色键已被上方循环持久化覆盖，天然恢复，无需按主题重铺色板）
+    setTheme(cm->value("style/theme", DEFAULT_THEME).toString());
 }
 
 namespace {
@@ -361,12 +501,40 @@ int StyleManager::toolbarCornerRadius(const QWidget *widget) {
  * @author chiangyang
  */
 QIcon StyleManager::loadSvgIcon(const QString &iconPath, const QSize &size) {
+    return loadSvgIcon(iconPath, size, QColor());
+}
+
+/**
+ * @brief 加载SVG图标
+ * @param iconPath SVG图标路径
+ * @return 加载的图标
+ * @author chiangyang
+ */
+QIcon StyleManager::loadSvgIcon(const QString &iconPath) {
+    return loadSvgIcon(iconPath, QSize(24, 24), QColor());
+}
+
+/**
+ * @brief 加载SVG图标并染色
+ * @param iconPath SVG图标路径
+ * @param size 图标大小
+ * @param tint 染色颜色；无效色（QColor()）时不染色
+ * @return 加载的图标
+ * @author chiangyang
+ */
+QIcon StyleManager::loadSvgIcon(const QString &iconPath, const QSize &size, const QColor &tint) {
     QSvgRenderer svgRenderer(iconPath);
     if (svgRenderer.isValid()) {
         QPixmap pixmap(size);
         pixmap.fill(Qt::transparent);
         QPainter painter(&pixmap);
         svgRenderer.render(&painter);
+        // 染色：SourceIn 用 tint 整体重着色，保留图标 alpha 形状
+        if (tint.isValid()) {
+            painter.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            painter.fillRect(pixmap.rect(), tint);
+        }
+        painter.end();
         QIcon icon(pixmap);
         if (!icon.isNull()) {
             LOG_INFO(QString("Loaded SVG icon: %1").arg(iconPath));
@@ -382,30 +550,14 @@ QIcon StyleManager::loadSvgIcon(const QString &iconPath, const QSize &size) {
 }
 
 /**
- * @brief 加载SVG图标
+ * @brief 加载SVG图标并染色（默认 24x24）
  * @param iconPath SVG图标路径
+ * @param tint 染色颜色；无效色（QColor()）时不染色
  * @return 加载的图标
  * @author chiangyang
  */
-QIcon StyleManager::loadSvgIcon(const QString &iconPath) {
-    QSvgRenderer svgRenderer(iconPath);
-    if (svgRenderer.isValid()) {
-        QPixmap pixmap(QSize(24, 24));
-        pixmap.fill(Qt::transparent);
-        QPainter painter(&pixmap);
-        svgRenderer.render(&painter);
-        QIcon icon(pixmap);
-        if (!icon.isNull()) {
-            LOG_INFO(QString("Loaded SVG icon: %1").arg(iconPath));
-            return icon;
-        } else {
-            LOG_WARNING(QString("Failed to create icon from SVG: %1").arg(iconPath));
-        }
-    } else {
-        LOG_WARNING(QString("Invalid SVG renderer for: %1").arg(iconPath));
-    }
-    // 如果加载失败，返回一个默认的箭头图标
-    return QApplication::style()->standardIcon(QStyle::SP_ArrowRight);
+QIcon StyleManager::loadSvgIcon(const QString &iconPath, const QColor &tint) {
+    return loadSvgIcon(iconPath, QSize(24, 24), tint);
 }
 
 /**
@@ -443,6 +595,55 @@ QIcon StyleManager::loadAppIcon() {
 }
 
 /**
+ * @brief 加载全局样式表（按当前主题填充占位符）
+ * @author chiangyang
+ */
+QString StyleManager::loadGlobalStyleSheet() {
+    QFile qss(":/stylesheets/app.qss");
+    if (!qss.open(QFile::ReadOnly)) {
+        LOG_WARNING("Failed to open global stylesheet resource");
+        return QString();
+    }
+    QString sheet = QString::fromUtf8(qss.readAll());
+
+    // 占位符按主题填值（浅色=原硬编码值；深色=HUD 配套色）
+    const bool dark = (themeMode() == ThemeMode::Dark);
+    const QHash<QString, QString> tokens = dark
+        ? QHash<QString, QString>{
+            { "@textColor",         "#f2f2f2" },
+            { "@groupBoxBorder",    "rgba(255,255,255,55)" },
+            { "@inputBorder",       "rgba(255,255,255,80)" },
+            { "@inputBorderFocus",  "rgba(255,255,255,160)" },
+            { "@scrollBg",          "#2a2a2e" },
+            { "@scrollHandle",      "#5a5a60" },
+            { "@scrollHandleHover", "#7a7a80" },
+            { "@sliderGroove",      "#3a3a3e" },
+            { "@sliderHandle",      "#c0c0c4" },
+            { "@colorButtonBorder", "rgba(255,255,255,55)" },
+            { "@viewBg",            "#1a1a1e" },
+            { "@separatorColor",    "rgba(255,255,255,60)" },
+        }
+        : QHash<QString, QString>{
+            { "@textColor",         "#000" },
+            { "@groupBoxBorder",    "#E0E0E0" },
+            { "@inputBorder",       "#848484" },
+            { "@inputBorderFocus",  "#2a2a2a" },
+            { "@scrollBg",          "#F0F0F0" },
+            { "@scrollHandle",      "#C0C0C0" },
+            { "@scrollHandleHover", "#A0A0A0" },
+            { "@sliderGroove",      "#b0b0b0" },
+            { "@sliderHandle",      "#555" },
+            { "@colorButtonBorder", "#ccc" },
+            { "@viewBg",            "#ffffff" },
+            { "@separatorColor",    "rgba(0,0,0,40)" },
+        };
+    for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
+        sheet.replace(it.key(), it.value());
+    }
+    return sheet;
+}
+
+/**
  * @brief 重新应用全局样式表
  *
  * 全局 qss（app.qss）只在 setStyleSheet() 调用时解析一次，DPI 变化后
@@ -454,12 +655,12 @@ QIcon StyleManager::loadAppIcon() {
  * @author chiangyang
  */
 bool StyleManager::reapplyGlobalStyleSheet() {
-    QFile qss(":/stylesheets/app.qss");
-    if (!qss.open(QFile::ReadOnly)) {
+    const QString sheet = loadGlobalStyleSheet();
+    if (sheet.isEmpty()) {
         LOG_WARNING("Failed to reload global stylesheet on DPI change");
         return false;
     }
-    qApp->setStyleSheet(QString::fromUtf8(qss.readAll()));
+    qApp->setStyleSheet(sheet);
     LOG_INFO("Global stylesheet reapplied on DPI change");
     return true;
 }
@@ -468,12 +669,12 @@ bool StyleManager::reapplyGlobalStyleSheet() {
 
 QString StyleManager::getToolbarBackgroundStyle() {
         return QString("background-color: %1; border-radius: 0.3em;")
-            .arg(color(StyleColorId::ToolbarBg).name());
+            .arg(qssColor(color(StyleColorId::ToolbarBg)));
 }
 
 QString StyleManager::getSubToolbarStyle() {
         return QString("background-color: %1; border-radius: 0.3em;")
-            .arg(color(StyleColorId::SubToolbarBg).name());
+            .arg(qssColor(color(StyleColorId::SubToolbarBg)));
 }
 
 QString StyleManager::getToolButtonStyle() {
@@ -481,10 +682,10 @@ QString StyleManager::getToolButtonStyle() {
                     "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }"
                     "QPushButton:hover { background-color: %3; transform: scale(1.05); }"
                     "QPushButton::icon { color: %4; }"
-                ).arg(color(StyleColorId::ToolbarText).name())
-                .arg(color(StyleColorId::ToolbarBtn).name())
-                .arg(color(StyleColorId::ToolbarButtonHover).name())
-                .arg(color(StyleColorId::ToolbarBtn).name());
+                ).arg(qssColor(color(StyleColorId::ToolbarText)))
+                .arg(qssColor(color(StyleColorId::ToolbarBtn)))
+                .arg(qssColor(color(StyleColorId::ToolbarButtonHover)))
+                .arg(qssColor(color(StyleColorId::ToolbarBtn)));
 }
 
 QString StyleManager::getActionButtonStyle() {
@@ -494,23 +695,23 @@ QString StyleManager::getActionButtonStyle() {
             "QPushButton:hover { background-color: %4; transform: scale(1.05); }"
             "QPushButton:disabled { color: %1; background-color: %5; }"
             "QPushButton::icon { color: %1; }"
-        ).arg(color(StyleColorId::ToolbarText).name())
-         .arg(color(StyleColorId::ToolbarBtn).name())
-         .arg(color(StyleColorId::ToolbarButtonChecked).name())
-         .arg(color(StyleColorId::ToolbarButtonHover).name())
-         .arg(color(StyleColorId::ToolbarButtonDisabled).name());
+        ).arg(qssColor(color(StyleColorId::ToolbarText)))
+         .arg(qssColor(color(StyleColorId::ToolbarBtn)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonChecked)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonHover)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonDisabled)));
 }
 
 QString StyleManager::getCloseButtonStyle() {
         return QString(
             "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }")
-            .arg(color(StyleColorId::ToolbarText).name())
-            .arg(color(StyleColorId::CloseButtonBg).name()) +
+            .arg(qssColor(color(StyleColorId::ToolbarText)))
+            .arg(qssColor(color(StyleColorId::CloseButtonBg))) +
             QString(
             "QPushButton:hover { background-color: %1; transform: scale(1.05); }")
-            .arg(color(StyleColorId::CloseButtonHover).name()) +
+            .arg(qssColor(color(StyleColorId::CloseButtonHover))) +
             QString("QPushButton::icon { color: %1; }")
-            .arg(color(StyleColorId::ToolbarText).name());
+            .arg(qssColor(color(StyleColorId::ToolbarText)));
 }
 
 void StyleManager::applyToolButtonStyle(QPushButton *button) {
@@ -539,50 +740,63 @@ void StyleManager::applyNormalButtonStyle(QPushButton *button) {
 
 QString StyleManager::getButtonCheckedStyle() {
         return QString("color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em;")
-            .arg(color(StyleColorId::ToolbarText).name())
-            .arg(color(StyleColorId::ToolbarButtonChecked).name());
+            .arg(qssColor(color(StyleColorId::ToolbarText)))
+            .arg(qssColor(color(StyleColorId::ToolbarButtonChecked)));
 }
 
 QString StyleManager::getComboBoxStyle() {
+        // 深色主题下弹出列表必须用实色底，半透明的 ToolbarBtn 会让下拉框透出下层内容
+        const bool dark = (themeMode() == ThemeMode::Dark);
+        const QString popupBg = dark ? QStringLiteral("#2a2a2e") : qssColor(color(StyleColorId::ToolbarBtn));
+        const QString border = dark ? QStringLiteral("rgba(255,255,255,80)") : QStringLiteral("#333");
+        const QString hover = dark ? QStringLiteral("rgba(255,255,255,48)") : QStringLiteral("#444");
         return QString(
             "QComboBox { color: %1; background-color: %2; border: 1px solid %3; padding: 0.14em 0.19em; border-radius: 0.24em; }"
             "QComboBox::drop-down { border: none; }"
             "QComboBox::down-arrow { image: none; border-left: 0.24em solid transparent; border-right: 0.24em solid transparent; border-top: 0.29em solid %1; }"
-            "QComboBox QAbstractItemView { background-color: %2; color: %1; border: 1px solid %3; }"
+            "QComboBox QAbstractItemView { background-color: %5; color: %1; border: 1px solid %3; }"
             "QComboBox QAbstractItemView::item { padding: 0.24em; }"
-            "QComboBox QAbstractItemView::item:hover { background-color: #444; }"
+            "QComboBox QAbstractItemView::item:hover { background-color: %6; }"
             "QComboBox QAbstractItemView::item:selected { background-color: %4; color: %1; }"
-        ).arg(color(StyleColorId::ToolbarText).name())
-         .arg(color(StyleColorId::ToolbarBtn).name())
-         .arg("#333")
-         .arg(color(StyleColorId::ToolbarButtonChecked).name());
+        ).arg(qssColor(color(StyleColorId::ToolbarText)))
+         .arg(qssColor(color(StyleColorId::ToolbarBtn)))
+         .arg(border)
+         .arg(qssColor(color(StyleColorId::ToolbarButtonChecked)))
+         .arg(popupBg)
+         .arg(hover);
 }
 
 QString StyleManager::getCheckBoxStyle() {
         return QString(
             "QCheckBox { color: %1; spacing: 4px; }"
             "QCheckBox::indicator { width: 0.67em; height: 0.67em; }"
-        ).arg(color(StyleColorId::ToolbarText).name());
+        ).arg(qssColor(color(StyleColorId::ToolbarText)));
 }
 
 QString StyleManager::getSettingsCheckBoxStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(
-            "QCheckBox { color: #000; }"
+            "QCheckBox { color: %1; }"
             "QCheckBox::indicator { width: 1.1em; height: 1.1em; }"
-        );
+        ).arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
 }
 
 QString StyleManager::getColorButtonStyle(const QString &color, const bool isSelected) {
+        const bool dark = (themeMode() == ThemeMode::Dark);
         if (isSelected) {
-            return QString("background-color: %1; border: 2px solid #000;").arg(color);
+            return QString("background-color: %1; border: 2px solid %2;")
+                .arg(color)
+                .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
         }
-        return QString("background-color: %1; border: 1px solid #ccc;").arg(color);
+        return QString("background-color: %1; border: 1px solid %2;")
+            .arg(color)
+            .arg(dark ? QStringLiteral("rgba(255,255,255,80)") : QStringLiteral("#ccc"));
 }
 
 QString StyleManager::getOverlayTextEditStyle(const QColor &color, int fontSize) {
         return QString("QTextEdit { background-color: rgba(255, 255, 255, 200); "
                        "border: 1px dashed %1; color: %1; font-size: %2px; }")
-            .arg(color.name())
+            .arg(qssColor(color))
             .arg(fontSize);
 }
 
@@ -605,16 +819,19 @@ QString StyleManager::getOcrLoadingLabelStyle() {
 }
 
 QString StyleManager::getOcrResultTextStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(
             "QTextEdit {"
-            "    background-color: #ffffff;"
-            "    color: #333333;"
-            "    border: 1px solid #cccccc;"
+            "    background-color: %1;"
+            "    color: %2;"
+            "    border: 1px solid %3;"
             "    border-radius: 0.3em;"
             "    padding: 0.5em;"
             "    font-size: 14pt;"
             "}"
-        );
+        ).arg(dark ? QStringLiteral("#1a1a1e") : QStringLiteral("#ffffff"))
+         .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#333333"))
+         .arg(dark ? QStringLiteral("rgba(255,255,255,55)") : QStringLiteral("#cccccc"));
 }
 
 QString StyleManager::getOcrResultTitleStyle() {
@@ -626,52 +843,70 @@ QString StyleManager::getAppNameLabelStyle() {
 }
 
 QString StyleManager::getMenuStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
+        const QString bg = dark ? QStringLiteral("#2a2a2e") : QStringLiteral("#ffffff");
+        const QString text = dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000000");
+        const QString border = dark ? QStringLiteral("rgba(255,255,255,55)") : QStringLiteral("#cccccc");
+        const QString hover = dark ? QStringLiteral("rgba(255,255,255,48)") : QStringLiteral("#e0e0e0");
         return QString(
-            "QMenu { background-color: #ffffff; color: #000000; border: 1px solid #cccccc; border-radius: 0.29em; padding: 0.29em 0; font-size: 10pt; }"
+            "QMenu { background-color: %1; color: %2; border: 1px solid %3; border-radius: 0.29em; padding: 0.29em 0; font-size: 10pt; }"
             "QMenu::item { padding: 0.48em 0.71em; margin: 0 0.29em; border-radius: 0.19em; }"
-            "QMenu::item:selected { background-color: #e0e0e0; }"
-            "QMenu::item:hover { background-color: #e0e0e0; }"
-            "QMenu::separator { height: 0.1em; background-color: #cccccc; margin: 0.3em 0.5em; }"
-        );
+            "QMenu::item:selected { background-color: %4; }"
+            "QMenu::item:hover { background-color: %4; }"
+            "QMenu::separator { height: 0.1em; background-color: %3; margin: 0.3em 0.5em; }"
+        ).arg(bg).arg(text).arg(border).arg(hover);
 }
 
 QString StyleManager::getWindowStyle() {
         return QString("background-color: %1; border-radius: 0.3em; color: %2;")
-            .arg(color(StyleColorId::RecordControlBg).name())
-            .arg(color(StyleColorId::ToolbarText).name());
+            .arg(qssColor(color(StyleColorId::RecordControlBg)))
+            .arg(qssColor(color(StyleColorId::ToolbarText)));
 }
 
 QString StyleManager::getPathEditStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(
             "QLineEdit {"
-            "    border: 1px solid #CCCCCC;"
-            "    border-bottom: 1px solid #848484;"
-            "    background-color: #fff;"
-            "    color: #000;"
+            "    border: 1px solid %1;"
+            "    border-bottom: 1px solid %2;"
+            "    background-color: %3;"
+            "    color: %4;"
             "}"
-        );
+        ).arg(dark ? QStringLiteral("rgba(255,255,255,55)") : QStringLiteral("#CCCCCC"))
+         .arg(dark ? QStringLiteral("rgba(255,255,255,160)") : QStringLiteral("#848484"))
+         .arg(dark ? QStringLiteral("#2a2a2e") : QStringLiteral("#fff"))
+         .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
 }
 
 QString StyleManager::getKeySequenceEditStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
+        const QString border = dark ? QStringLiteral("rgba(255,255,255,55)") : QStringLiteral("#CCCCCC");
+        const QString bg = dark ? QStringLiteral("#2a2a2e") : QStringLiteral("#fff");
+        const QString text = dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000");
         return QString(
             "QKeySequenceEdit QLineEdit {"
-            "    border: 1px solid #CCCCCC;"
-            "    border-bottom: 1px solid #848484;"
-            "    background-color: #fff;"
-            "    color: #000;"
+            "    border: 1px solid %1;"
+            "    border-bottom: 1px solid %2;"
+            "    background-color: %3;"
+            "    color: %4;"
             "}"
 
             "QKeySequenceEdit QLineEdit:focus {"
-            "    border: 1px solid #CCCCCC;"
-            "    border-bottom: 2px solid #1E90FF; /* 蓝色下边框 */"
+            "    border: 1px solid %1;"
+            "    border-bottom: 2px solid #1E90FF; /* 蓝色下边框（深浅色通用） */"
             "}"
-        );
+        ).arg(border)
+         .arg(dark ? QStringLiteral("rgba(255,255,255,160)") : QStringLiteral("#848484"))
+         .arg(bg)
+         .arg(text);
 }
 
 QString StyleManager::getGroupBoxStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(
-            "QGroupBox { background-color: %1; color: #000; }"
-        ).arg(color(StyleColorId::TabWidgetBg).name());
+            "QGroupBox { background-color: %1; color: %2; }"
+        ).arg(qssColor(color(StyleColorId::TabWidgetBg)))
+         .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
 }
 
 QString StyleManager::getSettingsButtonStyle() {
@@ -679,51 +914,63 @@ QString StyleManager::getSettingsButtonStyle() {
             "QPushButton { color: %1; background-color: %2; border: none; }"
             "QPushButton:hover { background-color: %4; }"
             "QPushButton:disabled { color: %1; background-color: %3; }"
-        ).arg(color(StyleColorId::SettingButtonText).name())
-         .arg(color(StyleColorId::SettingButtonBg).name())
-         .arg(color(StyleColorId::ToolbarButtonDisabled).name())
-         .arg(color(StyleColorId::ToolbarButtonHover).name());
+        ).arg(qssColor(color(StyleColorId::SettingButtonText)))
+         .arg(qssColor(color(StyleColorId::SettingButtonBg)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonDisabled)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonHover)));
 }
 
 QString StyleManager::getSettingsComboBoxStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
+        const QString bg = dark ? QStringLiteral("#2a2a2e") : QStringLiteral("#fff");
+        const QString text = dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000");
+        const QString border = dark ? QStringLiteral("rgba(255,255,255,80)") : QStringLiteral("#848484");
+        const QString hover = dark ? QStringLiteral("rgba(255,255,255,48)") : QStringLiteral("#d0d0d0");
+        // QSS image: 引用的 SVG 无法动态染色，深色主题换用白色箭头资源
+        const QString upArrow = dark ? QStringLiteral(":/icons/spinner-up-dark.svg")
+                                     : QStringLiteral(":/icons/spinner-up.svg");
+        const QString downArrow = dark ? QStringLiteral(":/icons/spinner-down-dark.svg")
+                                       : QStringLiteral(":/icons/spinner-down.svg");
         return QString(
-            "QComboBox { background-color: #fff; color: #000; }"
+            "QComboBox { background-color: %1; color: %2; }"
             "QComboBox::drop-down { border: none; }"
-            "QComboBox::down-arrow { image: none; border-left: 0.24em solid transparent; border-right: 0.24em solid transparent; border-top: 0.29em solid #000; }"
-            "QComboBox QAbstractItemView { background-color: #fff; color: #000; border: 1px solid #848484; outline: none; }"
+            "QComboBox::down-arrow { image: none; border-left: 0.24em solid transparent; border-right: 0.24em solid transparent; border-top: 0.29em solid %2; }"
+            "QComboBox QAbstractItemView { background-color: %1; color: %2; border: 1px solid %3; outline: none; }"
             "QComboBox QAbstractItemView::item { padding: 0.24em; }"
-            "QComboBox QAbstractItemView::item:hover { background-color: #d0d0d0; }"
-            "QComboBox QAbstractItemView::item:selected { background-color: #d0d0d0; color: #000; }"
-            "QAbstractSpinBox { background-color: #fff; color: #000; border: 1px solid #848484; border-radius: 0.24em; padding: 0.14em 0.19em; }"
+            "QComboBox QAbstractItemView::item:hover { background-color: %4; }"
+            "QComboBox QAbstractItemView::item:selected { background-color: %4; color: %2; }"
+            "QAbstractSpinBox { background-color: %1; color: %2; border: 1px solid %3; border-radius: 0.24em; padding: 0.14em 0.19em; }"
             "QAbstractSpinBox::up-button, QAbstractSpinBox::down-button { width: 1.2em; border: none; background: transparent; }"
             "QAbstractSpinBox::up-button { subcontrol-origin: border; subcontrol-position: top right; }"
             "QAbstractSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; }"
-            "QAbstractSpinBox::up-arrow { image: url(:/icons/spinner-up.svg); width: 0.5em; height: 0.5em; }"
-            "QAbstractSpinBox::down-arrow { image: url(:/icons/spinner-down.svg); width: 0.5em; height: 0.5em; }"
-        );
+            "QAbstractSpinBox::up-arrow { image: url(%5); width: 0.5em; height: 0.5em; }"
+            "QAbstractSpinBox::down-arrow { image: url(%6); width: 0.5em; height: 0.5em; }"
+        ).arg(bg).arg(text).arg(border).arg(hover).arg(upArrow).arg(downArrow);
 }
 
 QString StyleManager::getMessageBoxStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(
             "QMessageBox { background-color: %1; }"
-            "QMessageBox QLabel { color: #333333; }"
+            "QMessageBox QLabel { color: %6; }"
             "QMessageBox QPushButton { color: %2; background-color: %3; border: none; }"
             "QMessageBox QPushButton:hover { background-color: %4; }"
             "QMessageBox QPushButton:pressed { background-color: %4; }"
             "QMessageBox QPushButton:disabled { color: %2; background-color: %5; }"
-        ).arg(color(StyleColorId::TabWidgetBg).name())
-         .arg(color(StyleColorId::SettingButtonText).name())
-         .arg(color(StyleColorId::SettingButtonBg).name())
-         .arg(color(StyleColorId::ToolbarButtonHover).name())
-         .arg(color(StyleColorId::ToolbarButtonDisabled).name());
+        ).arg(qssColor(color(StyleColorId::TabWidgetBg)))
+         .arg(qssColor(color(StyleColorId::SettingButtonText)))
+         .arg(qssColor(color(StyleColorId::SettingButtonBg)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonHover)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonDisabled)))
+         .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#333333"));
 }
 
 QString StyleManager::getProgressBarStyle() {
         return QString(
             "QProgressBar { border: none; background-color: %1; }"
             "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
-        ).arg(color(StyleColorId::TabWidgetBg).name())
-         .arg(color(StyleColorId::ToolbarButtonHover).name());
+        ).arg(qssColor(color(StyleColorId::TabWidgetBg)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonHover)));
 }
 
 QString StyleManager::getTabWidgetStyle() {
@@ -732,12 +979,12 @@ QString StyleManager::getTabWidgetStyle() {
             "QTabBar::tab { background-color: %2; color: %3; }"
             "QTabBar::tab:selected { background-color: %4; color: %5; }"
             "QTabBar::tab:hover { background-color: %6; }"
-        ).arg(color(StyleColorId::TabWidgetBg).name())
-         .arg(color(StyleColorId::TabButtonBg).name())
-         .arg(color(StyleColorId::TabButtonText).name())
-         .arg(color(StyleColorId::TabButtonSelectedBg).name())
-         .arg(color(StyleColorId::TabButtonSelectedText).name())
-         .arg(color(StyleColorId::ToolbarButtonHover).name());
+        ).arg(qssColor(color(StyleColorId::TabWidgetBg)))
+         .arg(qssColor(color(StyleColorId::TabButtonBg)))
+         .arg(qssColor(color(StyleColorId::TabButtonText)))
+         .arg(qssColor(color(StyleColorId::TabButtonSelectedBg)))
+         .arg(qssColor(color(StyleColorId::TabButtonSelectedText)))
+         .arg(qssColor(color(StyleColorId::ToolbarButtonHover)));
 }
 
 QString StyleManager::getToolbarButtonStyle() {
@@ -793,5 +1040,6 @@ void StyleManager::resetToDefaults() {
         s_defaultMosaicSize = DEFAULT_MOSAIC_SIZE;
 
         s_toolbarButtonStyle = DEFAULT_TOOLBAR_BUTTON_STYLE;
+        s_theme = DEFAULT_THEME;
 }
 

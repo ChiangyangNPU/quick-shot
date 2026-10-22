@@ -173,9 +173,9 @@ void BaseToolBar::selectAnnotationTool(int toolId) {
  */
 void BaseToolBar::addSeparator(QHBoxLayout *layout) {
     QWidget *separator = new QWidget(this);
-    // 宽度/高度由全局 qss 管理，随 DPI 缩放；颜色用半透明深色，与浅灰工具栏背景形成对比
+    // 宽度/高度/颜色均由全局 app.qss 的 QWidget#toolbarSeparator 规则管理，
+    // 不再局部 setStyleSheet，主题切换时随全局 qss 自动刷新
     separator->setObjectName("toolbarSeparator");
-    separator->setStyleSheet("background-color: rgba(0, 0, 0, 40);");
     layout->addWidget(separator);
 }
 
@@ -192,7 +192,7 @@ void BaseToolBar::applyButtonStyle(QPushButton *btn, const QString &iconPath,
     if (!btn) return;
     if (isIcon) {
         btn->setText("");
-        btn->setIcon(StyleManager::loadSvgIcon(iconPath));
+        btn->setIcon(StyleManager::loadSvgIcon(iconPath, StyleManager::toolbarIconTint()));
         btn->setToolTip(text);
     } else {
         btn->setText(text);

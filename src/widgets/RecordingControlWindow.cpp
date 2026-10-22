@@ -149,14 +149,15 @@ void RecordingControlWindow::setupUi() {
 /**
  * @brief 在主布局中添加垂直分隔线
  *
- * 对象名与颜色和 BaseToolBar::addSeparator 保持一致，
- * 宽度/高度交由全局 app.qss 的 QWidget#toolbarSeparator 规则控制。
+ * 对象名与 BaseToolBar::addSeparator 保持一致，
+ * 宽度/高度/颜色均由全局 app.qss 的 QWidget#toolbarSeparator 规则管理。
  * @author chiangyang
  */
 void RecordingControlWindow::addSeparator() {
     QWidget *separator = new QWidget(this);
+    // 宽度/高度/颜色均由全局 app.qss 的 QWidget#toolbarSeparator 规则管理，
+    // 不再局部 setStyleSheet，主题切换时随全局 qss 自动刷新
     separator->setObjectName("toolbarSeparator");
-    separator->setStyleSheet("background-color: rgba(0, 0, 0, 40);");
     m_mainLayout->addWidget(separator);
 }
 
@@ -341,19 +342,19 @@ void RecordingControlWindow::updateButtonStyles() {
     if (buttonStyle == "icon") {
         // 图标模式
         btnStart->setText("");
-        btnStart->setIcon(StyleManager::loadSvgIcon(":/icons/start.svg"));
+        btnStart->setIcon(StyleManager::loadSvgIcon(":/icons/start.svg", StyleManager::toolbarIconTint()));
         btnStart->setToolTip(tm->get("record.start", "Start"));
         
         btnPause->setText("");
-        btnPause->setIcon(StyleManager::loadSvgIcon(":/icons/pause.svg"));
+        btnPause->setIcon(StyleManager::loadSvgIcon(":/icons/pause.svg", StyleManager::toolbarIconTint()));
         btnPause->setToolTip(tm->get("record.pause", "Pause"));
         
         btnResume->setText("");
-        btnResume->setIcon(StyleManager::loadSvgIcon(":/icons/resume.svg"));
+        btnResume->setIcon(StyleManager::loadSvgIcon(":/icons/resume.svg", StyleManager::toolbarIconTint()));
         btnResume->setToolTip(tm->get("record.resume", "Resume"));
         
         btnStop->setText("");
-        btnStop->setIcon(StyleManager::loadSvgIcon(":/icons/stop.svg"));
+        btnStop->setIcon(StyleManager::loadSvgIcon(":/icons/stop.svg", StyleManager::toolbarIconTint()));
         btnStop->setToolTip(tm->get("record.stop", "Stop"));
     } else {
         // 文字模式

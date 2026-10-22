@@ -157,6 +157,23 @@ void HistoryWindow::updateWindowColors()
     if (m_tabWidget) {
         m_tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
     }
+    // 搜索框与筛选下拉框配色随主题刷新
+    if (m_searchEdit) {
+        m_searchEdit->setStyleSheet(StyleManager::getPathEditStyle());
+    }
+    if (m_filterCombo) {
+        m_filterCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    }
+    // 各操作按钮配色随主题刷新（SettingButton 色板随主题变化）
+    const QString btnStyle = StyleManager::getSettingsButtonStyle();
+    if (m_searchBtn) m_searchBtn->setStyleSheet(btnStyle);
+    if (m_loadMoreBtn) m_loadMoreBtn->setStyleSheet(btnStyle);
+    if (m_copyBtn) m_copyBtn->setStyleSheet(btnStyle);
+    if (m_saveBtn) m_saveBtn->setStyleSheet(btnStyle);
+    if (m_deleteBtn) m_deleteBtn->setStyleSheet(btnStyle);
+    if (m_clearBtn) m_clearBtn->setStyleSheet(btnStyle);
+    // 系统标题栏浅色/深色随主题
+    StyleManager::applyDarkTitleBar(winId());
 }
 
 /**

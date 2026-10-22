@@ -5,6 +5,8 @@
  *   - 控件尺寸用 em：相对字体大小，字体变大控件自动变大，两者天然协调
  *   - 圆角用 px：视觉影响小，固定即可
  *   - 颜色不在此定义：UI 窗口颜色由 StyleManager 运行时填值（用户可配置）
+ *     本文件中的 @xxx 占位符由 StyleManager::loadGlobalStyleSheet()
+ *     按当前主题（浅色/深色）替换为实际值
  *   - 截图/录屏界面不受影响：它们用 setStyleSheet 局部覆盖，优先级高于全局
  *
  * 仅作用于 UI 窗口（SettingsWindow、HistoryWindow、OcrResultDialog、
@@ -16,10 +18,17 @@ QWidget {
     font-size: 10.5pt;
 }
 
-/* 文字颜色显式指定为黑色：避免深色模式/高对比度等系统主题下
-   系统原生文字色变浅，导致白底浅色文字看不见（跨电脑不一致） */
+/* 文字颜色显式指定：避免深色模式/高对比度等系统主题下
+   系统原生文字色与背景相近导致看不见（跨电脑不一致） */
 QLabel {
-    color: #000;
+    color: @textColor;
+}
+
+/* 项视图（历史记录列表）：项文本由委托按调色板绘制，
+   QLabel 规则覆盖不到，需显式指定文字色/背景色以适配深色主题 */
+QListWidget {
+    color: @textColor;
+    background-color: @viewBg;
 }
 
 /* 普通按钮：高度跟字体走 */
@@ -54,7 +63,7 @@ QTabBar::tab {
 
 /* 分组框 */
 QGroupBox {
-    border: 1px solid #E0E0E0;
+    border: 1px solid @groupBoxBorder;
     border-radius: 6px;
     margin-top: 0.9em;
     padding-top: 0.9em;
@@ -63,7 +72,7 @@ QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
     padding: 0.25em 0.5em;
-    color: #000;
+    color: @textColor;
 }
 
 /* 消息框按钮 */
@@ -77,14 +86,14 @@ QMessageBox QPushButton {
 /* 输入框、下拉框 */
 QLineEdit, QComboBox {
     height: 1.2em;
-    border: 1px solid #848484;
+    border: 1px solid @inputBorder;
     border-radius: 4px;
     padding: 0 0.4em;
 }
 
 /* 下拉框选中/悬停时边框加深，增强反馈 */
 QComboBox:focus, QComboBox:hover {
-    border: 1px solid #2a2a2a;
+    border: 1px solid @inputBorderFocus;
 }
 
 /* 下拉框下拉项 */
@@ -104,19 +113,19 @@ QCheckBox::indicator {
    之所以放在全局 QSS 而非 setStyleSheet，是因为 QScrollArea 调用
    setStyleSheet 会禁用子控件（如 QCheckBox）的原生主题绘制。 */
 QScrollBar:vertical {
-    background-color: #F0F0F0;
+    background-color: @scrollBg;
     width: 0.7em;
     border: none;
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background-color: #C0C0C0;
+    background-color: @scrollHandle;
     min-height: 1.43em;
     border-radius: 0.3em;
     margin: 0.15em;
 }
 QScrollBar::handle:vertical:hover {
-    background-color: #A0A0A0;
+    background-color: @scrollHandleHover;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
@@ -148,8 +157,11 @@ QPushButton#toolbarColorButton {
 
 /* 截图和录屏工具栏分隔线：宽度跟字体
    注意：QHBoxLayout 会把 widget 垂直拉伸到整个布局高度，
-   所以必须用 max-height 锁定上限，min-height 才有意义 */
+   所以必须用 max-height 锁定上限，min-height 才有意义。
+   颜色也在此管理（@separatorColor 占位符），深色主题下用白色半透明，
+   代码里不再 setStyleSheet 设置颜色，主题切换时随全局 qss 自动刷新 */
 QWidget#toolbarSeparator {
+    background-color: @separatorColor;
     min-width: 0.1em;
     max-width: 0.1em;
     min-height: 0.6em;
@@ -162,7 +174,7 @@ QPushButton#settingColorButton {
     width: 1.43em;
     height: 1.43em;
     padding: 0;
-    border: 1px solid #ccc;
+    border: 1px solid @colorButtonBorder;
     border-radius: 0.3em;
 }
 
@@ -174,7 +186,7 @@ QSlider {
 
 QSlider::groove:horizontal {
     height: 0.3em;
-    background: #b0b0b0;
+    background: @sliderGroove;
     border-radius: 0.15em;
 }
 
@@ -182,7 +194,7 @@ QSlider::handle:horizontal {
     width: 0.45em;
     height: 0.85em;
     margin: -0.18em 0;
-    background: #555;
+    background: @sliderHandle;
     border-radius: 0.33em;
 }
 

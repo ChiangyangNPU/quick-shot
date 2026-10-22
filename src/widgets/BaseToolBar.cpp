@@ -799,13 +799,24 @@ QWidget *BaseToolBar::getSubToolbarWindow() const {
 
 /**
  * @brief 更新背景样式
+ *
+ * 遍历全部已构建的子工具栏变体刷新窗口背景与形状下拉框样式，
+ * 主题切换后未激活的变体再次弹出时也呈现新主题配色
+ * （subToolbarWindow 是激活变体窗口的别名，循环已覆盖）。
  * @author chiangyang
  */
 void BaseToolBar::updateBackgroundStyle() {
-    // 更新子工具栏背景样式
-    if (subToolbarWindow) {
-        subToolbarWindow->setStyleSheet(StyleManager::getSubToolbarStyle());
-        subToolbarWindow->update();
+    for (auto &data : m_subVariants) {
+        if (!data.built) {
+            continue;
+        }
+        if (data.window) {
+            data.window->setStyleSheet(StyleManager::getSubToolbarStyle());
+            data.window->update();
+        }
+        if (data.shapeCombo) {
+            data.shapeCombo->setStyleSheet(StyleManager::getComboBoxStyle());
+        }
     }
 }
 

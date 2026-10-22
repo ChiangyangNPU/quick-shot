@@ -241,6 +241,14 @@ void SettingsHistoryTab::refreshStyles() {
     if (historyStorageGroup) historyStorageGroup->setStyleSheet(style);
     if (historyDataGroup) historyDataGroup->setStyleSheet(style);
     if (historyStatsGroup) historyStatsGroup->setStyleSheet(style);
+
+    // 输入控件配色随主题刷新（主题切换时经 SettingsWindow::refreshAllStyles 调用）
+    const QString checkStyle = StyleManager::getSettingsCheckBoxStyle();
+    if (m_screenshotHistoryCheck) m_screenshotHistoryCheck->setStyleSheet(checkStyle);
+    if (m_clipboardHistoryCheck) m_clipboardHistoryCheck->setStyleSheet(checkStyle);
+    const QString comboStyle = StyleManager::getSettingsComboBoxStyle();
+    if (cmbRetentionDays) cmbRetentionDays->setStyleSheet(comboStyle);
+    if (cmbMaxItems) cmbMaxItems->setStyleSheet(comboStyle);
 }
 
 void SettingsHistoryTab::applyTabBackground(const QColor &color) {

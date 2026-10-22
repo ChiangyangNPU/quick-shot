@@ -382,6 +382,19 @@ void SettingsGeneralTab::refreshStyles() {
     const QString style = StyleManager::getGroupBoxStyle();
     if (saveGroup) saveGroup->setStyleSheet(style);
     if (configGroup) configGroup->setStyleSheet(style);
+
+    // 输入控件配色随主题刷新（主题切换时经 SettingsWindow::refreshAllStyles 调用）
+    const QString comboStyle = StyleManager::getSettingsComboBoxStyle();
+    if (langCombo) langCombo->setStyleSheet(comboStyle);
+    if (cmbOcrLanguage) cmbOcrLanguage->setStyleSheet(comboStyle);
+    const QString checkStyle = StyleManager::getSettingsCheckBoxStyle();
+    if (autoStartCheck) autoStartCheck->setStyleSheet(checkStyle);
+    if (logPrintCheck) logPrintCheck->setStyleSheet(checkStyle);
+    if (gpuAccelCheck) gpuAccelCheck->setStyleSheet(checkStyle);
+    const QString editStyle = StyleManager::getPathEditStyle();
+    if (editCaptureSaveDir) editCaptureSaveDir->setStyleSheet(editStyle);
+    if (editRecordSaveDir) editRecordSaveDir->setStyleSheet(editStyle);
+    if (lblConfigFileName) lblConfigFileName->setStyleSheet(editStyle);
 }
 
 void SettingsGeneralTab::applyTabBackground(const QColor &color) {

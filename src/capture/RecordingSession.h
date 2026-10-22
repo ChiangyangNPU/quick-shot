@@ -64,6 +64,12 @@ public:
     void uncheckAllAnnotationBtns();        ///< 取消工具栏全部标注按钮选中
     void retranslateUi();                   ///< 语言切换时刷新工具栏文字
     void refreshDefaultValues();            ///< 设置页默认值变更时刷新工具栏
+
+    /**
+     * @brief 主题切换时刷新录屏工具栏/子工具栏/录制控制栏样式
+     * @author chiangyang
+     */
+    void refreshTheme();
     void updateToolBarState(bool hasSelection, bool canUndo, bool canRedo);
     bool isMouseInToolbars(const QPoint &globalPos) const;  ///< 鼠标是否在录屏工具栏/子工具栏/控制栏上
 

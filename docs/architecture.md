@@ -2148,44 +2148,87 @@ flowchart TD
     style K fill:#2196f3,color:#fff
 ```
 
-### 6.16 翻译 Overlay 交互优化
+### 6.16 浅色/深色主题
 
-**6.16.1 翻译完成后退出截图框**
+设置窗口「样式」选项卡顶部提供「外观」组（浅色/深色下拉框），深色主题把滚动截图提示条的深色 HUD 配色推广到整个应用 UI（设置/历史窗口、托盘菜单、MessageBox、截图/录屏工具栏、子工具栏、录屏控制栏、贴图工具栏）。
+
+#### 6.16.1 核心机制：主题 = 色板预设批量覆盖
+
+- 主题不是独立样式体系，而是对 `StyleManager::colorSettingTable()`（21 项颜色表）的一组**预设批量覆盖**。`StyleManager::applyTheme(theme, cm)` 批量 `setColor` 并以 HexArgb 持久化全部颜色键，同时写 `style/theme` 标量（"light"/"dark"）。切换后用户仍可单项微调颜色（主题下拉框仍显示当前主题，不引入"自定义"项）。
+- 启动时无需按 theme 重铺色板：颜色键已被持久化覆盖，`initFromConfig` 遍历颜色表天然恢复；仅恢复 `s_theme` 标量供各 `get*Style()` 的 dark 分支判断。
+- 深色色板要点：工具栏/子工具栏/控制栏底板 `rgba(22,22,26,248)`、按钮填充 `rgba(255,255,255,48)`、文字 `#f2f2f2`、主背景 `#1a1a1e`、输入框 `#2a2a2e`；截屏/录屏边框、角手柄、关闭钮等屏幕叠加物与红色语义色不随主题。
+
+#### 6.16.2 alpha 通道序列化（关键约束）
+
+- 深色色板大量依赖半透明色，`QColor::name()` 会丢 alpha。StyleManager.cpp 内部工具 `qssColor()` 在 alpha<255 时输出 `rgba(r,g,b,a)`，所有拼 QSS 处统一经此工具。
+- 配置持久化统一用 `name(QColor::HexArgb)`（`#AARRGGBB`），Qt 读取端兼容。
+
+#### 6.16.3 全局 qss 占位符
+
+- `src/resources/stylesheets/app.qss` 的硬编码颜色改为占位符（`@textColor`/`@inputBorder`/`@scrollBg`/`@viewBg`/`@separatorColor` 等），`StyleManager::loadGlobalStyleSheet()` 按 `themeMode()` 双映射填值；启动加载与 `reapplyGlobalStyleSheet()`（DPI 变化/主题切换）统一走此方法，避免两份 qss 重复维护。
+- 历史记录列表（QListWidget）项文本由委托按调色板绘制、`QLabel` 规则覆盖不到，app.qss 显式设 `color: @textColor; background-color: @viewBg;` 适配深色；工具栏分隔线颜色由代码内 setStyleSheet 迁入 app.qss `QWidget#toolbarSeparator`（`@separatorColor` 占位符），主题切换随全局 qss 自动刷新。
+
+#### 6.16.4 get*Style() 的 dark 分支与图标染色
+
+- `getPathEditStyle`/`getKeySequenceEditStyle`/`getSettingsCheckBoxStyle`/`getSettingsComboBoxStyle`/`getGroupBoxStyle`/`getMenuStyle`/`getMessageBoxStyle`/`getOcrResultTextStyle`/`getColorButtonStyle`/`getComboBoxStyle` 以 `themeMode()==ThemeMode::Dark` 分支填值（派生色不进颜色表，避免表膨胀）。
+- `StyleManager::loadSvgIcon` 带 `tint` 重载（`CompositionMode_SourceIn` 染色），`toolbarIconTint()` 深色返回 `#f2f2f2`、浅色返回无效色（不染色）；工具栏/控制栏图标经 `applyButtonStyle` 统一染色。
+- QSS `image:` 引用的 spinner SVG 无法动态染色：深色分支改用白色版 `spinner-up-dark.svg`/`spinner-down-dark.svg`（注册进 resources.qrc）。
+
+#### 6.16.5 切换调用链（立即生效）
+
+```
+cmbTheme 切换 → SettingsStyleTab::onThemeChanged
+  ├─ StyleManager::applyTheme（批量覆盖颜色表 + 持久化）
+  ├─ 刷新色块按钮 → reapplyGlobalStyleSheet() → refreshStyles()/reapplyInputStyles()
+  └─ emit themeChanged → SettingsWindow 转发：
+      ├─ SettingsWindow::refreshAllStyles()（tabWidget QSS + 各选项卡背景 + 各 Tab refreshStyles 含输入控件）
+      ├─ SnipScreen::refreshTheme()（截图工具栏背景/按钮/图标，委托 RecordingSession::refreshTheme 刷录屏工具栏 + 控制栏）
+      ├─ PinWindow::refreshAllTheme()（静态分发所有存活贴图窗口）
+      ├─ HistoryWindow::updateWindowColors()（复用，含搜索框/筛选下拉框）
+      └─ 托盘菜单重设 getMenuStyle()
+```
+
+- `BaseToolBar::updateBackgroundStyle()` 遍历全部已构建子工具栏变体刷背景与形状下拉框，未激活变体再次弹出也呈现新主题。
+- 「恢复默认」路径（`SettingsStyleTab::onResetStyle`）同步复位主题下拉框到浅色、重填全局 qss 并广播 `themeChanged`。
+
+### 6.17 翻译 Overlay 交互优化
+
+**6.17.1 翻译完成后退出截图框**
 - `TranslateOverlayWindow::translateAndShow` 新增可选 `onOverlayShown` 回调参数（`std::function<void()>`）
 - SnipScreen 翻译成功显示 Overlay 后调用 `exit()` 退出截图框和工具栏，与贴图完成后销毁截图框的行为一致
 - PinWindow 不传回调，翻译后保持贴图窗口继续显示
 - Overlay 是无 parent 的独立窗口（`WA_DeleteOnClose`），`exit()` 关闭 SnipScreen 不影响 Overlay
 
-**6.16.2 选字模式右键菜单**
+**6.17.2 选字模式右键菜单**
 - 进入选字模式后创建覆盖窗口的只读 QTextEdit（m_selectEditor），用户可跨段拖选文字
 - QTextEdit 继承自 QAbstractScrollArea，右键事件发送给 `viewport()` 而非控件本身，事件过滤器需安装在 `viewport()` 上
 - `eventFilter` 拦截 `QEvent::ContextMenu`，基于 `createStandardContextMenu()` 保留原生 Copy/Select All（可复制用户选中的文字），按快捷键（Ctrl+C/Ctrl+A）识别这两项并替换为本地化文本
 - 追加"文字选择模式"勾选项（取消勾选退出选字模式回到 Overlay 绘制界面）和"取消"项（退出选字模式并关闭 Overlay 窗口）
 
-### 6.17 自动更新机制
+### 6.18 自动更新机制
 
 QuickShot 内置自动更新功能，支持多渠道回退、SHA256 校验、解压安装与失败回滚。目前仅支持 Windows 平台的自动安装替换。
 
-#### 6.17.1 更新流程
+#### 6.18.1 更新流程
 
 ```
 检查更新 → 下载 zip → SHA256 校验 → 解压 → 查找 exe → 生成 update.bat → 退出主程序 → 安装替换 → 启动新版本
 ```
 
-#### 6.17.2 多渠道回退
+#### 6.18.2 多渠道回退
 
 UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个渠道独立超时（15 秒）。某渠道失败后自动切换到下一个渠道，全部失败后报错。
 
 支持环境变量 `QUICKSHOT_UPDATE_URL` 覆盖版本检查地址，用于本地模拟更新测试（详见 update-test/README.md）。
 
-#### 6.17.3 下载与校验
+#### 6.18.3 下载与校验
 
 - 基于 QNetworkAccessManager 实现 HTTP/HTTPS 下载，支持进度回调和取消
 - 30 秒无数据超时保护
 - 下载完成后进行 SHA256 校验，与 version.json 中的 checksum 比对
 - 文件名从 downloadUrl 路径推断扩展名
 
-#### 6.17.4 安装替换（Windows）
+#### 6.18.4 安装替换（Windows）
 
 安装流程由 UpdateManager::installUpdate() 动态生成 update.bat 批处理脚本执行：
 
@@ -2197,20 +2240,20 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 6. **回滚**：替换失败时从 backup 目录 robocopy 回滚，启动旧版本
 7. **启动**：启动安装目录中的新 exe（而非临时目录）
 
-#### 6.17.5 版本号管理
+#### 6.18.5 版本号管理
 
 - 版本号由 [CMakeLists.txt](file:///e:/develop/Code/github_new/quick-shot/CMakeLists.txt#L2) 的 `project(QuickShot VERSION x.y.z)` 统一管理
 - 通过 `add_compile_definitions(QUICKSHOT_VERSION="${PROJECT_VERSION}")` 注入为编译宏
 - 源码中使用 `QUICKSHOT_VERSION` 宏或 `qApp->applicationVersion()` 获取版本号
 - 打包脚本 deploy.ps1 自动从 CMakeLists.txt 解析版本号，生成 `QuickShot-{Config}-{Version}-Windows-x64` 格式的包名
 
-#### 6.17.6 打包与版本清单
+#### 6.18.6 打包与版本清单
 
 - **打包**：`deploy/win/deploy.ps1` 自动编译、windeployqt 部署依赖、生成 zip 包
 - **版本清单**：`update-test/server/make-version-json.ps1` 计算 SHA256 和文件大小，生成 version.json
 - **文件命名约定**：`QuickShot-Release-{version}-Windows-x64.zip`（GitHub/Gitee 下载 URL 与此对齐）
 
-### 6.18 滚动截图（ScrollCaptureSession + ScrollStitcher）
+### 6.19 滚动截图（ScrollCaptureSession + ScrollStitcher）
 
 滚动截图由会话编排层与纯算法层分离实现：
 

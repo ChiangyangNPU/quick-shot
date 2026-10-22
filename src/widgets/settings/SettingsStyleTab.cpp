@@ -23,6 +23,31 @@ SettingsStyleTab::SettingsStyleTab(QWidget *parent)
 void SettingsStyleTab::setupUi() {
     // 边框颜色设置
     auto *tm = TranslationManager::instance();
+
+    // 外观主题设置（浅色/深色，置于滚动区最顶部）
+    m_themeGroup = new QGroupBox(tm->get("style.themeGroup", "Appearance"));
+    m_themeGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    QVBoxLayout *themeLayout = new QVBoxLayout(m_themeGroup);
+    themeLayout->setContentsMargins(10, 10, 10, 10);
+    themeLayout->setSpacing(8);
+
+    QHBoxLayout *themeRowLayout = new QHBoxLayout();
+    lblTheme = new QLabel(tm->get("style.theme", "Theme:"), m_themeGroup);
+    cmbTheme = new QComboBox(m_themeGroup);
+    StyleManager::useHighlightOnlyPopup(cmbTheme);
+    cmbTheme->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    cmbTheme->addItem(tm->get("style.theme.light", "Light"), "light");
+    cmbTheme->addItem(tm->get("style.theme.dark", "Dark"), "dark");
+    const int themeIndex = cmbTheme->findData(StyleManager::theme());
+    if (themeIndex >= 0) {
+        cmbTheme->setCurrentIndex(themeIndex);
+    }
+    connect(cmbTheme, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &SettingsStyleTab::onThemeChanged);
+    themeRowLayout->addWidget(lblTheme);
+    themeRowLayout->addStretch();
+    themeRowLayout->addWidget(cmbTheme);
+    themeLayout->addLayout(themeRowLayout);
+
     borderGroup = new QGroupBox(tm->get("style.borderColor", "Border Colors"));
     borderGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *borderLayout = new QVBoxLayout(borderGroup);
@@ -195,6 +220,7 @@ void SettingsStyleTab::setupUi() {
     QVBoxLayout *scrollLayout = new QVBoxLayout(scrollContainer);
     scrollLayout->setContentsMargins(10, 10, 10, 10);
     scrollLayout->setSpacing(10);
+    scrollLayout->addWidget(m_themeGroup);
     scrollLayout->addWidget(tabGroup);
     scrollLayout->addWidget(m_annotationDefaultsGroup);
     scrollLayout->addWidget(borderGroup);
@@ -378,6 +404,18 @@ void SettingsStyleTab::retranslateUi() {
     TranslationManager *tm = TranslationManager::instance();
 
     if (borderGroup) borderGroup->setTitle(tm->get("style.borderColor", "Border Colors"));
+    if (m_themeGroup) m_themeGroup->setTitle(tm->get("style.themeGroup", "Appearance"));
+    if (lblTheme) lblTheme->setText(tm->get("style.theme", "Theme:"));
+    if (cmbTheme) {
+        const int currentIndex = cmbTheme->currentIndex();
+        // 与 cmbToolbarButtonStyle 同理：重建期间屏蔽信号，避免中间态触发主题切换
+        cmbTheme->blockSignals(true);
+        cmbTheme->clear();
+        cmbTheme->addItem(tm->get("style.theme.light", "Light"), "light");
+        cmbTheme->addItem(tm->get("style.theme.dark", "Dark"), "dark");
+        cmbTheme->setCurrentIndex(currentIndex);
+        cmbTheme->blockSignals(false);
+    }
     if (toolbarGroup) toolbarGroup->setTitle(tm->get("style.toolbarStyle", "Toolbar Style"));
     // Tab Style Group
     QGroupBox *tabGroup = findChild<QGroupBox*>("tabGroup");
@@ -416,6 +454,7 @@ void SettingsStyleTab::retranslateUi() {
 
 void SettingsStyleTab::refreshStyles() {
     const QString style = StyleManager::getGroupBoxStyle();
+    if (m_themeGroup) m_themeGroup->setStyleSheet(style);
     if (borderGroup) borderGroup->setStyleSheet(style);
     if (toolbarGroup) toolbarGroup->setStyleSheet(style);
     if (tabGroup) tabGroup->setStyleSheet(style);
@@ -465,11 +504,29 @@ void SettingsStyleTab::onResetStyle() {
         QColor defaultTabWidgetBgColor = StyleManager::getTabWidgetBgColor();
         applyColorPostUpdate(StyleManager::StyleColorCategory::TabWidgetBg, defaultTabWidgetBgColor);
 
+        // 主题复位（resetToDefaults 已将 s_theme 重置为浅色，此处同步下拉框显示）
+        if (cmbTheme) {
+            cmbTheme->blockSignals(true);
+            const int lightIndex = cmbTheme->findData(StyleManager::theme());
+            if (lightIndex >= 0) {
+                cmbTheme->setCurrentIndex(lightIndex);
+            }
+            cmbTheme->blockSignals(false);
+        }
+
+        // 全局 qss 与输入控件样式按浅色主题重填
+        StyleManager::reapplyGlobalStyleSheet();
+        refreshStyles();
+        reapplyInputStyles();
+
         // 保存默认值到QSettings
         saveStyleSettings();
 
         // 发送颜色变更信号（仅选项卡背景有订阅者：HistoryWindow）
         emit tabWidgetBgColorChanged();
+
+        // 主题已复位为浅色，通知各存活窗口刷新
+        emit themeChanged(StyleManager::theme());
 
         // 发送标注工具默认值变更信号（通知工具栏更新滑块）
         emit defaultPenWidthChanged(StyleManager::getDefaultPenWidth());
@@ -505,6 +562,60 @@ void SettingsStyleTab::onToolbarButtonStyleChanged(int index) {
 }
 
 /**
+ * @brief 主题切换槽函数
+ *
+ * 切换浅色/深色主题：批量覆盖颜色表并持久化，随后刷新全局 qss、
+ * 本选项卡全部控件样式，并发射 themeChanged 通知各存活窗口立即刷新。
+ * @param index 下拉框索引
+ * @author chiangyang
+ */
+void SettingsStyleTab::onThemeChanged(int index) {
+    const QString theme = cmbTheme->itemData(index).toString();
+    if (theme.isEmpty() || theme == StyleManager::theme()) {
+        return;
+    }
+
+    // 批量覆盖颜色表并持久化（主题键 + 全部颜色键，HexArgb 保 alpha）
+    StyleManager::applyTheme(theme, ConfigManager::instance());
+
+    // 刷新色块按钮为新主题色板值
+    const auto& table = StyleManager::colorSettingTable();
+    for (size_t i = 0; i < table.size(); ++i) {
+        if (m_colorButtons[i]) {
+            updateColorButton(m_colorButtons[i], table[i].getter());
+        }
+    }
+
+    // 全局 qss 占位符按新主题重填值
+    StyleManager::reapplyGlobalStyleSheet();
+
+    // 本选项卡内控件样式刷新
+    refreshStyles();
+    applyColorPostUpdate(StyleManager::StyleColorCategory::TabWidgetBg, StyleManager::getTabWidgetBgColor());
+    reapplyInputStyles();
+
+    LOG_INFO(QString("SettingsStyleTab: Theme changed to %1").arg(theme));
+
+    // 通知宿主转发到各存活窗口立即刷新（截图/录屏工具栏、控制栏、历史窗口、贴图窗口）
+    emit themeChanged(theme);
+}
+
+/**
+ * @brief 重设本选项卡内下拉框/SpinBox/重置按钮的样式
+ * @author chiangyang
+ */
+void SettingsStyleTab::reapplyInputStyles() {
+    const QString inputStyle = StyleManager::getSettingsComboBoxStyle();
+    if (cmbTheme) cmbTheme->setStyleSheet(inputStyle);
+    if (cmbToolbarButtonStyle) cmbToolbarButtonStyle->setStyleSheet(inputStyle);
+    if (spnDefaultPenWidth) spnDefaultPenWidth->setStyleSheet(inputStyle);
+    if (spnDefaultFontSize) spnDefaultFontSize->setStyleSheet(inputStyle);
+    if (spnDefaultEraserWidth) spnDefaultEraserWidth->setStyleSheet(inputStyle);
+    if (spnDefaultMosaicSize) spnDefaultMosaicSize->setStyleSheet(inputStyle);
+    if (btnResetStyle) btnResetStyle->setStyleSheet(StyleManager::getSettingsButtonStyle());
+}
+
+/**
  * @brief 保存样式设置
  * @author chiangyang
  */
@@ -513,11 +624,13 @@ void SettingsStyleTab::saveStyleSettings() {
     QSettings *settings = ConfigManager::instance()->getSettings();
 
     // 通过数据驱动表循环保存所有颜色（表归 StyleManager 所有）
+    // HexArgb 保留 alpha（深色主题色板含半透明色，name() 会丢 alpha）
     const auto& table = StyleManager::colorSettingTable();
     for (const auto& s : table) {
-        settings->setValue(QString("style/%1").arg(s.settingsKey), s.getter().name());
+        settings->setValue(QString("style/%1").arg(s.settingsKey), s.getter().name(QColor::HexArgb));
     }
     settings->setValue("style/toolbarButtonStyle", cmbToolbarButtonStyle->currentData().toString());
+    settings->setValue("style/theme", StyleManager::theme());
 
     // 保存标注工具默认值
     settings->setValue("style/defaultPenWidth", qBound(1, StyleManager::getDefaultPenWidth(), 20));
@@ -558,6 +671,12 @@ void SettingsStyleTab::loadStyleSettings() {
     int styleIndex = cmbToolbarButtonStyle->findData(toolbarButtonStyle);
     if (styleIndex >= 0) {
         cmbToolbarButtonStyle->setCurrentIndex(styleIndex);
+    }
+
+    // 主题（已由 initFromConfig 恢复；onThemeChanged 内有同值保护，不会重复铺色板）
+    const int themeIndex = cmbTheme->findData(StyleManager::theme());
+    if (themeIndex >= 0) {
+        cmbTheme->setCurrentIndex(themeIndex);
     }
 
     // 标注工具默认值（已由 initFromConfig 恢复，同步到 SpinBox）

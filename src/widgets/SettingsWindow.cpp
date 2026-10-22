@@ -237,9 +237,22 @@ void SettingsWindow::setupUi() {
     setupAboutTab();
     
     mainLayout->addWidget(tabWidget);
-    
+
+    // 窗口自身背景与标题栏随主题（QTabBar 行透出窗口底色，必须同步）
+    updateWindowBackground();
+
     // 连接选项卡切换信号，用于自适应调整窗口高度
     connect(tabWidget, &QTabWidget::currentChanged, this, &SettingsWindow::onTabChanged);
+}
+
+void SettingsWindow::updateWindowBackground() {
+    // objectName 选择器只染窗口自身，避免 background-color 级联到全部子控件
+    if (objectName().isEmpty()) {
+        setObjectName(QStringLiteral("settingsMainWindow"));
+    }
+    setStyleSheet(QString("QWidget#%1 { background-color: %2; }")
+                  .arg(objectName(), StyleManager::getTabWidgetBgColor().name()));
+    StyleManager::applyDarkTitleBar(winId());
 }
 
 /**
@@ -399,12 +412,16 @@ void SettingsWindow::setupStyleTab() {
     });
     connect(m_styleTabWidget, &SettingsStyleTab::tabWidgetBgChanged, this, [this](const QColor &color) {
         tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
+        updateWindowBackground();
         updateAllTabsPalette(color);
         updateAllGroupBoxStyles();
     });
     // 对外信号转发（HistoryWindow / 工具栏订阅保持不变）
     connect(m_styleTabWidget, &SettingsStyleTab::tabWidgetBgColorChanged, this, &SettingsWindow::tabWidgetBgColorChanged);
     connect(m_styleTabWidget, &SettingsStyleTab::toolbarButtonStyleChanged, this, &SettingsWindow::toolbarButtonStyleChanged);
+    connect(m_styleTabWidget, &SettingsStyleTab::themeChanged, this, &SettingsWindow::themeChanged);
+    // 主题切换时本窗口全部样式同步刷新（各选项卡 refreshStyles + 背景）
+    connect(m_styleTabWidget, &SettingsStyleTab::themeChanged, this, &SettingsWindow::refreshAllStyles);
     connect(m_styleTabWidget, &SettingsStyleTab::defaultPenWidthChanged, this, &SettingsWindow::defaultPenWidthChanged);
     connect(m_styleTabWidget, &SettingsStyleTab::defaultFontSizeChanged, this, &SettingsWindow::defaultFontSizeChanged);
     connect(m_styleTabWidget, &SettingsStyleTab::defaultEraserWidthChanged, this, &SettingsWindow::defaultEraserWidthChanged);
@@ -623,6 +640,20 @@ void SettingsWindow::updateAllTabsPalette(const QColor &color) {
     }
     // 快捷键选项卡（背景刷新内聚在 SettingsShortcutsTab）
     if (m_shortcutsTabWidget) m_shortcutsTabWidget->applyTabBackground(color);
+}
+
+/**
+ * @brief 主题切换时刷新设置窗口全部样式
+ * @author chiangyang
+ */
+void SettingsWindow::refreshAllStyles() {
+    LOG_INFO("SettingsWindow: refresh all styles for theme change");
+    // 窗口自身背景与标题栏（QTabBar 行透出窗口底色，需先同步）
+    updateWindowBackground();
+    tabWidget->setStyleSheet(StyleManager::getTabWidgetStyle());
+    updateAllTabsPalette(StyleManager::getTabWidgetBgColor());
+    // 循环调各选项卡 refreshStyles（含分组与输入控件配色）
+    updateAllGroupBoxStyles();
 }
 
 /**

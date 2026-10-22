@@ -1960,6 +1960,20 @@ void SnipScreen::refreshAnnotationToolDefaults() {
     m_recordingSession->refreshDefaultValues();
 }
 
+/**
+ * @brief 主题切换时刷新截图/录屏工具栏与子工具栏样式
+ * @author chiangyang
+ */
+void SnipScreen::refreshTheme() {
+    LOG_INFO("Refreshing toolbar theme styles");
+    if (m_toolbar) {
+        m_toolbar->setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+        m_toolbar->updateBackgroundStyle();
+        m_toolbar->updateButtonStyles();
+    }
+    m_recordingSession->refreshTheme();
+}
+
 
 /**
  * @brief 连接工具栏信号到设置窗口

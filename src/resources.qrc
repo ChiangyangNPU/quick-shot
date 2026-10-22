@@ -35,6 +35,8 @@
     <file alias="browse.svg">../icons/browse.svg</file>
     <file alias="spinner-up.svg">../icons/spinner-up.svg</file>
     <file alias="spinner-down.svg">../icons/spinner-down.svg</file>
+    <file alias="spinner-up-dark.svg">../icons/spinner-up-dark.svg</file>
+    <file alias="spinner-down-dark.svg">../icons/spinner-down-dark.svg</file>
 </qresource>
 <qresource prefix="/stylesheets">
     <file alias="app.qss">resources/stylesheets/app.qss</file>

@@ -61,6 +61,26 @@ public:
     void retranslateUi();
 
     /**
+     * @brief 主题切换时刷新设置窗口全部样式
+     *
+     * 刷新 tabWidget QSS、各选项卡根背景与全部分组样式，
+     * 并循环调用各选项卡的 refreshStyles()（含输入控件配色）。
+     * @author chiangyang
+     */
+    void refreshAllStyles();
+
+    /**
+     * @brief 刷新窗口自身背景色与系统标题栏主题
+     *
+     * 窗口底色取 TabWidgetBg 色板项（浅色近白/深色 #1a1a1e），
+     * 用 objectName 选择器只染窗口自身、避免级联到子控件；
+     * 标题栏经 StyleManager::applyDarkTitleBar 跟随浅色/深色。
+     * 构造时与主题切换（refreshAllStyles）时调用。
+     * @author chiangyang
+     */
+    void updateWindowBackground();
+
+    /**
      * @brief 事件过滤器
      * @param obj 被监视的对象
      * @param event 事件
@@ -145,6 +165,13 @@ signals:
      * @author chiangyang
      */
     void toolbarButtonStyleChanged(const QString &style);
+
+    /**
+     * @brief 主题改变信号
+     * @param theme 主题标识（"light"或"dark"）
+     * @author chiangyang
+     */
+    void themeChanged(const QString &theme);
 
     /**
      * @brief 画笔默认粗细改变信号

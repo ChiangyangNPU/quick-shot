@@ -291,6 +291,22 @@ void RecordingSession::refreshDefaultValues() {
     if (m_toolbar) m_toolbar->refreshDefaultValues();
 }
 
+/**
+ * @brief 主题切换时刷新录屏工具栏/子工具栏/录制控制栏样式
+ * @author chiangyang
+ */
+void RecordingSession::refreshTheme() {
+    if (m_toolbar) {
+        m_toolbar->setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+        m_toolbar->updateBackgroundStyle();
+        m_toolbar->updateButtonStyles();
+    }
+    if (m_control) {
+        m_control->updateBackgroundStyle();
+        m_control->updateButtonStyles();
+    }
+}
+
 void RecordingSession::updateToolBarState(bool hasSelection, bool canUndo, bool canRedo) {
     if (m_toolbar) m_toolbar->updateState(hasSelection, canUndo, canRedo);
 }

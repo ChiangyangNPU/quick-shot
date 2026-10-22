@@ -75,6 +75,14 @@ public:
     static void refreshAllToolDefaults();
 
     /**
+     * @brief 主题切换时刷新所有存活贴图窗口的工具栏样式
+     * @note 仿 refreshAllToolDefaults 的静态分发：重设工具栏背景、
+     *       子工具栏背景与按钮样式/图标染色
+     * @author chiangyang
+     */
+    static void refreshAllTheme();
+
+    /**
      * @brief 显示操作提示（ESC 关闭 / 拖动 / 右键 / 滚轮缩放）
      *
      * 是否显示的"首次"时机由调用方按入口各自控制（工具栏贴图与 Alt+P

@@ -9,6 +9,7 @@
 #include <QHBoxLayout>
 #include <QScrollBar>
 #include <QWheelEvent>
+#include <utility>
 
 // ============================================================
 // 构造与 UI 构建
@@ -279,6 +280,15 @@ void SettingsShortcutsTab::refreshStyles() {
     if (m_shortcutGroupTools) m_shortcutGroupTools->setStyleSheet(style);
     if (m_shortcutGroupAnnotation) m_shortcutGroupAnnotation->setStyleSheet(style);
     if (m_shortcutGroupPinWindow) m_shortcutGroupPinWindow->setStyleSheet(style);
+
+    // 快捷键输入框配色随主题刷新（主题切换时经 SettingsWindow::refreshAllStyles 调用）
+    const QString editStyle = StyleManager::getKeySequenceEditStyle();
+    for (const auto &row : std::as_const(m_extraShortcutRows)) {
+        if (row.edit) row.edit->setStyleSheet(editStyle);
+    }
+    for (const auto &row : std::as_const(m_fixedShortcutRows)) {
+        if (row.edit) row.edit->setStyleSheet(editStyle);
+    }
 }
 
 void SettingsShortcutsTab::applyTabBackground(const QColor &color) {

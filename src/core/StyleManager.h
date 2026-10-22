@@ -5,6 +5,7 @@
 #include <QColor>
 #include <QIcon>
 #include <QSize>
+#include <qwindowdefs.h>
 #include <array>
 
 // 前置声明，避免头文件级循环依赖：
@@ -35,6 +36,12 @@ private:
 
 public:
     static QString s_toolbarButtonStyle;        ///< 工具栏按钮当前样式（"text"或"icon"）
+    static QString s_theme;                     ///< 当前主题（"light"或"dark"）
+
+    /// 主题模式（浅色 / 深色）
+    enum class ThemeMode { Light, Dark };
+
+    static const QString DEFAULT_THEME;         ///< 默认主题（浅色）
 
     // 默认颜色
     static const QColor DEFAULT_RECORD_BORDER_COLOR;              ///< 录屏框默认颜色
@@ -133,6 +140,53 @@ public:
      * @author chiangyang
      */
     static void initFromConfig(ConfigManager* cm);
+
+    /**
+     * @brief 获取当前主题标识
+     * @return 主题标识（"light"或"dark"）
+     * @author chiangyang
+     */
+    static QString theme();
+
+    /**
+     * @brief 设置当前主题标识（仅更新标量，不写配置、不铺色板）
+     * @param theme 主题标识（"light"或"dark"，其他值按浅色处理）
+     * @author chiangyang
+     */
+    static void setTheme(const QString &theme);
+
+    /**
+     * @brief 获取当前主题模式枚举
+     * @return s_theme 为 "dark" 时返回 ThemeMode::Dark，否则 ThemeMode::Light
+     * @author chiangyang
+     */
+    static ThemeMode themeMode();
+
+    /**
+     * @brief 应用主题：批量覆盖颜色表并持久化全部颜色键与主题键
+     * @param theme 主题标识（"light"或"dark"）
+     * @param cm ConfigManager 指针；非空时写入 style/theme 与全部颜色键（HexArgb）
+     * @note 主题是一组预设色板：切换时批量覆盖 21 项颜色，之后用户仍可单项微调；
+     *       本方法不刷新界面，调用方负责随后 reapplyGlobalStyleSheet() 与各窗口样式刷新
+     * @author chiangyang
+     */
+    static void applyTheme(const QString &theme, ConfigManager* cm);
+
+    /**
+     * @brief 工具栏 SVG 图标染色色
+     * @return 深色主题返回近白色（#f2f2f2），浅色主题返回无效色（不染色）
+     * @author chiangyang
+     */
+    static QColor toolbarIconTint();
+
+    /**
+     * @brief 按当前主题切换窗口系统标题栏浅色/深色（Windows DWM）
+     * @param windowId 目标窗口句柄（QWidget::winId()）
+     * @note 仅 Windows 生效（DwmSetWindowAttribute DWMWA_USE_IMMERSIVE_DARK_MODE），
+     *       其他平台为空实现；窗口创建后与主题切换时调用
+     * @author chiangyang
+     */
+    static void applyDarkTitleBar(WId windowId);
 
     // 标注工具默认值
     static constexpr int DEFAULT_PEN_WIDTH = 5;                 ///< 画笔默认粗细
@@ -461,6 +515,27 @@ public:
     static QIcon loadSvgIcon(const QString &iconPath);
 
     /**
+     * @brief 加载SVG图标并染色
+     * @param iconPath SVG图标路径
+     * @param size 图标大小
+     * @param tint 染色颜色；无效色（QColor()）时不染色，行为等同原重载
+     * @return 加载的图标
+     * @note 染色用 CompositionMode_SourceIn 整体重着色，保留图标 alpha 形状；
+     *       深色主题下工具栏图标经 toolbarIconTint() 染为近白色
+     * @author chiangyang
+     */
+    static QIcon loadSvgIcon(const QString &iconPath, const QSize &size, const QColor &tint);
+
+    /**
+     * @brief 加载SVG图标并染色（默认 24x24）
+     * @param iconPath SVG图标路径
+     * @param tint 染色颜色；无效色（QColor()）时不染色，行为等同原重载
+     * @return 加载的图标
+     * @author chiangyang
+     */
+    static QIcon loadSvgIcon(const QString &iconPath, const QColor &tint);
+
+    /**
      * @brief 加载应用图标
      * @return 加载的应用图标
      * @author chiangyang
@@ -489,6 +564,15 @@ public:
      * @author chiangyang
      */
     static void useHighlightOnlyPopup(QComboBox *combo);
+
+    /**
+     * @brief 加载全局样式表（按当前主题填充占位符）
+     * @return 填充后的样式表字符串；qss 资源打开失败时返回空串
+     * @note app.qss 中颜色以 @xxx 占位符书写，此处按 themeMode() 替换为
+     *       浅色/深色实际值；启动加载与 reapplyGlobalStyleSheet 统一走此方法
+     * @author chiangyang
+     */
+    static QString loadGlobalStyleSheet();
 
     /**
      * @brief 重新应用全局样式表

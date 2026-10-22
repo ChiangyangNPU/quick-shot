@@ -121,18 +121,6 @@ int main(int argc, char *argv[]) {
         LOG_INFO("Single-instance lock acquired");
     }
 
-    // 加载全局样式表（qss），使用 em/pt 单位实现 DPI 自适应
-    // 字体用 pt 随 DPI 缩放，控件尺寸用 em 相对字体，两者天然协调
-    {
-        QFile qss(":/stylesheets/app.qss");
-        if (qss.open(QFile::ReadOnly)) {
-            qApp->setStyleSheet(QString::fromUtf8(qss.readAll()));
-            LOG_INFO("Global stylesheet loaded");
-        } else {
-            LOG_INFO("Failed to load global stylesheet");
-        }
-    }
-
     // 禁用"关闭最后一个窗口时退出"，托盘程序应通过菜单退出
     QApplication::setQuitOnLastWindowClosed(false);
 
@@ -155,6 +143,19 @@ int main(int argc, char *argv[]) {
     // StyleManager 启动自初始化：在任何窗口创建之前从持久化配置恢复样式
     // （依赖注入，与窗口构造顺序解耦，SnipScreen 构造即可读到持久化的标注默认值）
     StyleManager::initFromConfig(configManager);
+
+    // 加载全局样式表（qss），使用 em/pt 单位实现 DPI 自适应
+    // 字体用 pt 随 DPI 缩放，控件尺寸用 em 相对字体，两者天然协调
+    // 必须在 initFromConfig 之后：占位符按当前主题（浅色/深色）填值
+    {
+        const QString sheet = StyleManager::loadGlobalStyleSheet();
+        if (!sheet.isEmpty()) {
+            qApp->setStyleSheet(sheet);
+            LOG_INFO("Global stylesheet loaded");
+        } else {
+            LOG_WARNING("Failed to load global stylesheet");
+        }
+    }
 
     TranslationManager::instance();
 
@@ -213,6 +214,19 @@ int main(int argc, char *argv[]) {
         // 选项卡背景颜色变更时同步更新历史记录窗口
         QObject::connect(settingsWindow, &SettingsWindow::tabWidgetBgColorChanged,
                          historyWindow, &HistoryWindow::updateWindowColors);
+
+        // 主题切换时立即刷新存活窗口：截图/录屏工具栏、贴图窗口、历史记录窗口
+        QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
+                         snipScreen, &SnipScreen::refreshTheme);
+        QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
+                         &PinWindow::refreshAllTheme);
+        QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
+                         historyWindow, &HistoryWindow::updateWindowColors);
+        // 托盘菜单样式在创建时一次性设置，主题切换后需重设
+        QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
+                         trayMenu, [trayMenu]() {
+            trayMenu->setStyleSheet(StyleManager::getMenuStyle());
+        });
 
         // 标注工具默认值变更时同步刷新工具栏设置
         QObject::connect(settingsWindow, &SettingsWindow::defaultPenWidthChanged,

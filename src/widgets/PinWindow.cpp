@@ -96,6 +96,20 @@ void PinWindow::refreshAllToolDefaults() {
     }
 }
 
+/**
+ * @brief 主题切换时刷新所有存活贴图窗口的工具栏样式
+ * @author chiangyang
+ */
+void PinWindow::refreshAllTheme() {
+    for (PinWindow *w : std::as_const(s_instances)) {
+        if (w->m_toolBar) {
+            w->m_toolBar->setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+            w->m_toolBar->updateBackgroundStyle();
+            w->m_toolBar->updateButtonStyles();
+        }
+    }
+}
+
 PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     : QWidget(parent), m_pixmap(pixmap), m_isMoving(false), m_isResizing(false) {
     s_instances.insert(this);  // 加入注册表，供 toggleAll 统一显隐

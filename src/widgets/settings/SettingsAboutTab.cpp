@@ -194,6 +194,13 @@ void SettingsAboutTab::refreshStyles() {
     if (m_updateGroup) {
         m_updateGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     }
+    // 更新相关按钮/进度条配色随主题刷新（主题切换时经 SettingsWindow::refreshAllStyles 调用）
+    const QString btnStyle = StyleManager::getSettingsButtonStyle();
+    if (btnCheckUpdate) btnCheckUpdate->setStyleSheet(btnStyle);
+    if (btnDownloadUpdate) btnDownloadUpdate->setStyleSheet(btnStyle);
+    if (btnCancelUpdate) btnCancelUpdate->setStyleSheet(btnStyle);
+    if (btnInstallUpdate) btnInstallUpdate->setStyleSheet(btnStyle);
+    if (m_updateProgressBar) m_updateProgressBar->setStyleSheet(StyleManager::getProgressBarStyle());
 }
 
 // ============================================================

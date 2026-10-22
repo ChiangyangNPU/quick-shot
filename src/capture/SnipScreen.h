@@ -180,6 +180,15 @@ public slots:
     void refreshAnnotationToolDefaults();
 
     /**
+     * @brief 主题切换时刷新截图/录屏工具栏与子工具栏样式
+     *
+     * 重设工具栏背景、按钮样式与 SVG 图标染色，并委托
+     * RecordingSession 刷新录屏工具栏与录制控制栏。
+     * @author chiangyang
+     */
+    void refreshTheme();
+
+    /**
      * @brief 连接工具栏信号到设置窗口
      *
      * 当 SettingsWindow 创建后调用，建立工具栏到设置窗口的双向同步。
