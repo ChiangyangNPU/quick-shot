@@ -37,6 +37,10 @@ constexpr int kCaptureIntervalMs = 150;
 constexpr int kMinSelectionSize = 32;
 ///< 隐藏宿主后等待一帧再抓首帧，避免抓到尚未消失的遮罩
 constexpr int kStartDelayMs = 120;
+///< 连续无法定位多少帧后重设匹配基准（150ms/帧，约 1.2 秒）
+constexpr int kNoMatchResetThreshold = 8;
+///< “已重新对齐”提示显示时长
+constexpr int kResyncNoticeMs = 2500;
 
 /**
  * @brief 将窗口排除在屏幕捕获之外（提示条兜底，避免选区占满整屏时被拍进长图）
@@ -75,6 +79,13 @@ ScrollCaptureSession::ScrollCaptureSession(SnipScreen *host, QObject *parent)
     , m_host(host) {
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &ScrollCaptureSession::captureTick);
+
+    m_noticeTimer = new QTimer(this);
+    m_noticeTimer->setSingleShot(true);
+    connect(m_noticeTimer, &QTimer::timeout, this, [this]() {
+        m_showResyncNotice = false;
+        updateHintText();
+    });
 }
 
 ScrollCaptureSession::~ScrollCaptureSession() {
@@ -107,6 +118,11 @@ bool ScrollCaptureSession::start(ScrollStitcher::Orientation orientation) {
 
     m_stitcher.reset(orientation);
     m_active = true;
+    m_noMatchStreak = 0;
+    m_showResyncNotice = false;
+    if (m_noticeTimer) {
+        m_noticeTimer->stop();
+    }
 
     // 隐藏工具栏与遮罩窗口：让用户看到并操作真实页面
     m_host->hideToolBar();
@@ -157,6 +173,7 @@ void ScrollCaptureSession::captureTick() {
 
     switch (m_stitcher.appendFrame(frame)) {
         case ScrollStitcher::AppendResult::Appended:
+            m_noMatchStreak = 0;
             updateHintText();
             break;
         case ScrollStitcher::AppendResult::LimitReached:
@@ -164,10 +181,22 @@ void ScrollCaptureSession::captureTick() {
             finish();
             break;
         case ScrollStitcher::AppendResult::SizeMismatch:
+            m_noMatchStreak = 0;
             LOG_WARNING("[ScrollCapture] frame size changed, ignored");
             break;
+        case ScrollStitcher::AppendResult::NoMatch:
+            // 快速滚动、页面跳转或大面积动画导致无法对齐：连续失败后
+            // 以当前画面重设基准，避免一直和过期基准比较而永久卡住
+            if (++m_noMatchStreak >= kNoMatchResetThreshold
+                && m_stitcher.restartFromFrame(frame)) {
+                LOG_INFO("[ScrollCapture] re-aligned after repeated no-match");
+                m_noMatchStreak = 0;
+                showResyncNotice();
+            }
+            break;
         default:
-            // Duplicate / NoMatch：页面未滚动或滚动过快，等待下一帧
+            // Duplicate：页面未滚动（或仅有抖动），等待下一帧
+            m_noMatchStreak = 0;
             break;
     }
 }
@@ -177,6 +206,19 @@ QImage ScrollCaptureSession::grabFrame() const {
         return QImage();
     }
 
+    QImage image;
+#ifdef Q_OS_WIN
+    // 只抓选区矩形：滚动截图每 150ms 抓一帧，多屏高分屏下抓整块虚拟桌面
+    // 会产生大量无用的拷贝与内存分配，且全部发生在 GUI 线程
+    const QPixmap shot = Utils::grabScreenRegionPixmap(m_captureRect);
+    if (shot.isNull() || shot.size() != m_captureRect.size()) {
+        LOG_WARNING(QString("[ScrollCapture] grabFrame: region grab failed, shot %1x%2, rect %3x%4")
+            .arg(shot.width()).arg(shot.height())
+            .arg(m_captureRect.width()).arg(m_captureRect.height()));
+        return QImage();
+    }
+    image = shot.toImage();
+#else
     QPixmap shot;
     qreal dpr = 1.0;
 #ifdef Q_OS_MACOS
@@ -204,9 +246,10 @@ QImage ScrollCaptureSession::grabFrame() const {
         LOG_WARNING("[ScrollCapture] grabFrame: selection outside captured desktop");
         return QImage();
     }
+    image = shot.copy(clipped).toImage();
+#endif
 
     // 统一为物理像素、dpr=1，保证逐帧尺寸一致
-    QImage image = shot.copy(clipped).toImage();
     image.setDevicePixelRatio(1.0);
     return image.convertToFormat(QImage::Format_RGB32);
 }
@@ -219,6 +262,11 @@ void ScrollCaptureSession::finish() {
     stopTimer();
     const QImage image = m_stitcher.result();
     m_active = false;
+    m_noMatchStreak = 0;
+    m_showResyncNotice = false;
+    if (m_noticeTimer) {
+        m_noticeTimer->stop();
+    }
     destroyHintBar();
 
     if (image.isNull()) {
@@ -242,6 +290,11 @@ void ScrollCaptureSession::cancel() {
     }
     stopTimer();
     m_active = false;
+    m_noMatchStreak = 0;
+    m_showResyncNotice = false;
+    if (m_noticeTimer) {
+        m_noticeTimer->stop();
+    }
     destroyHintBar();
     LOG_INFO("[ScrollCapture] canceled");
     emit finished();
@@ -253,6 +306,11 @@ void ScrollCaptureSession::setOrientation(ScrollStitcher::Orientation orientatio
     }
     // 切换方向即重置拼接：以切换后的第一帧重新开始
     m_stitcher.reset(orientation);
+    m_noMatchStreak = 0;
+    m_showResyncNotice = false;
+    if (m_noticeTimer) {
+        m_noticeTimer->stop();
+    }
     updateHintText();
     LOG_INFO(QString("[ScrollCapture] orientation switched to %1")
         .arg(orientation == ScrollStitcher::Orientation::Vertical ? "vertical" : "horizontal"));
@@ -264,7 +322,12 @@ void ScrollCaptureSession::shutdown() {
     if (m_timer) {
         m_timer->stop();
     }
+    if (m_noticeTimer) {
+        m_noticeTimer->stop();
+    }
     m_active = false;
+    m_noMatchStreak = 0;
+    m_showResyncNotice = false;
     destroyHintBar();
 }
 
@@ -275,6 +338,11 @@ void ScrollCaptureSession::createHintBar() {
 
     m_hintBar = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
     m_hintBar->setObjectName(QStringLiteral("ScrollHintBar"));
+#ifdef Q_OS_MACOS
+    // 用户需要切到其他应用滚动页面；Qt::Tool 窗口默认随应用失活隐藏，
+    // 这里保持提示条常驻，确保进度与完成/取消按钮始终可见
+    m_hintBar->setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
     m_hintBar->setAttribute(Qt::WA_TranslucentBackground);
     m_hintBar->setAttribute(Qt::WA_DeleteOnClose, false);
     m_hintBar->installEventFilter(this);
@@ -333,6 +401,10 @@ void ScrollCaptureSession::createHintBar() {
 }
 
 void ScrollCaptureSession::destroyHintBar() {
+    if (m_noticeTimer) {
+        m_noticeTimer->stop();
+    }
+    m_showResyncNotice = false;
     if (!m_hintBar) {
         return;
     }
@@ -405,13 +477,26 @@ void ScrollCaptureSession::updateHintText() {
                                      : scrollText("scroll.horizontal", "Horizontal Scroll Capture"));
     }
     if (m_statusLabel) {
-        const int length = m_stitcher.stitchedLength();
-        m_statusLabel->setText(length > 0
-            ? scrollText("scroll.status", "Captured %1 px").arg(length)
-            : scrollText("scroll.hint", "Scroll the page; Enter to finish, Esc to cancel"));
+        if (m_showResyncNotice) {
+            m_statusLabel->setText(
+                scrollText("scroll.realign", "Content changed; re-aligned"));
+        } else {
+            const int length = m_stitcher.stitchedLength();
+            m_statusLabel->setText(length > 0
+                ? scrollText("scroll.status", "Captured %1 px").arg(length)
+                : scrollText("scroll.hint", "Scroll the page to start"));
+        }
     }
     m_hintBar->adjustSize();
     positionHintBar();
+}
+
+void ScrollCaptureSession::showResyncNotice() {
+    m_showResyncNotice = true;
+    updateHintText();
+    if (m_noticeTimer) {
+        m_noticeTimer->start(kResyncNoticeMs);
+    }
 }
 
 bool ScrollCaptureSession::eventFilter(QObject *watched, QEvent *event) {

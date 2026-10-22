@@ -13,7 +13,7 @@
  * 在选区完成后显示，定位在选区附近。
  *
  * 工具栏布局：
- * 一级工具栏：录屏 | 矩形 | 椭圆 | 箭头 | 画笔 | 直线 | 文本 | 马赛克 | 橡皮擦 | 撤销 | 重做 | 清除 | OCR | 翻译 | GIF | 复制 | 保存 | 贴图 | 关闭
+ * 一级工具栏：录屏 | 矩形 | 椭圆 | 箭头 | 画笔 | 直线 | 文本 | 马赛克 | 橡皮擦 | 撤销 | 重做 | 清除 | OCR | 翻译 | GIF | 长截图 | 复制 | 保存 | 贴图 | 关闭
  * 子工具栏：形状选择 | 线宽/字体大小 | 颜色选择
  *
  * 信号：
@@ -76,10 +76,11 @@ signals:
     void pinRequested();
 
     /**
-     * @brief 请求滚动截图（长截图，默认垂直方向）
+     * @brief 请求滚动截图（长截图）
+     * @param orientation 0=垂直滚动，1=水平滚动
      * @author chiangyang
      */
-    void scrollCaptureRequested();
+    void scrollCaptureRequested(int orientation);
 
     /**
      * @brief 请求关闭截图

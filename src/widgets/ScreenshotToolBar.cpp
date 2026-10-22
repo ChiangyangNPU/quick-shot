@@ -8,6 +8,7 @@ using namespace ToolIds;
 #include <QApplication>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
+#include <QMenu>
 #include <QScreen>
 
 /**
@@ -114,10 +115,26 @@ void ScreenshotToolBar::createActionButtons() {
     m_gifBtn->setVisible(ScreenRecorder::isGifSupported());
     m_primaryLayout->addWidget(m_gifBtn);
 
-    // 滚动截图按钮（长截图）：默认垂直方向，水平方向用 H 快捷键
+    // 滚动截图按钮（长截图）：左键默认垂直，右键菜单可选垂直/水平
     m_scrollBtn = makeActionButton({&m_scrollBtn, "scroll.button", ":/icons/scroll.svg"}, [this]() {
-        LOG_INFO("ScreenshotToolBar: Scroll capture requested");
-        emit scrollCaptureRequested();
+        LOG_INFO("ScreenshotToolBar: Scroll capture requested (vertical)");
+        emit scrollCaptureRequested(0);
+    });
+    m_scrollBtn->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_scrollBtn, &QPushButton::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QMenu menu(this);
+        QAction *verticalAction = menu.addAction(
+            TranslationManager::instance()->get("scroll.vertical"));
+        QAction *horizontalAction = menu.addAction(
+            TranslationManager::instance()->get("scroll.horizontal"));
+        QAction *chosen = menu.exec(m_scrollBtn->mapToGlobal(pos));
+        if (chosen == verticalAction) {
+            LOG_INFO("ScreenshotToolBar: Scroll capture requested (vertical, menu)");
+            emit scrollCaptureRequested(0);
+        } else if (chosen == horizontalAction) {
+            LOG_INFO("ScreenshotToolBar: Scroll capture requested (horizontal, menu)");
+            emit scrollCaptureRequested(1);
+        }
     });
     m_primaryLayout->addWidget(m_scrollBtn);
 
@@ -179,6 +196,11 @@ void ScreenshotToolBar::updateButtonStyles() {
 
     // 操作按钮样式统一遍历基类注册表
     updateActionButtons(isIcon);
+
+    // 长截图按钮提示方向入口：applyButtonStyle 会覆盖 tooltip，需在其后设置
+    if (m_scrollBtn) {
+        m_scrollBtn->setToolTip(tm->get("scroll.tooltip"));
+    }
 
     layout()->activate();
     adjustSize();

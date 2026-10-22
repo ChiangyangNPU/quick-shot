@@ -293,9 +293,9 @@ void SnipScreen::connectToolbarSignals()
         performTranslate();
     });
 
-    // 截图工具栏长截图按钮 → 默认进入垂直滚动截图（水平用 H 键）
-    connect(m_toolbar, &ScreenshotToolBar::scrollCaptureRequested, [this]() {
-        startScrollCapture(0);
+    // 截图工具栏长截图按钮 → 左键垂直，右键菜单可选方向
+    connect(m_toolbar, &ScreenshotToolBar::scrollCaptureRequested, [this](int orientation) {
+        startScrollCapture(orientation);
     });
 }
 

@@ -164,6 +164,75 @@ QString Utils::savePixmapToFile(QWidget* parent, std::function<QPixmap()> pixmap
 // 屏幕抓取
 // ============================================================
 
+#ifdef Q_OS_WIN
+/**
+ * @brief Win32 BitBlt 抓取指定屏幕矩形（物理像素）
+ *
+ * 只分配与目标区域等大的位图，避免滚动截图每 150ms 抓帧时复制整个
+ * 虚拟桌面。区域超出虚拟桌面时自动裁剪到有效范围。
+ * @param region 全局物理像素矩形
+ * @return 区域截图，失败返回空 QPixmap
+ * @author chiangyang
+ */
+static QPixmap grabScreenRegionWin32(const QRect &region) {
+    const QRect virtualRect(GetSystemMetrics(SM_XVIRTUALSCREEN),
+                            GetSystemMetrics(SM_YVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    const QRect r = region.normalized().intersected(virtualRect);
+    if (r.isEmpty()) {
+        return QPixmap();
+    }
+
+    HDC hScreenDC = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
+    if (!hScreenDC) {
+        return QPixmap();
+    }
+    HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
+    if (!hMemoryDC) {
+        DeleteDC(hScreenDC);
+        return QPixmap();
+    }
+    HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, r.width(), r.height());
+    if (!hBitmap) {
+        DeleteDC(hMemoryDC);
+        DeleteDC(hScreenDC);
+        return QPixmap();
+    }
+    HGDIOBJ hOldBitmap = SelectObject(hMemoryDC, hBitmap);
+    if (!hOldBitmap) {
+        DeleteObject(hBitmap);
+        DeleteDC(hMemoryDC);
+        DeleteDC(hScreenDC);
+        return QPixmap();
+    }
+
+    QPixmap pix;
+    if (BitBlt(hMemoryDC, 0, 0, r.width(), r.height(),
+               hScreenDC, r.x(), r.y(), SRCCOPY)) {
+        BITMAPINFO bmi = {};
+        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+        bmi.bmiHeader.biWidth = r.width();
+        bmi.bmiHeader.biHeight = -r.height();
+        bmi.bmiHeader.biPlanes = 1;
+        bmi.bmiHeader.biBitCount = 32;
+        bmi.bmiHeader.biCompression = BI_RGB;
+
+        QImage image(r.width(), r.height(), QImage::Format_ARGB32);
+        if (GetDIBits(hMemoryDC, hBitmap, 0, r.height(), image.bits(),
+                      &bmi, DIB_RGB_COLORS) > 0) {
+            pix = QPixmap::fromImage(image);
+        }
+    }
+
+    SelectObject(hMemoryDC, hOldBitmap);
+    DeleteObject(hBitmap);
+    DeleteDC(hMemoryDC);
+    DeleteDC(hScreenDC);
+    return pix;
+}
+#endif
+
 /**
  * @brief 抓取整个虚拟桌面（多屏并集）的物理像素截图
  *
@@ -175,39 +244,27 @@ QString Utils::savePixmapToFile(QWidget* parent, std::function<QPixmap()> pixmap
  */
 QPixmap Utils::grabVirtualDesktopPixmap() {
 #ifdef Q_OS_WIN
-    int vx = GetSystemMetrics(SM_XVIRTUALSCREEN);
-    int vy = GetSystemMetrics(SM_YVIRTUALSCREEN);
-    int vw = GetSystemMetrics(SM_CXVIRTUALSCREEN);
-    int vh = GetSystemMetrics(SM_CYVIRTUALSCREEN);
-    if (vw <= 0 || vh <= 0) return QPixmap();
-
-    HDC hScreenDC = CreateDC(TEXT("DISPLAY"), NULL, NULL, NULL);
-    HDC hMemoryDC = CreateCompatibleDC(hScreenDC);
-    HBITMAP hBitmap = CreateCompatibleBitmap(hScreenDC, vw, vh);
-    HBITMAP hOldBitmap = (HBITMAP)SelectObject(hMemoryDC, hBitmap);
-    BitBlt(hMemoryDC, 0, 0, vw, vh, hScreenDC, vx, vy, SRCCOPY);
-
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = vw;
-    bmi.bmiHeader.biHeight = -vh;
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-
-    QImage image(vw, vh, QImage::Format_ARGB32);
-    GetDIBits(hMemoryDC, hBitmap, 0, vh, image.bits(), &bmi, DIB_RGB_COLORS);
-    QPixmap pix = QPixmap::fromImage(image);
-
-    SelectObject(hMemoryDC, hOldBitmap);
-    DeleteObject(hBitmap);
-    DeleteDC(hMemoryDC);
-    DeleteDC(hScreenDC);
-    return pix;
+    const QRect virtualRect(GetSystemMetrics(SM_XVIRTUALSCREEN),
+                            GetSystemMetrics(SM_YVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CXVIRTUALSCREEN),
+                            GetSystemMetrics(SM_CYVIRTUALSCREEN));
+    if (virtualRect.width() <= 0 || virtualRect.height() <= 0) {
+        return QPixmap();
+    }
+    return grabScreenRegionWin32(virtualRect);
 #else
     QScreen *primary = QGuiApplication::primaryScreen();
     if (!primary) return QPixmap();
     return primary->grabWindow(0);
+#endif
+}
+
+QPixmap Utils::grabScreenRegionPixmap(const QRect &region) {
+#ifdef Q_OS_WIN
+    return grabScreenRegionWin32(region);
+#else
+    Q_UNUSED(region);
+    return grabVirtualDesktopPixmap();
 #endif
 }
 

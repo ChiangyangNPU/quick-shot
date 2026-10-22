@@ -16,6 +16,12 @@ constexpr int kMinOverlapRows = 16;
 constexpr int kMinAnchorVotes = 2;
 ///< 回代校验时要求通过的唯一行占比
 constexpr double kMinAnchorAgreement = 0.6;
+///< 无有效位移时，可用锚点低于帧高该比例视为画面已变化而非未滚动
+constexpr double kMinNoScrollAnchorRatio = 0.2;
+///< 固定页脚的最小高度（低于该值视为普通内容边界）
+constexpr int kMinFooterRows = 8;
+///< 固定页脚最大占帧高的比例（超过该值多半是整块内容而非页脚）
+constexpr double kMaxFooterRatio = 0.5;
 
 /**
  * @brief 判断两帧是否几乎完全相同
@@ -80,6 +86,67 @@ quint64 rowHash(const QImage &gray, int y, int colStep, int colBegin, int colEnd
     }
     return hash;
 }
+
+/**
+ * @brief 判断帧底部静止区域是否只是页面背景留白
+ *
+ * 固定页脚与白底页面的底部留白在像素上都可能连续多帧不变，不能仅凭
+ * “静止”就裁掉：前者是视口覆盖层，后者是正文的一部分。这里先检查
+ * 该区域是否为纯色，再把纯色与页脚上方一小段区域的背景主色比较；
+ * 只有“纯色且不同于上方背景”才按页脚处理。带文字/图标的页脚不是
+ * 纯色，会直接判为非背景。
+ * @param image 当前帧（RGB32，转置坐标系）
+ * @param top 静止区域起始行（含）
+ * @return 该区域是页面背景留白返回 true
+ * @author chiangyang
+ */
+bool isBlankBackgroundRegion(const QImage &image, int top) {
+    const int width = image.width();
+    const int height = image.height();
+    if (image.format() != QImage::Format_RGB32 || top < 0 || top >= height) {
+        return false;
+    }
+
+    const uchar *row0 = image.constScanLine(top);
+    const QRgb candidate = *reinterpret_cast<const QRgb *>(row0);
+    // 候选区域必须整块纯色：带文字/按钮的页脚会在这一步被排除
+    for (int x = 1; x < width; ++x) {
+        if (reinterpret_cast<const QRgb *>(row0)[x] != candidate) {
+            return false;
+        }
+    }
+    const int bytesPerLine = width * 4;
+    for (int y = top + 1; y < height; ++y) {
+        if (std::memcmp(row0, image.constScanLine(y), bytesPerLine) != 0) {
+            return false;
+        }
+    }
+
+    // 只取页脚上方一小段估算背景色，避免大面积表头/色块主导直方图
+    const int sampleTop = qMax(0, top - qMax(40, top / 2));
+    QHash<QRgb, int> histogram;
+    const int rowStep = qMax(1, (top - sampleTop) / 24);
+    const int colStep = qMax(1, width / 160);
+    for (int y = sampleTop; y < top; y += rowStep) {
+        const QRgb *line = reinterpret_cast<const QRgb *>(image.constScanLine(y));
+        for (int x = 0; x < width; x += colStep) {
+            ++histogram[line[x]];
+        }
+    }
+    if (histogram.isEmpty()) {
+        return false;
+    }
+
+    QRgb dominant = candidate;
+    int bestCount = -1;
+    for (auto it = histogram.constBegin(); it != histogram.constEnd(); ++it) {
+        if (it.value() > bestCount) {
+            bestCount = it.value();
+            dominant = it.key();
+        }
+    }
+    return dominant == candidate;
+}
 } // namespace
 
 ScrollStitcher::ScrollStitcher(Orientation orientation)
@@ -93,6 +160,8 @@ void ScrollStitcher::reset(Orientation orientation) {
     m_workFrameSize = QSize();
     m_frameSize = QSize();
     m_stitchedLength = 0;
+    m_footerRows = 0;
+    m_firstStripTrimmedRows = 0;
 }
 
 int ScrollStitcher::stitchedLength() const {
@@ -132,7 +201,8 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
         return AppendResult::Duplicate;
     }
 
-    const int shift = findVerticalShift(m_lastGray, gray);
+    int staticBottomRows = 0;
+    const int shift = findVerticalShift(m_lastGray, gray, &staticBottomRows);
     if (shift < 0) {
         return AppendResult::NoMatch;
     }
@@ -140,7 +210,30 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
     if (shift < kMinShift) {
         return AppendResult::Duplicate;
     }
-    const int startRow = work.height() - shift;           // 当前帧中新内容的起始行
+
+    /**
+     * @brief 固定页脚确认
+     *
+     * 底部连续不动的非背景纯色区域视为视口页脚。只在确认高度增大时
+     * 更新并裁掉首帧对应行，避免页脚内动画导致边界来回抖动。
+     * 纯色留白（白底页面底部空白）不算页脚，否则会裁掉正文留白。
+     */
+    if (staticBottomRows >= kMinFooterRows) {
+        const int maxFooterRows = qMin(int(work.height() * kMaxFooterRatio),
+                                       work.height() - kMinOverlapRows - kMinShift);
+        if (staticBottomRows <= maxFooterRows
+            && staticBottomRows > m_footerRows
+            && !isBlankBackgroundRegion(work, work.height() - staticBottomRows)) {
+            m_footerRows = staticBottomRows;
+            trimFirstStripFooter(m_footerRows);
+        }
+    }
+
+    const int contentBottom = work.height() - m_footerRows;  // 正文可视区下边界
+    const int startRow = contentBottom - shift;              // 当前帧中新内容的起始行
+    if (startRow < 0) {
+        return AppendResult::NoMatch;
+    }
 
     if (m_stitchedLength + shift > m_maxLength) {
         return AppendResult::LimitReached;
@@ -149,14 +242,35 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
         return AppendResult::LimitReached;
     }
 
-    if (!appendRows(work, startRow)) {
-        return AppendResult::SizeMismatch;
+    if (!appendRows(work, startRow, contentBottom)) {
+        return AppendResult::NoMatch;
     }
     m_lastGray = gray;
     return AppendResult::Appended;
 }
 
-int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next) const {
+bool ScrollStitcher::restartFromFrame(const QImage &frame) {
+    if (frame.isNull() || frame.width() <= 0 || frame.height() <= 0 || m_strips.isEmpty()) {
+        return false;
+    }
+
+    QImage work = frame.convertToFormat(QImage::Format_RGB32);
+    if (m_orientation == Orientation::Horizontal) {
+        work = work.transformed(QTransform().rotate(90), Qt::FastTransformation);
+    }
+    if (work.size() != m_workFrameSize) {
+        return false;
+    }
+
+    m_lastGray = toGray(work);
+    return !m_lastGray.isNull();
+}
+
+int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
+                                      int *staticBottomRows) const {
+    if (staticBottomRows) {
+        *staticBottomRows = 0;
+    }
     const int width = prev.width();
     const int height = prev.height();
     if (next.width() != width || next.height() != height || width <= 0 || height <= 0) {
@@ -240,9 +354,17 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next) co
         }
     }
 
-    // 没有任何非零位移获得足够票数：页面没有真正滚动
+    /**
+     * @brief 没有非零位移获得足够票数
+     *
+     * 若两帧的可用锚点很少，说明共同内容已经很少（页面跳转、快速滚动
+     * 超出重叠范围、画面被大面积动画覆盖），按无法定位处理，让会话
+     * 有机会重设基准；锚点充足时才视为页面未滚动。
+     */
     if (bestShift < 0 || bestVotes < kMinAnchorVotes) {
-        return 0;
+        const int minAnchorsForNoScroll =
+            qMax(kMinAnchorVotes, int(height * kMinNoScrollAnchorRatio));
+        return anchorTotal >= minAnchorsForNoScroll ? 0 : -1;
     }
 
     // 回代校验：上一帧的行在向上移动后应落在当前帧更低的位置；跳过静止行（表头/底栏）
@@ -266,26 +388,62 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next) co
     if (total < kMinAnchorVotes || double(agree) / total < kMinAnchorAgreement) {
         return -1;
     }
+
+    // 帧底部连续与上一帧同位置完全相同的行，作为固定页脚候选。
+    // 是否采纳还要看它是否为页面背景留白（见 appendFrame）。
+    if (staticBottomRows) {
+        /**
+         * @brief 用采样行指纹而不是整行像素寻找静止页脚
+         *
+         * 行指纹跳过左右各 3% 的列，滚动条滑块、窗口阴影等边缘元素在
+         * 页脚区域移动时不会把静止页脚截短；页脚是否只是页面背景留白
+         * 由 appendFrame 中的 isBlankBackgroundRegion 用全像素检查。
+         */
+        int run = 0;
+        for (int y = height - 1; y >= 0 && prevRows[y] == nextRows[y]; --y) {
+            ++run;
+        }
+        *staticBottomRows = run;
+    }
     return bestShift;
 }
 
-bool ScrollStitcher::appendRows(const QImage &frame, int startRow) {
-    if (startRow < 0 || startRow >= frame.height()) {
+bool ScrollStitcher::appendRows(const QImage &frame, int startRow, int endRow) {
+    if (startRow < 0 || endRow > frame.height() || startRow >= endRow) {
         return false;
     }
-    const int shift = frame.height() - startRow;
-    if (frame.width() != m_workFrameSize.width() || shift <= 0) {
+    const int rows = endRow - startRow;
+    if (frame.width() != m_workFrameSize.width() || rows <= 0) {
         return false;
     }
 
     // 只保存新增条带，避免长图增长后每帧复制整图
-    const QImage strip = frame.copy(0, startRow, frame.width(), shift);
+    const QImage strip = frame.copy(0, startRow, frame.width(), rows);
     if (strip.isNull()) {
         return false;
     }
     m_strips.append(strip);
-    m_stitchedLength += shift;
+    m_stitchedLength += rows;
     return true;
+}
+
+void ScrollStitcher::trimFirstStripFooter(int footerRows) {
+    if (m_strips.isEmpty() || footerRows <= m_firstStripTrimmedRows) {
+        return;
+    }
+    const int extraRows = footerRows - m_firstStripTrimmedRows;
+    const QImage &first = m_strips.first();
+    if (first.height() - extraRows < 1) {
+        return;
+    }
+
+    const QImage trimmed = first.copy(0, 0, first.width(), first.height() - extraRows);
+    if (trimmed.isNull()) {
+        return;
+    }
+    m_strips[0] = trimmed;
+    m_stitchedLength -= extraRows;
+    m_firstStripTrimmedRows += extraRows;
 }
 
 QImage ScrollStitcher::result() const {

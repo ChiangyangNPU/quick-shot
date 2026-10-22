@@ -2,7 +2,8 @@
  * @file ScrollStitcherTest.cpp
  * @brief 滚动截图拼接器单元测试
  *
- * 覆盖垂直/水平拼接、固定表头与底栏、重复帧丢弃、无纹理画面拒绝、最大长度限制。
+ * 覆盖垂直/水平拼接、固定表头与底栏、重复帧丢弃、无纹理画面拒绝、
+ * 最大长度限制，以及页面跳转/快速滚动后的基准重设。
  * 纯 QImage 计算，无 GUI 依赖，使用 QTEST_GUILESS_MAIN。
  * @author chiangyang
  */
@@ -58,6 +59,17 @@ QImage makeSparseDocument(int width, int height) {
  * @brief 从文档中截取一帧
  * @author chiangyang
  */
+QImage makeAltDocument(int width, int height) {
+    QImage image(width, height, QImage::Format_RGB32);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            const int v = (y * 53 + x * 17 + (y * y) / 11 + (x * x) / 7 + 91) % 256;
+            image.setPixel(x, y, qRgb((v * 5) % 256, v, (v * 2) % 256));
+        }
+    }
+    return image;
+}
+
 QImage slice(const QImage &doc, int x, int y, int width, int height) {
     return doc.copy(x, y, width, height);
 }
@@ -122,6 +134,30 @@ private slots:
      * @author chiangyang
      */
     void maxLengthRejected();
+
+    /**
+     * @brief 纯色固定页脚：不重复拼入，正文逐像素完整
+     * @author chiangyang
+     */
+    void fixedFooterPixels();
+
+    /**
+     * @brief 页脚右侧有移动滚动条时，页脚仍应被完整剔除
+     * @author chiangyang
+     */
+    void fixedFooterWithMovingEdge();
+
+    /**
+     * @brief 页面跳转后共同内容很少：返回 NoMatch，重设基准后可继续
+     * @author chiangyang
+     */
+    void pageChangeRejected();
+
+    /**
+     * @brief 滚动超过重叠范围：返回 NoMatch，重设基准后可继续
+     * @author chiangyang
+     */
+    void fastScrollBecomesNoMatch();
 };
 
 void ScrollStitcherTest::verticalStitch() {
@@ -219,9 +255,18 @@ void ScrollStitcherTest::fixedHeaderFooterStitch() {
     for (int i = 1; i < 5; ++i) {
         QCOMPARE(stitcher.appendFrame(makeFrame(i * step)),
                  ScrollStitcher::AppendResult::Appended);
-        // 表头/底栏始终静止，若被当作定位依据会算成 0 位移而卡住
-        QCOMPARE(stitcher.stitchedLength(), frameH + i * step);
+        // 表头/底栏始终静止，若被当作定位依据会算成 0 位移而卡住；
+        // 底栏已确认并被排除，长度从首帧正文高度开始增长
+        QCOMPARE(stitcher.stitchedLength(), frameH - footerH + i * step);
     }
+
+    // 像素级校验：固定表头只出现一次，静态底栏不重复拼入，正文无丢失
+    const int contentRows = contentH + 4 * step;
+    QImage expected(frameW, headerH + contentRows, QImage::Format_RGB32);
+    QPainter expectedPainter(&expected);
+    expectedPainter.drawImage(0, 0, header);
+    expectedPainter.drawImage(0, headerH, doc.copy(0, 0, frameW, contentRows));
+    QVERIFY(imagesEqual(stitcher.result(), expected));
 }
 
 void ScrollStitcherTest::duplicateFrameIgnored() {
@@ -258,6 +303,149 @@ void ScrollStitcherTest::maxLengthRejected() {
     QVERIFY(stitcher.appendFrame(slice(doc, 0, 50, 100, frameH))
             == ScrollStitcher::AppendResult::LimitReached);
     QCOMPARE(stitcher.stitchedLength(), frameH);
+}
+
+void ScrollStitcherTest::fixedFooterPixels() {
+    const int frameW = 120;
+    const int frameH = 160;
+    const int headerH = 20;
+    const int footerH = 15;
+    const int contentH = frameH - headerH - footerH;
+    const int step = 40;
+    const int scrolls = 4;
+
+    const QImage header = makeDocument(frameW, headerH);
+    const QImage doc = makeDocument(frameW, 500);
+    QImage footer(frameW, footerH, QImage::Format_RGB32);
+    footer.fill(qRgb(30, 60, 90));  // 与页面背景差异明显的纯色页脚
+
+    auto makeFrame = [&](int offset) {
+        QImage frame(frameW, frameH, QImage::Format_RGB32);
+        QPainter painter(&frame);
+        painter.drawImage(0, 0, header);
+        painter.drawImage(0, headerH, doc.copy(0, offset, frameW, contentH));
+        painter.drawImage(0, headerH + contentH, footer);
+        return frame;
+    };
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(makeFrame(0))
+            == ScrollStitcher::AppendResult::Appended);
+    for (int i = 1; i <= scrolls; ++i) {
+        QCOMPARE(stitcher.appendFrame(makeFrame(i * step)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    // 期望：表头 + 连续正文，不含任何页脚行
+    const int contentRows = contentH + scrolls * step;
+    QImage expected(frameW, headerH + contentRows, QImage::Format_RGB32);
+    QPainter expectedPainter(&expected);
+    expectedPainter.drawImage(0, 0, header);
+    expectedPainter.drawImage(0, headerH, doc.copy(0, 0, frameW, contentRows));
+
+    QCOMPARE(stitcher.stitchedLength(), headerH + contentRows);
+    QVERIFY(imagesEqual(stitcher.result(), expected));
+}
+
+void ScrollStitcherTest::fixedFooterWithMovingEdge() {
+    const int frameW = 120;
+    const int frameH = 160;
+    const int headerH = 20;
+    const int footerH = 15;
+    const int contentH = frameH - headerH - footerH;
+    const int step = 40;
+    const int scrolls = 4;
+
+    const QImage header = makeDocument(frameW, headerH);
+    const QImage doc = makeDocument(frameW, 500);
+
+    auto makeFrame = [&](int offset, int barY) {
+        QImage frame(frameW, frameH, QImage::Format_RGB32);
+        QPainter painter(&frame);
+        painter.drawImage(0, 0, header);
+        painter.drawImage(0, headerH, doc.copy(0, offset, frameW, contentH));
+        painter.fillRect(0, headerH + contentH, frameW, footerH, QColor(30, 60, 90));
+        // 模拟页脚右侧滚动的滚动条滑块：只改变边缘 2 列，行指纹会跳过
+        painter.fillRect(frameW - 2, headerH + contentH + barY, 2, 5, Qt::white);
+        return frame;
+    };
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(makeFrame(0, 0))
+            == ScrollStitcher::AppendResult::Appended);
+    for (int i = 1; i <= scrolls; ++i) {
+        QCOMPARE(stitcher.appendFrame(makeFrame(i * step, (i * 3) % 11)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    const int contentRows = contentH + scrolls * step;
+    QImage expected(frameW, headerH + contentRows, QImage::Format_RGB32);
+    QPainter expectedPainter(&expected);
+    expectedPainter.drawImage(0, 0, header);
+    expectedPainter.drawImage(0, headerH, doc.copy(0, 0, frameW, contentRows));
+
+    QCOMPARE(stitcher.stitchedLength(), headerH + contentRows);
+    QVERIFY(imagesEqual(stitcher.result(), expected));
+}
+
+void ScrollStitcherTest::pageChangeRejected() {
+    const int frameW = 120;
+    const int frameH = 300;
+    const int headerH = 20;
+    const int footerH = 15;
+    const int contentH = frameH - headerH - footerH;
+
+    const QImage header = makeDocument(frameW, headerH);
+    const QImage footer = makeDocument(frameW, footerH);
+    const QImage docA = makeDocument(frameW, 600);
+    const QImage docB = makeAltDocument(frameW, 600);
+
+    auto makeFrame = [&](const QImage &doc, int offset) {
+        QImage frame(frameW, frameH, QImage::Format_RGB32);
+        QPainter painter(&frame);
+        painter.drawImage(0, 0, header);
+        painter.drawImage(0, headerH, doc.copy(0, offset, frameW, contentH));
+        painter.drawImage(0, headerH + contentH, footer);
+        return frame;
+    };
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(makeFrame(docA, 0))
+            == ScrollStitcher::AppendResult::Appended);
+    const int before = stitcher.stitchedLength();
+
+    // 页面跳转后只剩表头/底栏共同行，锚点不足，应按无法定位处理
+    QCOMPARE(stitcher.appendFrame(makeFrame(docB, 0)),
+             ScrollStitcher::AppendResult::NoMatch);
+    QCOMPARE(stitcher.stitchedLength(), before);
+
+    // 重设基准后，新页面的后续滚动应继续追加；首次确认页脚时
+    // 会把第一帧底部的页脚一并裁掉，因此比 before 少 footerH 行
+    QVERIFY(stitcher.restartFromFrame(makeFrame(docB, 0)));
+    QCOMPARE(stitcher.appendFrame(makeFrame(docB, 40)),
+             ScrollStitcher::AppendResult::Appended);
+    QCOMPARE(stitcher.stitchedLength(), before - footerH + 40);
+}
+
+void ScrollStitcherTest::fastScrollBecomesNoMatch() {
+    const int frameW = 120;
+    const int frameH = 300;
+    const int fastStep = frameH - 10;  // 重叠 10 行，低于 kMinOverlapRows
+    const QImage doc = makeDocument(frameW, 800);
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(slice(doc, 0, 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+    const int before = stitcher.stitchedLength();
+
+    QCOMPARE(stitcher.appendFrame(slice(doc, 0, fastStep, frameW, frameH)),
+             ScrollStitcher::AppendResult::NoMatch);
+    QCOMPARE(stitcher.stitchedLength(), before);
+
+    QVERIFY(stitcher.restartFromFrame(slice(doc, 0, fastStep, frameW, frameH)));
+    QCOMPARE(stitcher.appendFrame(slice(doc, 0, fastStep + 40, frameW, frameH)),
+             ScrollStitcher::AppendResult::Appended);
+    QCOMPARE(stitcher.stitchedLength(), before + 40);
 }
 
 QTEST_GUILESS_MAIN(ScrollStitcherTest)

@@ -23,6 +23,7 @@ QuickShot 是一款跨平台的截图与录屏工具，基于 **Qt 6.10.2** 框�
 ### 1.2 核心特性
 
 - **多种截图模式**：全屏、区域、窗口、显示器
+- **滚动截图**：垂直/水平方向自动拼接，行指纹投票对齐，自动排除固定页脚，连续无法定位后自动重设基准
 - **智能选区**：自动吸附到窗口/显示器边界，支持滚轮切换吸附层级
 - **丰富标注工具**：矩形、椭圆、三角形、画笔、箭头、直线、文本、马赛克、橡皮擦
 - **标注约束**：绘制矩形/椭圆/箭头/直线时支持 Shift 等比约束与 Alt 中心约束，自动限制在选区内
@@ -2209,6 +2210,16 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 - **版本清单**：`update-test/server/make-version-json.ps1` 计算 SHA256 和文件大小，生成 version.json
 - **文件命名约定**：`QuickShot-Release-{version}-Windows-x64.zip`（GitHub/Gitee 下载 URL 与此对齐）
 
+### 6.18 滚动截图（ScrollCaptureSession + ScrollStitcher）
+
+滚动截图由会话编排层与纯算法层分离实现：
+
+- **ScrollCaptureSession**：选区完成后隐藏 SnipScreen 与工具栏，按 150ms 间隔抓取选区；提示条显示方向、已拼接长度，并提供完成/取消/方向切换。Windows 只对选区矩形做 BitBlt（`Utils::grabScreenRegionPixmap`），避免每次抓取整块虚拟桌面；macOS 使用 `QScreen::grabWindow` 后按 DPR 裁剪。提示条使用 `WA_MacAlwaysShowToolWindow`，防止用户切到浏览器滚动后提示条随应用失活隐藏。
+- **ScrollStitcher**：每帧灰度化并按行生成 64 位指纹，只有前后两帧都唯一出现的行参与位移投票，得票最多的位移再回代校验（≥60% 一致）后才追加新内容。水平方向通过转置 90° 复用垂直算法。
+- **固定页脚**：帧底部连续静止且不是页面背景留白的区域识别为页脚，追加时排除，并在确认后裁掉首帧底部对应行；纯色留白不会被误判为页脚，避免白底页面丢正文。
+- **异常恢复**：连续 8 帧（约 1.2 秒）无法定位时，以当前帧重设匹配基准并显示「已重新对齐」，避免页面跳转或快速滚动后永久卡住。
+- **结果交付**：完成后交给 `SnipScreen::pinPixmap`，用 PinWindow 承载，复用复制/保存/标注/翻译；超长图按屏幕可用高度等比缩放显示，内部保留原图。
+
 ---
 
 ## 7. 配置项
@@ -2369,7 +2380,6 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 ### 9.1 功能扩展
 
 1. **截图增强**
-   - 滚动截图
    - 延时截图
    - 截图后自动标注
 
@@ -3206,6 +3216,7 @@ graph TD
 | `StyleManagerTest` | StyleManager | 颜色配置表完整性与存取回环 |
 | `TranslationManagerTest` | TranslationManager | 翻译键回退契约、六语言文件可加载且 currentLanguage 跟随、加载失败不污染状态、config.* 错误文案词条六语言齐备 |
 | `UpdateManagerVersionTest` | UpdateManager | 版本比较与 release API 解析 |
+| `ScrollStitcherTest` | ScrollStitcher | 垂直/水平拼接、固定表头与固定页脚（含像素级校验）、白底稀疏页面、重复帧/无纹理帧丢弃、最大长度、页面跳转与快速滚动后的基准重设 |
 
 本地运行：
 

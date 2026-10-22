@@ -12,13 +12,14 @@
  * 垂直方向沿 Y 轴向下追加，水平方向沿 X 轴向右追加。
  *
  * 拼接原理：
- * 1. 取上一帧底部（水平为右侧）一定高度的模板；
- * 2. 在当前帧顶部（水平为左侧）60% 范围内滑动搜索模板的最佳匹配位置；
- * 3. 匹配位置之后的像素视为新内容，追加到结果图末尾；
- * 4. 匹配差异过大或模板无纹理时丢弃该帧，避免错位拼接。
+ * 1. 灰度化后为每行按固定步长采样列、生成 64 位指纹；
+ * 2. 只在前后两帧中都唯一出现的行参与位移投票，得票最多的位移为候选；
+ * 3. 用上一帧其余唯一行回代校验一致率，不足则丢弃该帧；
+ * 4. 匹配成功后只追加当前帧的新内容条带；帧底部连续不动的区域视为
+ *    固定页脚，不参与对齐也不再拼入长图，避免正文丢失与页脚重复。
  *
- * 模板取自上一帧尾部而非头部，可自然规避固定表头（滚动时表头不动，
- * 不会出现在上一帧尾部，因此不会被误匹配到当前帧顶部）。
+ * 空白行与重复排版行因不唯一而不投票，固定表头/底栏因位移为 0
+ * 被排除，纯色画面则因缺乏唯一行被判为无法定位。
  *
  * 水平方向内部把帧转置 90°，复用同一套垂直算法，最终输出时转回。
  * @author chiangyang
@@ -83,6 +84,17 @@ public:
     QImage result() const;
 
     /**
+     * @brief 以当前帧重设匹配基准（保留已拼接结果）
+     *
+     * 连续无法定位时由会话调用：放弃旧基准，后续帧从当前画面继续拼接。
+     * 无法定位期间的内容不会进入结果，仅用于让会话恢复可用。
+     * @param frame 当前帧（原始朝向）
+     * @return 帧尺寸与首帧一致并成功更新基准时返回 true
+     * @author chiangyang
+     */
+    bool restartFromFrame(const QImage &frame);
+
+    /**
      * @brief 是否尚无任何帧
      * @author chiangyang
      */
@@ -126,10 +138,12 @@ private:
      *
      * @param prev 上一帧灰度图（转置坐标系）
      * @param next 当前帧灰度图（转置坐标系）
+     * @param staticBottomRows 输出：帧底部连续保持不动的行数（固定页脚候选）
      * @return 内容上移的像素数；0 表示未滚动；-1 表示无法可靠定位
      * @author chiangyang
      */
-    int findVerticalShift(const QImage &prev, const QImage &next) const;
+    int findVerticalShift(const QImage &prev, const QImage &next,
+                          int *staticBottomRows) const;
 
     /**
      * @brief 将新内容追加为一段条带（转置坐标系）
@@ -137,11 +151,22 @@ private:
      * 只保存新增部分而非每帧整图拷贝：长图增长到上万像素后，
      * 逐帧复制整图会带来显著的 CPU 与内存抖动。
      * @param frame 当前帧（转置坐标系）
-     * @param startRow 新内容起始行
+     * @param startRow 新内容起始行（含）
+     * @param endRow 新内容结束行（不含，固定页脚在此之下）
      * @return 是否追加成功
      * @author chiangyang
      */
-    bool appendRows(const QImage &frame, int startRow);
+    bool appendRows(const QImage &frame, int startRow, int endRow);
+
+    /**
+     * @brief 从首帧条带底部移除已确认的固定页脚
+     *
+     * 首帧先按整帧保存，第二帧检测到固定页脚后才能确认其高度；
+     * 此时把首帧底部的页脚行裁掉，避免页脚出现在长图开头。
+     * @param footerRows 累计确认的固定页脚行数
+     * @author chiangyang
+     */
+    void trimFirstStripFooter(int footerRows);
 
     Orientation m_orientation;      ///< 滚动方向
     QVector<QImage> m_strips;       ///< 分段条带（按顺序拼接即为结果，水平方向为转置坐标系）
@@ -149,6 +174,8 @@ private:
     QSize m_workFrameSize;          ///< 转置坐标系下的帧尺寸
     QSize m_frameSize;              ///< 原始朝向的帧尺寸
     int m_stitchedLength = 0;       ///< 已拼接的主方向长度
+    int m_footerRows = 0;           ///< 已确认的固定页脚行数（0 表示无页脚）
+    int m_firstStripTrimmedRows = 0;///< 首帧条带已裁掉的页脚行数
     int m_maxLength = kDefaultMaxLength;  ///< 最大拼接长度
 };
 

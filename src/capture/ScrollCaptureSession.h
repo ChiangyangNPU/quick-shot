@@ -158,10 +158,16 @@ private:
     void positionHintBar();
 
     /**
-     * @brief 刷新提示文案（方向 / 已拼接长度）
+     * @brief 刷新提示文案（方向 / 已拼接长度 / 重新对齐提示）
      * @author chiangyang
      */
     void updateHintText();
+
+    /**
+     * @brief 显示短暂的“已重新对齐”提示
+     * @author chiangyang
+     */
+    void showResyncNotice();
 
     /**
      * @brief 停止抓帧定时器
@@ -172,12 +178,15 @@ private:
     SnipScreen *m_host;                  ///< 宿主（非拥有）
     ScrollStitcher m_stitcher;           ///< 拼接器
     QTimer *m_timer = nullptr;           ///< 抓帧定时器
+    QTimer *m_noticeTimer = nullptr;     ///< 重新对齐提示的显示时长
     QPointer<QWidget> m_hintBar;         ///< 提示条窗口
     QLabel *m_statusLabel = nullptr;     ///< 提示条状态文字
     QPushButton *m_finishBtn = nullptr;  ///< 完成按钮
     QPushButton *m_cancelBtn = nullptr;  ///< 取消按钮
     QRect m_captureRect;                 ///< 选区（全局坐标，已内缩避开边框）
+    int m_noMatchStreak = 0;             ///< 连续无法定位的帧数
     bool m_active = false;               ///< 会话是否进行中
+    bool m_showResyncNotice = false;     ///< 是否正在显示重新对齐提示
 };
 
 #endif // SCROLLCAPTURESESSION_H

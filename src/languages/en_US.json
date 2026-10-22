@@ -364,5 +364,7 @@
   "scroll.finish": "Finish",
   "scroll.cancel": "Cancel",
   "scroll.hint": "Scroll the page to start",
+  "scroll.tooltip": "Scroll capture (left-click vertical, right-click for horizontal; V / H)",
+  "scroll.realign": "Content changed too much; re-aligned",
   "update.later": "Later"
 }

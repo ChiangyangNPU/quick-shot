@@ -49,6 +49,7 @@ The first time you open QuickShot to take a **screenshot or record the screen**,
 *   **Auto Window Detection**: Automatically detects and highlights window areas when hovering over software windows; click to select quickly.
 *   **Display/Fullscreen Switching**: Supports rectangular area, window, display, and desktop capture modes. Use the mouse wheel to quickly switch snapping levels.
 *   **Free Rectangular Selection**: Supports drag-and-drop to create rectangular screenshot areas of any size.
+*   **Scroll Capture (Long Screenshot)**: After selecting an area, press `V` for vertical or `H` for horizontal, or click the toolbar "Scroll Capture" button (left-click vertical; right-click menu for horizontal). Scroll the page to auto-stitch; `Enter` finishes and `Esc` cancels. Fixed footers are detected and excluded, and the result opens in a PinWindow for copy/save/annotation/translation.
 *   **Smart Right-Click Interaction**:
     *   **No Selection**: Right-click automatically snaps to the window under the mouse; if on desktop background, it captures full screen.
     *   **Selection Active**: Right-click cancels the current screenshot (exit).

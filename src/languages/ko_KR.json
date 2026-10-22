@@ -364,5 +364,7 @@
   "scroll.finish": "완료",
   "scroll.cancel": "취소",
   "scroll.hint": "페이지를 스크롤하여 캡처",
+  "scroll.tooltip": "긴 스크린샷(왼쪽 클릭 세로, 오른쪽 클릭 가로, V / H)",
+  "scroll.realign": "화면 변화가 커서 다시 정렬했습니다",
   "update.later": "나중에"
 }

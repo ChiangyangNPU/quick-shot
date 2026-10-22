@@ -4,6 +4,7 @@
 #include <functional>
 #include <QString>
 #include <QPixmap>
+#include <QRect>
 
 class QWidget;
 
@@ -68,6 +69,18 @@ public:
      * @author chiangyang
      */
     static QPixmap grabVirtualDesktopPixmap();
+
+    /**
+     * @brief 抓取屏幕指定矩形区域的物理像素截图
+     *
+     * Windows 下只对目标区域做 BitBlt，供滚动截图每 150ms 抓帧使用，
+     * 避免每次都复制整个虚拟桌面；区域超出虚拟桌面时自动裁剪。
+     * 其他平台暂不支持区域抓取，返回整屏截图（调用方需自行裁剪）。
+     * @param region 全局物理像素矩形
+     * @return 区域截图（物理像素），失败返回空 QPixmap
+     * @author chiangyang
+     */
+    static QPixmap grabScreenRegionPixmap(const QRect &region);
 
     /**
      * @brief 抓取前台活动窗口的物理像素截图

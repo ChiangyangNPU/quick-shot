@@ -364,5 +364,7 @@
   "scroll.finish": "完成",
   "scroll.cancel": "取消",
   "scroll.hint": "捲動頁面開始擷取",
+  "scroll.tooltip": "長截圖（左鍵垂直，右鍵選水平；快捷鍵 V / H）",
+  "scroll.realign": "畫面變化過大，已重新對齊",
   "update.later": "稍後"
 }

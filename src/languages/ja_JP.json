@@ -364,5 +364,7 @@
   "scroll.finish": "完了",
   "scroll.cancel": "キャンセル",
   "scroll.hint": "ページをスクロールして撮影",
+  "scroll.tooltip": "長いスクリーンショット（左クリックで縦、右クリックで横、V / H）",
+  "scroll.realign": "画面の変化が大きいため再同期しました",
   "update.later": "後で"
 }

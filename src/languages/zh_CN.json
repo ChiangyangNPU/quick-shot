@@ -364,5 +364,7 @@
   "scroll.finish": "完成",
   "scroll.cancel": "取消",
   "scroll.hint": "滚动页面开始采集",
+  "scroll.tooltip": "长截图（左键垂直，右键选水平；快捷键 V / H）",
+  "scroll.realign": "画面变化过大，已重新对齐",
   "update.later": "稍后"
 }
