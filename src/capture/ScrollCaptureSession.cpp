@@ -5,6 +5,7 @@
 #include "../log/Logger.h"
 #include "../utils/Utils.h"
 
+#include <QFontMetrics>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
@@ -64,6 +65,24 @@ void excludeWindowFromCapture(WId wid) {
     Q_UNUSED(wid);
 #endif
 }
+
+#ifdef Q_OS_WIN
+/**
+ * @brief 将提示条提升到 Windows 置顶窗口组的最上层
+ *
+ * Qt::WindowStaysOnTopHint 只保证窗口属于 WS_EX_TOPMOST 组；如果目标
+ * 应用本身也置顶（全屏浏览器、播放器等），新创建的工具窗仍可能被压住，
+ * 看起来发灰、像半透明。显示后显式 SetWindowPos(HWND_TOPMOST) 可把
+ * 提示条放到置顶组顶部，保证状态和按钮可读。
+ * @param wid 窗口句柄
+ * @author chiangyang
+ */
+void raiseWindowAboveTopmost(WId wid) {
+    if (!wid) return;
+    SetWindowPos(reinterpret_cast<HWND>(wid), HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+}
+#endif
 
 /**
  * @brief 翻译键取值（带英文兜底，未翻译语言也能正常显示）
@@ -134,6 +153,10 @@ bool ScrollCaptureSession::start(ScrollStitcher::Orientation orientation) {
     m_hintBar->raise();
     m_hintBar->activateWindow();
     m_hintBar->setFocus();
+#ifdef Q_OS_WIN
+    // 目标应用自身置顶时，Qt 的置顶窗口仍可能被压在下面；再提升一次
+    raiseWindowAboveTopmost(m_hintBar->winId());
+#endif
 
     LOG_INFO(QString("[ScrollCapture] start %1, rect: %2,%3 %4x%5")
         .arg(orientation == ScrollStitcher::Orientation::Vertical ? "vertical" : "horizontal")
@@ -347,51 +370,90 @@ void ScrollCaptureSession::createHintBar() {
     m_hintBar->setAttribute(Qt::WA_DeleteOnClose, false);
     m_hintBar->installEventFilter(this);
 
-    auto *layout = new QHBoxLayout(m_hintBar);
+    /**
+     * @brief 深色圆角由容器子控件绘制，顶层窗口只负责透明
+     *
+     * 普通 QWidget 同时设置 WA_TranslucentBackground 时，样式表里的
+     * background-color 不会生效，只剩文字浮在页面上，看起来像“透明字”。
+     * 这里用带 WA_StyledBackground 的容器绘制底板，顶层窗口保持透明，
+     * 圆角外的区域仍能透出桌面。
+     */
+    auto *outerLayout = new QVBoxLayout(m_hintBar);
+    outerLayout->setContentsMargins(0, 0, 0, 0);
+    outerLayout->setSpacing(0);
+
+    auto *container = new QWidget(m_hintBar);
+    container->setObjectName(QStringLiteral("ScrollHintContainer"));
+    container->setAttribute(Qt::WA_StyledBackground, true);
+    outerLayout->addWidget(container);
+
+    auto *layout = new QHBoxLayout(container);
     layout->setContentsMargins(14, 8, 10, 8);
     layout->setSpacing(12);
 
-    // 标题 / 状态 / 按钮统一固定行高并垂直居中，保证四者处于同一条水平线上
-    constexpr int kHintRowHeight = 26;
+    /**
+     * @brief 行高跟随字体/DPI 缩放
+     *
+     * 全局样式表字体为 10.5pt；固定 26px 在 150%~200% 缩放下会贴边甚至
+     * 裁字。这里显式设置同一字号并按字体度量留出上下留白。
+     */
+    QFont hintFont = m_hintBar->font();
+    hintFont.setPointSizeF(10.5);
+    m_hintBar->setFont(hintFont);
+    const int hintRowHeight = qMax(26, QFontMetrics(hintFont).height() + 10);
 
-    auto *titleLabel = new QLabel(m_hintBar);
+    auto *titleLabel = new QLabel(container);
     titleLabel->setObjectName(QStringLiteral("ScrollHintTitle"));
-    titleLabel->setFixedHeight(kHintRowHeight);
+    titleLabel->setFixedHeight(hintRowHeight);
     titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(titleLabel, 0, Qt::AlignVCenter);
 
-    m_statusLabel = new QLabel(m_hintBar);
+    m_statusLabel = new QLabel(container);
     m_statusLabel->setObjectName(QStringLiteral("ScrollHintStatus"));
     // 固定最小宽度：拼接长度变化时不引起提示条宽度抖动
-    m_statusLabel->setMinimumWidth(180);
-    m_statusLabel->setFixedHeight(kHintRowHeight);
+    m_statusLabel->setMinimumWidth(190);
+    m_statusLabel->setFixedHeight(hintRowHeight);
     m_statusLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(m_statusLabel, 0, Qt::AlignVCenter);
 
-    m_finishBtn = new QPushButton(scrollText("scroll.finish", "Finish"), m_hintBar);
+    m_finishBtn = new QPushButton(scrollText("scroll.finish", "Finish"), container);
     m_finishBtn->setObjectName(QStringLiteral("ScrollHintButton"));
-    m_finishBtn->setFixedHeight(kHintRowHeight);
+    m_finishBtn->setFixedHeight(hintRowHeight);
     // 按钮不抢焦点：Enter/Esc 始终由提示条窗口的 eventFilter 统一处理
     m_finishBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_finishBtn, &QPushButton::clicked, this, &ScrollCaptureSession::finish);
     layout->addWidget(m_finishBtn, 0, Qt::AlignVCenter);
 
-    m_cancelBtn = new QPushButton(scrollText("scroll.cancel", "Cancel"), m_hintBar);
+    m_cancelBtn = new QPushButton(scrollText("scroll.cancel", "Cancel"), container);
     m_cancelBtn->setObjectName(QStringLiteral("ScrollHintButton"));
-    m_cancelBtn->setFixedHeight(kHintRowHeight);
+    m_cancelBtn->setFixedHeight(hintRowHeight);
     m_cancelBtn->setFocusPolicy(Qt::NoFocus);
     connect(m_cancelBtn, &QPushButton::clicked, this, &ScrollCaptureSession::cancel);
     layout->addWidget(m_cancelBtn, 0, Qt::AlignVCenter);
 
-    m_hintBar->setStyleSheet(QStringLiteral(
-        "QWidget#ScrollHintBar { background-color: rgba(28, 28, 32, 235); border-radius: 8px; }"
-        "QLabel#ScrollHintTitle { color: #ffffff; font-weight: bold; padding: 0; margin: 0; }"
-        "QLabel#ScrollHintStatus { color: #c8c8c8; padding: 0; margin: 0; }"
+    /**
+     * @brief 提示条样式：接近实色的深色 HUD
+     *
+     * 容器底板 248/255 不透明，加 1px 亮边与页面内容分离；状态文字由
+     * 灰色提升为高亮半粗体，按钮填充/描边同步增强，避免在浅色或复杂
+     * 页面上看起来像半透明、看不清。
+     */
+    container->setStyleSheet(QStringLiteral(
+        "QWidget#ScrollHintContainer {"
+        "  background-color: rgba(22, 22, 26, 248);"
+        "  border: 1px solid rgba(255, 255, 255, 55);"
+        "  border-radius: 8px; }"
+        "QLabel#ScrollHintTitle {"
+        "  color: #ffffff; font-weight: bold; padding: 0; margin: 0; }"
+        "QLabel#ScrollHintStatus {"
+        "  color: #f2f2f2; font-weight: bold; padding: 0; margin: 0; }"
         "QPushButton#ScrollHintButton {"
-        "  color: #ffffff; background-color: rgba(255, 255, 255, 28);"
-        "  border: 1px solid rgba(255, 255, 255, 60); border-radius: 4px;"
-        "  padding: 0 12px; margin: 0; }"
-        "QPushButton#ScrollHintButton:hover { background-color: rgba(255, 255, 255, 48); }"));
+        "  color: #ffffff; background-color: rgba(255, 255, 255, 48);"
+        "  border: 1px solid rgba(255, 255, 255, 125); border-radius: 5px;"
+        "  padding: 0 14px; margin: 0; font-weight: bold; }"
+        "QPushButton#ScrollHintButton:hover {"
+        "  background-color: rgba(255, 255, 255, 78);"
+        "  border-color: rgba(255, 255, 255, 170); }"));
 
     updateHintText();
     m_hintBar->adjustSize();

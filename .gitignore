@@ -22,6 +22,10 @@ lib/
 .vs/
 *.user
 
+.tmp-hint-preview/
+.tmp-hint-real/
+build-verify
+
 # Compiled binaries and libraries
 *.exe
 *.dll
