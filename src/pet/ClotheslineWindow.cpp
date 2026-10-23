@@ -150,18 +150,21 @@ protected:
     }
 
     /**
-     * @brief 鼠标移出预览：预览消失
+     * @brief 鼠标移出预览：预览消失（右键菜单打开期间除外，保持预览可见）
      * @author chiangyang
      */
     void leaveEvent(QEvent *event) override {
-        hide();
+        if (!m_menuOpen) {
+            hide();
+        }
         QWidget::leaveEvent(event);
     }
 
     /**
      * @brief 右键菜单（参考贴图窗口）：复制/标注/文字识别/翻译
      *
-     * 菜单弹出即隐藏预览；点击菜单项后执行对应功能：
+     * 菜单弹出期间预览保持可见；仅当真正点击菜单项后才隐藏预览并执行对应功能，
+     * 菜单被 Esc/点击空白取消时预览保留：
      * - 复制：图片写剪贴板 / 文本写剪贴板
      * - 标注：用原图创建贴图窗口并直接进入标注模式
      * - 文字识别：异步 OCR 后弹出识别结果对话框
@@ -194,12 +197,14 @@ protected:
         }
         QAction *translateAction = menu.addAction(tm->get("translate.button"));
 
-        hide();  // 菜单弹出即隐藏预览
-
+        // 菜单打开期间预览保持可见；仅选中菜单项后才隐藏预览，取消菜单则保留
+        m_menuOpen = true;
         QAction *chosen = menu.exec(event->globalPos());
+        m_menuOpen = false;
         if (!chosen) {
             return;
         }
+        hide();
 
         if (chosen == copyAction) {
             QClipboard *cb = QGuiApplication::clipboard();
@@ -365,6 +370,7 @@ private:
     qreal m_baseFontPt = 12.0;  ///< 文本基准字号（zoom=1）
     int m_wrapWidth = 460;      ///< 文本换行宽度
     QPoint m_centerGlobal;      ///< 居中基准（晾衣绳窗口中心）
+    bool m_menuOpen = false;    ///< 右键菜单是否打开中（打开期间 leaveEvent 不隐藏预览）
 };
 
 /**
