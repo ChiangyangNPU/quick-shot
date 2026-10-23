@@ -400,9 +400,10 @@ void ClotheslineWindow::updateHoverCursor(const QPoint &pos) {
  */
 void ClotheslineWindow::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
-        // 关闭按钮
+        // 关闭按钮（不立即关闭，等 release 消化本次点击后再关，防止事件穿透到桌面）
         if (closeButtonRect().contains(event->pos())) {
-            close();
+            m_pendingClose = true;
+            event->accept();
             return;
         }
         // 边缘/角落调整区
@@ -471,7 +472,8 @@ void ClotheslineWindow::mouseMoveEvent(QMouseEvent *event) {
 }
 
 /**
- * @brief 鼠标释放：结束拖动/调整
+ * @brief 鼠标释放：结束拖动/调整；若双击请求了关闭则在此真正关闭
+ * @note 双击的释放事件必须由本窗口消化完再关闭，否则残余事件会穿透到桌面
  * @author chiangyang
  */
 void ClotheslineWindow::mouseReleaseEvent(QMouseEvent *event) {
@@ -484,12 +486,20 @@ void ClotheslineWindow::mouseReleaseEvent(QMouseEvent *event) {
             m_dragging = false;
             setCursor(Qt::OpenHandCursor);
         }
+        if (m_pendingClose) {
+            m_pendingClose = false;
+            event->accept();
+            close();
+            return;
+        }
     }
     QWidget::mouseReleaseEvent(event);
 }
 
 /**
  * @brief 鼠标双击：卡片/关闭按钮/调整区以外的空白区域双击隐藏晾衣绳
+ * @note 不立即 close()，仅标记待关闭；立即隐藏窗口会导致本次双击的
+ *       残余鼠标事件被系统派发给下方桌面（事件穿透）
  * @author chiangyang
  */
 void ClotheslineWindow::mouseDoubleClickEvent(QMouseEvent *event) {
@@ -506,7 +516,8 @@ void ClotheslineWindow::mouseDoubleClickEvent(QMouseEvent *event) {
                 return; // 卡片双击不隐藏（单击为复制）
             }
         }
-        close();
+        m_pendingClose = true; // 等本次双击的 release 到达后在 mouseReleaseEvent 中关闭
+        event->accept();
         return;
     }
     QWidget::mouseDoubleClickEvent(event);

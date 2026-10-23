@@ -140,6 +140,7 @@ private:
     QPoint m_resizeStartGlobal;     ///< 调整开始时的全局鼠标坐标
     QRect m_resizeStartGeo;         ///< 调整开始时的窗口全局几何
     bool m_closeHovered = false;    ///< 鼠标悬停在关闭按钮上
+    bool m_pendingClose = false;    ///< 双击空白区域请求关闭（等本次鼠标序列结束后执行，防止事件穿透到桌面）
 };
 
 #endif // CLOTHESLINEWINDOW_H
