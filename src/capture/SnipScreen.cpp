@@ -15,6 +15,7 @@
 #include "../widgets/SettingsWindow.h"
 #include "../utils/Utils.h"
 #include "../history/HistoryManager.h"
+#include "../pet/DesktopPetManager.h"
 #include "../shortcut/AnnotationShortcutController.h"
 #include "../ocr/OcrEngine.h"
 #include "../ocr/OcrAsyncHelper.h"
@@ -561,10 +562,15 @@ void SnipScreen::exit() {
  * @author chiangyang
  */
 void SnipScreen::copy() {
-    auto [pixmap, _] = snip();
+    auto [pixmap, pos] = snip();
 
     // 剪贴板 + 历史记录统一分发
     CaptureSession::publish(pixmap, windowTitle());
+
+    // 桌面宠物投喂动画：截图从选区飞入宠物（宠物未开启时内部直接返回）
+    if (!pixmap.isNull()) {
+        DesktopPetManager::instance()->feed(pixmap, QRect(pos, pixmap.size()));
+    }
 
     exit();
 }
@@ -675,6 +681,9 @@ void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToS
 
     // 剪贴板 + 历史记录统一分发（便于 Alt+P 重复贴图）
     CaptureSession::publish(pixmap, windowTitle());
+
+    // 桌面宠物投喂动画：截图从贴图位置飞入宠物（宠物未开启时内部直接返回）
+    DesktopPetManager::instance()->feed(pixmap, QRect(safePos, windowSize));
 
     // 创建贴图窗口，延迟设置几何和显示
     PinWindow *pinWindow = new PinWindow(pixmap);

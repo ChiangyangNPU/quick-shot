@@ -252,6 +252,18 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/settings/SettingsGeneralTab.h
         src/widgets/settings/SettingsStyleTab.cpp
         src/widgets/settings/SettingsStyleTab.h
+        src/widgets/settings/SettingsPetTab.cpp
+        src/widgets/settings/SettingsPetTab.h
+
+        # 桌面宠物
+        src/pet/DesktopPetManager.cpp
+        src/pet/DesktopPetManager.h
+        src/pet/PetWindow.cpp
+        src/pet/PetWindow.h
+        src/pet/FlyAnimationWidget.cpp
+        src/pet/FlyAnimationWidget.h
+        src/pet/ClotheslineWindow.cpp
+        src/pet/ClotheslineWindow.h
         src/widgets/PrecisionSlider.cpp
         src/widgets/PrecisionSlider.h
         src/widgets/MessageBox.cpp

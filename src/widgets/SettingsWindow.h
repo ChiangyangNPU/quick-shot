@@ -29,6 +29,7 @@
 #include "ElidedLabel.h"
 #include "settings/SettingsAboutTab.h"
 #include "settings/SettingsHistoryTab.h"
+#include "settings/SettingsPetTab.h"
 #include "settings/SettingsTranslateTab.h"
 #include "settings/SettingsShortcutsTab.h"
 #include "settings/SettingsGeneralTab.h"
@@ -322,6 +323,8 @@ private:
 
     // History（选项卡内容内聚在 SettingsHistoryTab）
     SettingsHistoryTab *m_historyTabWidget; ///< 历史记录选项卡
+    // Desktop Pet（选项卡内容内聚在 SettingsPetTab）
+    SettingsPetTab *m_petTabWidget;         ///< 桌面宠物选项卡
     SettingsShortcutsTab *m_shortcutsTabWidget; ///< 快捷键选项卡
 
     // About（选项卡内容内聚在 SettingsAboutTab：应用信息 + 软件更新）
@@ -377,6 +380,12 @@ private:
      * @author chiangyang
      */
     void setupHistoryTab();
+
+    /**
+     * @brief 设置桌面宠物选项卡
+     * @author chiangyang
+     */
+    void setupPetTab();
 
     /**
      * @brief 根据当前屏幕逻辑 DPI 重新计算并应用窗口宽度

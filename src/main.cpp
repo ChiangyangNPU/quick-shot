@@ -19,6 +19,7 @@
 #include "widgets/SettingsWindow.h"
 #include "history/HistoryManager.h"
 #include "history/ClipboardMonitor.h"
+#include "pet/DesktopPetManager.h"
 #include "widgets/HistoryWindow.h"
 #include "ocr/OcrEngine.h"
 #include "../log/Logger.h"
@@ -165,6 +166,9 @@ int main(int argc, char *argv[]) {
 
     // 初始化历史记录管理器
     HistoryManager::instance();
+
+    // 初始化桌面宠物（配置开启时显示在桌面上）
+    DesktopPetManager::instance()->initFromConfig();
 
     // 启动剪贴板监控
     ClipboardMonitor *clipboardMonitor = new ClipboardMonitor();

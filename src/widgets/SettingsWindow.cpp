@@ -234,6 +234,7 @@ void SettingsWindow::setupUi() {
     setupStyleTab();
     setupTranslateTab();
     setupHistoryTab();
+    setupPetTab();
     setupAboutTab();
     
     mainLayout->addWidget(tabWidget);
@@ -380,7 +381,8 @@ void SettingsWindow::retranslateUi() {
     tabWidget->setTabText(2, tm->get("tabStyle", "Style"));
     tabWidget->setTabText(3, tm->get("tabTranslate", "Translate"));
     tabWidget->setTabText(4, tm->get("history.tabName", "History"));
-    tabWidget->setTabText(5, tm->get("tabAbout", "About"));
+    tabWidget->setTabText(5, tm->get("pet.tabName", "Desktop Pet"));
+    tabWidget->setTabText(6, tm->get("tabAbout", "About"));
 
     // About 选项卡文案（应用信息为静态；更新组标题/按钮/状态文字由选项卡自行翻译）
     m_aboutTab->retranslateUi();
@@ -400,6 +402,9 @@ void SettingsWindow::retranslateUi() {
 
     // History 历史记录选项卡文案（含保留天数下拉框重建与统计刷新）
     m_historyTabWidget->retranslateUi();
+
+    // Desktop Pet 桌面宠物选项卡文案
+    m_petTabWidget->retranslateUi();
 }
 
 
@@ -579,6 +584,15 @@ void SettingsWindow::setupHistoryTab() {
 }
 
 /**
+ * @brief 设置桌面宠物选项卡
+ * @author chiangyang
+ */
+void SettingsWindow::setupPetTab() {
+    m_petTabWidget = new SettingsPetTab(this);
+    tabWidget->addTab(m_petTabWidget, TranslationManager::instance()->get("pet.tabName", "Desktop Pet"));
+}
+
+/**
  * @brief 刷新所有 QGroupBox 的背景样式（绑定到 StyleManager 的 s_tabWidgetBgColor）
  *
  * 各选项卡改色/重置路径统一调用，
@@ -603,6 +617,9 @@ void SettingsWindow::updateAllGroupBoxStyles() {
 
     // History 历史记录选项卡（样式刷新内聚在 SettingsHistoryTab）
     if (m_historyTabWidget) m_historyTabWidget->refreshStyles();
+
+    // Desktop Pet 桌面宠物选项卡（样式刷新内聚在 SettingsPetTab）
+    if (m_petTabWidget) m_petTabWidget->refreshStyles();
 
     // About 关于选项卡（GroupBox 样式刷新内聚在 SettingsAboutTab）
     if (m_aboutTab) m_aboutTab->refreshStyles();
@@ -637,6 +654,9 @@ void SettingsWindow::updateAllTabsPalette(const QColor &color) {
     }
     if (m_historyTabWidget) {
         m_historyTabWidget->applyTabBackground(color);
+    }
+    if (m_petTabWidget) {
+        m_petTabWidget->applyTabBackground(color);
     }
     // 快捷键选项卡（背景刷新内聚在 SettingsShortcutsTab）
     if (m_shortcutsTabWidget) m_shortcutsTabWidget->applyTabBackground(color);

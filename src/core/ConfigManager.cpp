@@ -142,6 +142,9 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         // History
         { "history/thumbnailSize", 200 },
 
+        // Desktop Pet
+        { "pet/enabled", false },
+
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },
 
