@@ -19,6 +19,7 @@ class PetWindow : public QWidget {
     Q_OBJECT
     Q_PROPERTY(qreal mouthOpen READ mouthOpen WRITE setMouthOpen)
     Q_PROPERTY(qreal chewScale READ chewScale WRITE setChewScale)
+    Q_PROPERTY(qreal starProgress READ starProgress WRITE setStarProgress)
 
 public:
     /**
@@ -42,7 +43,8 @@ public:
     void openMouth();
 
     /**
-     * @brief 咀嚼吞下（飞行动画到达时调用）：闭嘴 + 身体压扁回弹
+     * @brief 咀嚼吞下（飞行动画到达时调用）：闭嘴 + 多轮咀嚼挤压回弹，
+     *        完成后左眼闪一颗星星作为奖励
      * @author chiangyang
      */
     void chew();
@@ -59,6 +61,9 @@ public:
 
     qreal chewScale() const { return m_chewScale; }
     void setChewScale(qreal v);
+
+    qreal starProgress() const { return m_starProgress; }
+    void setStarProgress(qreal v);
 
 signals:
     /**
@@ -84,13 +89,20 @@ protected:
 
 private:
     /**
-     * @brief 调度下一次眨眼（随机 2.4~5 秒）
+     * @brief 调度下一次眨眼（随机 2.4~5 秒；星星闪烁期间自动跳过）
      * @author chiangyang
      */
     void scheduleBlink();
 
+    /**
+     * @brief 左眼星星闪烁动画（咀嚼完成后触发，闪完恢复眨眼状态）
+     * @author chiangyang
+     */
+    void sparkleStar();
+
     qreal m_mouthOpen = 0.0;        ///< 嘴张开程度 [0,1]，驱动 paintEvent 嘴形
     qreal m_chewScale = 1.0;        ///< 咀嚼挤压系数（垂直方向），1 为常态
+    qreal m_starProgress = 0.0;     ///< 左眼星星闪烁进度 [0,1]，0 为无星星
     bool m_eyesClosed = false;      ///< 眨眼瞬间为 true
 
     bool m_pressing = false;        ///< 左键按下中

@@ -7,6 +7,7 @@
 #include <QSequentialAnimationGroup>
 #include <QTimer>
 #include <QRandomGenerator>
+#include <QtMath>
 
 namespace {
 // 身体中心（咀嚼挤压变换的锚点）
@@ -59,6 +60,15 @@ void PetWindow::setChewScale(qreal v) {
 }
 
 /**
+ * @brief 设置星星闪烁进度
+ * @author chiangyang
+ */
+void PetWindow::setStarProgress(qreal v) {
+    m_starProgress = v;
+    update();
+}
+
+/**
  * @brief 张嘴等待食物
  * @author chiangyang
  */
@@ -72,36 +82,65 @@ void PetWindow::openMouth() {
 }
 
 /**
- * @brief 咀嚼吞下：闭嘴 + 身体压扁回弹
+ * @brief 咀嚼吞下：闭嘴 + 三轮咀嚼挤压回弹，完成后左眼闪星星
  * @author chiangyang
  */
 void PetWindow::chew() {
+    // 闭嘴
     QPropertyAnimation *closeMouth = new QPropertyAnimation(this, "mouthOpen");
-    closeMouth->setDuration(120);
+    closeMouth->setDuration(150);
     closeMouth->setStartValue(m_mouthOpen);
     closeMouth->setEndValue(0.0);
 
-    // 身体挤压回弹：1.0 → 0.82 → 1.08 → 1.0
-    QPropertyAnimation *squish = new QPropertyAnimation(this, "chewScale");
-    squish->setDuration(360);
-    squish->setKeyValueAt(0.0, 1.0);
-    squish->setKeyValueAt(0.35, 0.82);
-    squish->setKeyValueAt(0.7, 1.08);
-    squish->setKeyValueAt(1.0, 1.0);
+    // 三轮咀嚼挤压回弹（每轮 320ms），拉长咀嚼过程更有满足感
+    auto *chewCycles = new QSequentialAnimationGroup;
+    for (int i = 0; i < 3; ++i) {
+        QPropertyAnimation *cycle = new QPropertyAnimation(this, "chewScale");
+        cycle->setDuration(320);
+        cycle->setKeyValueAt(0.0, 1.0);
+        cycle->setKeyValueAt(0.4, 0.84);
+        cycle->setKeyValueAt(0.75, 1.06);
+        cycle->setKeyValueAt(1.0, 1.0);
+        chewCycles->addAnimation(cycle);
+    }
 
     QSequentialAnimationGroup *group = new QSequentialAnimationGroup(this);
     group->addAnimation(closeMouth);
-    group->addAnimation(squish);
+    group->addAnimation(chewCycles);
+    // 咀嚼完成：左眼闪一颗星星
+    connect(group, &QSequentialAnimationGroup::finished, this, &PetWindow::sparkleStar);
     group->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
 /**
- * @brief 调度下一次眨眼
+ * @brief 左眼星星闪烁动画：星星从小到大旋转闪现再消失（约 800ms）
+ * @author chiangyang
+ */
+void PetWindow::sparkleStar() {
+    QPropertyAnimation *anim = new QPropertyAnimation(this, "starProgress", this);
+    anim->setDuration(800);
+    anim->setStartValue(0.01); // 0 表示无星星，从非 0 开始
+    anim->setEndValue(1.0);
+    connect(anim, &QPropertyAnimation::finished, this, [this]() {
+        // 闪完复位，恢复正常眨眼状态
+        m_starProgress = 0.0;
+        update();
+    });
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+/**
+ * @brief 调度下一次眨眼（星星闪烁期间自动跳过）
  * @author chiangyang
  */
 void PetWindow::scheduleBlink() {
     const int interval = 2400 + QRandomGenerator::global()->bounded(2600);
     QTimer::singleShot(interval, this, [this]() {
+        if (m_starProgress > 0.0) {
+            // 星星闪烁中，跳过本次眨眼
+            scheduleBlink();
+            return;
+        }
         m_eyesClosed = true;
         update();
         QTimer::singleShot(160, this, [this]() {
@@ -169,19 +208,46 @@ void PetWindow::paintEvent(QPaintEvent *event) {
     p.drawEllipse(QRectF(26, 82, 16, 9));
     p.drawEllipse(QRectF(54, 82, 16, 9));
 
-    // 眼睛（眨眼时画横线）
+    // 眼睛（眨眼时画横线；左眼在星星闪烁期间画星星）
     p.setPen(QPen(QColor(40, 32, 24), 2, Qt::SolidLine, Qt::RoundCap));
     p.setBrush(QColor(40, 32, 24));
     if (m_eyesClosed) {
         p.drawLine(QPointF(29, 46), QPointF(39, 46));
         p.drawLine(QPointF(57, 46), QPointF(67, 46));
     } else {
-        p.drawEllipse(QPointF(34, 46), 5, 5);
+        // 左眼：星星闪烁期间替换为金色四角星
+        if (m_starProgress > 0.0) {
+            const qreal t = m_starProgress;
+            // 随进度从 0 长到最大再缩回 0，并旋转 120°
+            const qreal scale = qSin(t * M_PI);
+            p.save();
+            p.translate(34, 46);
+            p.rotate(t * 120.0);
+            p.scale(scale, scale);
+            QPainterPath star;
+            constexpr qreal kOuter = 9.0, kInner = 2.8;
+            for (int i = 0; i < 8; ++i) {
+                const qreal radius = (i % 2 == 0) ? kOuter : kInner;
+                const qreal angle = M_PI / 4 * i - M_PI / 2;
+                const QPointF pt(radius * qCos(angle), radius * qSin(angle));
+                if (i == 0) star.moveTo(pt); else star.lineTo(pt);
+            }
+            star.closeSubpath();
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(255, 215, 64));
+            p.drawPath(star);
+            p.restore();
+        } else {
+            p.drawEllipse(QPointF(34, 46), 5, 5);
+        }
+        p.setBrush(QColor(40, 32, 24));
         p.drawEllipse(QPointF(62, 46), 5, 5);
         // 眼睛高光
         p.setPen(Qt::NoPen);
         p.setBrush(Qt::white);
-        p.drawEllipse(QPointF(35.5, 44.5), 1.6, 1.6);
+        if (m_starProgress <= 0.0) {
+            p.drawEllipse(QPointF(35.5, 44.5), 1.6, 1.6);
+        }
         p.drawEllipse(QPointF(63.5, 44.5), 1.6, 1.6);
     }
 
