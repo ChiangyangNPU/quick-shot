@@ -180,10 +180,11 @@ public:
     static QColor toolbarIconTint();
 
     /**
-     * @brief 按当前主题切换窗口系统标题栏浅色/深色（Windows DWM）
+     * @brief 按当前主题切换窗口系统标题栏浅色/深色
      * @param windowId 目标窗口句柄（QWidget::winId()）
-     * @note 仅 Windows 生效（DwmSetWindowAttribute DWMWA_USE_IMMERSIVE_DARK_MODE），
-     *       其他平台为空实现；窗口创建后与主题切换时调用
+     * @note Windows 经 DwmSetWindowAttribute DWMWA_USE_IMMERSIVE_DARK_MODE 实现，
+     *       macOS 经 NSWindow.appearance（DarkAqua/Aqua）实现，其他平台为空实现；
+     *       窗口创建后与主题切换时调用
      * @author chiangyang
      */
     static void applyDarkTitleBar(WId windowId);

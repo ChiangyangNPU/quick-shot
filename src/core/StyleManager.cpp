@@ -25,6 +25,11 @@
 #include <dwmapi.h>
 #endif
 
+#ifdef Q_OS_MACOS
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
+
 // .cpp 级循环依赖：ConfigManager.cpp 会 include StyleManager.h（用 DEFAULT_* 播种），
 // 此文件 include ConfigManager.h（initFromConfig 用 value() 读取持久化）。
 // 头文件间仅前向声明 class ConfigManager，见 StyleManager.h 顶部注释。
@@ -362,6 +367,29 @@ void StyleManager::applyDarkTitleBar(WId windowId) {
     if (FAILED(DwmSetWindowAttribute(hwnd, 20, &dark, sizeof(dark)))) {
         DwmSetWindowAttribute(hwnd, 19, &dark, sizeof(dark));
     }
+#elif defined(Q_OS_MACOS)
+    if (!windowId) {
+        return;
+    }
+    // QWidget::winId() 在 macOS 上是 NSView*，取其所属 NSWindow
+    id nsView = reinterpret_cast<id>(windowId);
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) {
+        return;
+    }
+    const bool dark = (themeMode() == ThemeMode::Dark);
+    const char *appearanceName = dark ? "NSAppearanceNameDarkAqua" : "NSAppearanceNameAqua";
+    // NSString *name = [NSString stringWithUTF8String:appearanceName]
+    id name = ((id (*)(id, SEL, const char *))objc_msgSend)(
+        (id)objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), appearanceName);
+    // NSAppearance *appearance = [NSAppearance appearanceNamed:name]
+    id appearance = ((id (*)(id, SEL, id))objc_msgSend)(
+        (id)objc_getClass("NSAppearance"), sel_registerName("appearanceNamed:"), name);
+    if (!appearance) {
+        return;
+    }
+    // [nsWindow setAppearance:appearance]，窗口外观（含标题栏）随主题切换
+    ((void (*)(id, SEL, id))objc_msgSend)(nsWindow, sel_registerName("setAppearance:"), appearance);
 #else
     Q_UNUSED(windowId);
 #endif
