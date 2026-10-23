@@ -16,6 +16,7 @@ class ClotheslineWindow;
  * - 开关状态持久化（pet/enabled）与启动时恢复
  * - 宠物窗口位置持久化（pet/posX、pet/posY）
  * - 截图复制/贴图后的"投喂"入口：触发飞行动画与宠物进食动作
+ * - 文字复制后的"投喂"入口：文字渲染成小卡片从鼠标位置飞入宠物
  * - 宠物点击后晾衣绳历史窗口的显隐切换
  * @author chiangyang
  */
@@ -61,6 +62,15 @@ public:
      * @author chiangyang
      */
     void feed(const QPixmap &pixmap, const QRect &sourceGlobalRect);
+
+    /**
+     * @brief 投喂宠物文字：文字渲染成小卡片后从鼠标位置飞入宠物并被吃掉
+     *
+     * 宠物未开启或文字为空时直接返回，调用方无需判断。
+     * @param text 复制的文字内容
+     * @author chiangyang
+     */
+    void feedText(const QString &text);
 
     /**
      * @brief 将宠物移回默认位置（屏幕右下角）并清除持久化位置
@@ -109,6 +119,14 @@ private:
      * @author chiangyang
      */
     void toggleClothesline();
+
+    /**
+     * @brief 将文字渲染成圆角小卡片图像（文字投喂的飞行内容）
+     * @param text 文字内容
+     * @return 渲染的卡片图像
+     * @author chiangyang
+     */
+    QPixmap renderTextCard(const QString &text) const;
 
     static DesktopPetManager* s_instance;   ///< 单例实例
     bool m_enabled = false;                 ///< 是否开启

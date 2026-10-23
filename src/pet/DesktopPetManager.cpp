@@ -3,10 +3,15 @@
 #include "FlyAnimationWidget.h"
 #include "ClotheslineWindow.h"
 #include "../core/ConfigManager.h"
+#include "../history/HistoryManager.h"
+#include "../history/HistoryItem.h"
 #include "../log/Logger.h"
 
 #include <QGuiApplication>
 #include <QScreen>
+#include <QCursor>
+#include <QPainter>
+#include <QFontMetrics>
 
 DesktopPetManager* DesktopPetManager::s_instance = nullptr;
 
@@ -39,6 +44,15 @@ void DesktopPetManager::initFromConfig() {
     if (enabled) {
         setEnabled(true);
     }
+
+    // 文字复制投喂：新增文本历史记录时让宠物吃掉（图片由截图/贴图/快照流程显式投喂）
+    connect(HistoryManager::instance(), &HistoryManager::itemAdded,
+            this, [this](const HistoryItem &item) {
+        if (!item.isScreenshot()) {
+            feedText(item.content);
+        }
+    });
+
     LOG_INFO(QString("DesktopPetManager: initFromConfig, enabled=%1").arg(enabled));
 }
 
@@ -135,6 +149,50 @@ void DesktopPetManager::feed(const QPixmap &pixmap, const QRect &sourceGlobalRec
                                                      m_petWindow->mouthCenterGlobal());
     connect(fly, &FlyAnimationWidget::arrived, m_petWindow, &PetWindow::chew);
     fly->start();
+}
+
+/**
+ * @brief 投喂宠物文字：文字渲染成小卡片后从鼠标位置飞入宠物并被吃掉
+ * @author chiangyang
+ */
+void DesktopPetManager::feedText(const QString &text) {
+    if (!m_enabled || !m_petWindow || text.isEmpty()) {
+        return;
+    }
+
+    const QPixmap card = renderTextCard(text);
+    if (card.isNull()) {
+        return;
+    }
+    // 以鼠标位置为动画起点（复制动作发生时光标即"食物来源"）
+    const QPoint cursor = QCursor::pos();
+    const QRect sourceRect(cursor - QPoint(card.width() / 2, card.height() / 2), card.size());
+    feed(card, sourceRect);
+}
+
+/**
+ * @brief 将文字渲染成圆角小卡片图像
+ * @author chiangyang
+ */
+QPixmap DesktopPetManager::renderTextCard(const QString &text) const {
+    const int kMaxW = 240;  // 文字换行宽度
+    const int kMaxH = 160;  // 卡片内容最大高度
+    QFontMetrics fm(QFont{});
+    QRect br = fm.boundingRect(QRect(0, 0, kMaxW, 10000), Qt::TextWordWrap, text);
+    br.setHeight(qMin(br.height(), kMaxH));
+    const QSize size = br.size() + QSize(20, 12);
+
+    QPixmap pix(size);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(QColor(0, 0, 0, 40), 1));
+    p.setBrush(Qt::white);
+    p.drawRoundedRect(pix.rect().adjusted(0, 0, -1, -1), 8, 8);
+    p.setPen(QColor(60, 60, 60));
+    p.drawText(pix.rect().adjusted(10, 6, -10, -6),
+               Qt::AlignHCenter | Qt::AlignVCenter | Qt::TextWordWrap, text);
+    return pix;
 }
 
 /**

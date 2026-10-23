@@ -19,6 +19,7 @@
 #include <QFontMetrics>
 #include <QCursor>
 #include <QWheelEvent>
+#include <QWindow>
 #include <QtMath>
 
 namespace {
@@ -845,6 +846,23 @@ bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
         const bool inPreview = m_preview && m_preview->isVisible()
                                && m_preview->geometry().contains(globalPos);
         if (!geometry().contains(globalPos) && !inPet && !inPreview) {
+            // 截图/录屏覆盖层上的交互不关闭晾衣绳：复制/贴图/快照后晾衣绳保持打开并自动刷新
+            // 注意：顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow 句柄），
+            // 需经 QWidget::find 映射回 widget 再判断顶层窗口类型
+            QWidget *w = qobject_cast<QWidget *>(watched);
+            if (!w) {
+                if (auto *win = qobject_cast<QWindow *>(watched)) {
+                    w = QWidget::find(win->winId());
+                }
+            }
+            QWidget *top = w ? w->window() : nullptr;
+            if (top && (top->inherits("SnipScreen") || top->inherits("RecordingControlWindow"))) {
+                return QWidget::eventFilter(watched, event);
+            }
+            // 诊断日志：记录触发关闭的事件来源（定位晾衣绳被误关闭的根因）
+            LOG_INFO(QString("ClotheslineWindow: close by outside press, watched=%1, top=%2")
+                     .arg(watched ? watched->metaObject()->className() : "null")
+                     .arg(top ? top->metaObject()->className() : "null"));
             close();
         }
     }
@@ -856,6 +874,8 @@ bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
  * @author chiangyang
  */
 void ClotheslineWindow::closeEvent(QCloseEvent *event) {
+    // 诊断日志：区分用户关闭（ spontaneous ）与程序内 close()（定位晾衣绳被误关闭的根因）
+    LOG_INFO(QString("ClotheslineWindow: closeEvent, spontaneous=%1").arg(event->spontaneous()));
     qApp->removeEventFilter(this);
     m_animTimer->stop();
     hidePreview();
