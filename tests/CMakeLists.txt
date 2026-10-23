@@ -13,20 +13,26 @@ set(QS_TEST_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/TranslationManager.cpp
 )
 
+# QS_TEST_CORE_SOURCES 中 StyleManager.cpp 的 Windows 分支调用
+# DwmSetWindowAttribute，凡引用该闭包的测试目标在 Windows 上均需链接 dwmapi
+if (WIN32)
+    set(QS_TEST_PLATFORM_LIBS dwmapi)
+endif()
+
 # ---- UpdateManager：版本比较与 release API 解析 ----
 add_executable(UpdateManagerVersionTest UpdateManagerVersionTest.cpp
     ${CMAKE_SOURCE_DIR}/src/update/UpdateManager.cpp
     ${QS_TEST_CORE_SOURCES})
 target_include_directories(UpdateManagerVersionTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(UpdateManagerVersionTest PRIVATE
-    Qt6::Test Qt6::Core Qt6::Network Qt6::Widgets Qt6::Svg)
+    Qt6::Test Qt6::Core Qt6::Network Qt6::Widgets Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 add_test(NAME UpdateManagerVersionTest COMMAND UpdateManagerVersionTest)
 
 # ---- StyleManager：颜色表完整性与存取回环 ----
 add_executable(StyleManagerTest StyleManagerTest.cpp ${QS_TEST_CORE_SOURCES})
 target_include_directories(StyleManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(StyleManagerTest PRIVATE
-    Qt6::Test Qt6::Core Qt6::Widgets Qt6::Svg)
+    Qt6::Test Qt6::Core Qt6::Widgets Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 add_test(NAME StyleManagerTest COMMAND StyleManagerTest)
 
 # ---- TranslationManager：翻译键回退行为 ----
@@ -35,7 +41,7 @@ add_executable(TranslationManagerTest TranslationManagerTest.cpp
     ${QS_TEST_CORE_SOURCES})
 target_include_directories(TranslationManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(TranslationManagerTest PRIVATE
-    Qt6::Test Qt6::Core Qt6::Widgets Qt6::Svg)
+    Qt6::Test Qt6::Core Qt6::Widgets Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 add_test(NAME TranslationManagerTest COMMAND TranslationManagerTest)
 
 # ---- OcrDetPostprocess：检测后处理（纯计算，无 GUI 依赖）----
@@ -80,7 +86,7 @@ add_executable(HistoryManagerTest HistoryManagerTest.cpp
     ${QS_TEST_CORE_SOURCES})
 target_include_directories(HistoryManagerTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(HistoryManagerTest PRIVATE
-    Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg)
+    Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Sql Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 add_test(NAME HistoryManagerTest COMMAND HistoryManagerTest)
 
 # ---- Resizer：选区几何（header-only 纯逻辑，QTEST_MAIN 需 QApplication 跑 QCursor）----
@@ -94,7 +100,7 @@ add_executable(SecretStoreTest SecretStoreTest.cpp
     ${CMAKE_SOURCE_DIR}/src/core/SecretStore.cpp
     ${QS_TEST_CORE_SOURCES})
 target_include_directories(SecretStoreTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(SecretStoreTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg)
+target_link_libraries(SecretStoreTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 if (APPLE)
     target_link_libraries(SecretStoreTest PRIVATE "-framework Security")   # SecItemAdd/CopyMatching
 elseif (WIN32)
