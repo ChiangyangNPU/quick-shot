@@ -486,6 +486,30 @@ void ClotheslineWindow::mouseReleaseEvent(QMouseEvent *event) {
 }
 
 /**
+ * @brief 鼠标双击：卡片/关闭按钮/调整区以外的空白区域双击隐藏晾衣绳
+ * @author chiangyang
+ */
+void ClotheslineWindow::mouseDoubleClickEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        const QPoint pos = event->pos();
+        if (closeButtonRect().contains(pos)) {
+            return; // 双击关闭按钮交给单击逻辑处理
+        }
+        if (hitTestResize(pos) != ResizeNone) {
+            return; // 调整区双击不隐藏，避免误触
+        }
+        for (const Card &c : m_cards) {
+            if (c.rect.contains(pos)) {
+                return; // 卡片双击不隐藏（单击为复制）
+            }
+        }
+        close();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
+}
+
+/**
  * @brief 鼠标离开：复位关闭按钮悬停态与光标
  * @author chiangyang
  */

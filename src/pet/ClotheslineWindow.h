@@ -13,8 +13,8 @@
  * 往下 1/4 高度处），绳上挂着最近的截图与剪贴板文本（数据来源 HistoryManager），
  * 卡片带入场下落与轻微摆动动画。
  * - 拖动空白区域可移动窗口位置；单击卡片：把对应截图/文本重新复制到系统剪贴板
- * - 左上角/右上角/左下角/右下角与上下边界可拖拽调整窗口大小；右上角 × 按钮关闭
- * - 关闭：× 按钮、Esc、再次点击宠物、点击窗口外
+ * - 双击空白区域：隐藏晾衣绳；左上角/右上角/左下角/右下角与上下边界可拖拽调整窗口大小；右上角 × 按钮关闭
+ * - 关闭：× 按钮、双击空白、Esc、再次点击宠物、点击窗口外
  * - 历史增删时实时刷新（刷新时保留用户拖动后的位置）
  * @author chiangyang
  */
@@ -39,6 +39,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void leaveEvent(QEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
