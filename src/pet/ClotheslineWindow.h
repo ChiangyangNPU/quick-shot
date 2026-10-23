@@ -13,7 +13,8 @@
  * 往下 1/4 高度处），绳上挂着最近的截图与剪贴板文本（数据来源 HistoryManager），
  * 卡片带入场下落与轻微摆动动画。
  * - 拖动空白区域可移动窗口位置；单击卡片：把对应截图/文本重新复制到系统剪贴板
- * - 关闭：Esc、再次点击宠物、点击窗口外
+ * - 左上角/右上角/左下角/右下角与上下边界可拖拽调整窗口大小；右上角 × 按钮关闭
+ * - 关闭：× 按钮、Esc、再次点击宠物、点击窗口外
  * - 历史增删时实时刷新（刷新时保留用户拖动后的位置）
  * @author chiangyang
  */
@@ -38,6 +39,8 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
@@ -83,6 +86,47 @@ private:
      */
     void activateCard(int index);
 
+    /**
+     * @brief 重建卡片布局（锚点由绳子形状决定，依赖当前窗口宽度）
+     * @author chiangyang
+     */
+    void layoutCards();
+
+    /**
+     * @brief 窗口边缘调整模式
+     */
+    enum ResizeMode {
+        ResizeNone = 0,   ///< 非调整状态
+        ResizeTopLeft,    ///< 左上角
+        ResizeTopRight,   ///< 右上角
+        ResizeBottomLeft, ///< 左下角
+        ResizeBottomRight,///< 右下角
+        ResizeTop,        ///< 上边界
+        ResizeBottom      ///< 下边界
+    };
+
+    /**
+     * @brief 命中检测：判断 pos 落在哪个边缘/角落调整区
+     * @param pos 窗口局部坐标
+     * @return 调整模式，不在调整区时返回 ResizeNone
+     * @author chiangyang
+     */
+    ResizeMode hitTestResize(const QPoint &pos) const;
+
+    /**
+     * @brief 右上角关闭按钮（×）的矩形区域
+     * @return 窗口局部坐标矩形
+     * @author chiangyang
+     */
+    QRect closeButtonRect() const;
+
+    /**
+     * @brief 更新悬停光标（调整区/卡片/空白区域各自的光标形状）
+     * @param pos 窗口局部坐标
+     * @author chiangyang
+     */
+    void updateHoverCursor(const QPoint &pos);
+
     QList<Card> m_cards;            ///< 卡片列表
     QTimer *m_animTimer = nullptr;  ///< 摆动/入场动画定时器
     qreal m_phase = 0.0;            ///< 摆动相位
@@ -91,6 +135,10 @@ private:
     QElapsedTimer m_bounceTimer;    ///< 弹跳开始时间
     bool m_dragging = false;        ///< 窗口拖动中
     QPoint m_dragOffset;            ///< 按下点相对窗口左上角的偏移
+    ResizeMode m_resizeMode = ResizeNone; ///< 当前进行中的边缘调整模式
+    QPoint m_resizeStartGlobal;     ///< 调整开始时的全局鼠标坐标
+    QRect m_resizeStartGeo;         ///< 调整开始时的窗口全局几何
+    bool m_closeHovered = false;    ///< 鼠标悬停在关闭按钮上
 };
 
 #endif // CLOTHESLINEWINDOW_H
