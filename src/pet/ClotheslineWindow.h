@@ -6,16 +6,15 @@
 #include <QElapsedTimer>
 #include <QList>
 
-class PetWindow;
-
 /**
  * @brief 晾衣绳历史窗口
  *
- * 点击桌面宠物后弹出：一条悬链线晾衣绳上挂着最近的截图与剪贴板文本
- * （数据来源 HistoryManager），卡片带入场下落与轻微摆动动画。
- * - 单击卡片：把对应截图/文本重新复制到系统剪贴板，并弹跳反馈
+ * 点击桌面宠物后弹出：一条铺满主屏幕宽度的悬链线晾衣绳（默认位于屏幕顶部
+ * 往下 1/4 高度处），绳上挂着最近的截图与剪贴板文本（数据来源 HistoryManager），
+ * 卡片带入场下落与轻微摆动动画。
+ * - 拖动空白区域可移动窗口位置；单击卡片：把对应截图/文本重新复制到系统剪贴板
  * - 关闭：Esc、再次点击宠物、点击窗口外
- * - 历史增删时实时刷新
+ * - 历史增删时实时刷新（刷新时保留用户拖动后的位置）
  * @author chiangyang
  */
 class ClotheslineWindow : public QWidget {
@@ -29,15 +28,16 @@ public:
     explicit ClotheslineWindow(QWidget *parent = nullptr);
 
     /**
-     * @brief 在宠物附近显示（优先宠物上方，空间不足则下方）
-     * @param pet 宠物窗口
+     * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/4 高度处）
      * @author chiangyang
      */
-    void showNear(PetWindow *pet);
+    void showFullWidth();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
     void keyPressEvent(QKeyEvent *event) override;
     bool eventFilter(QObject *watched, QEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
@@ -89,6 +89,8 @@ private:
     QElapsedTimer m_showElapsed;    ///< 显示至今的时间（入场动画用）
     int m_bounceIndex = -1;         ///< 正在弹跳反馈的卡片下标
     QElapsedTimer m_bounceTimer;    ///< 弹跳开始时间
+    bool m_dragging = false;        ///< 窗口拖动中
+    QPoint m_dragOffset;            ///< 按下点相对窗口左上角的偏移
 };
 
 #endif // CLOTHESLINEWINDOW_H

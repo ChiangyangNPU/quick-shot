@@ -152,7 +152,7 @@ void DesktopPetManager::toggleClothesline() {
         return;
     }
     m_clothesline = new ClotheslineWindow();
-    m_clothesline->showNear(m_petWindow);
+    m_clothesline->showFullWidth();
 }
 
 /**

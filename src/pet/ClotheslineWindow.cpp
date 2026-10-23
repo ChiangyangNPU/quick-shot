@@ -25,7 +25,6 @@ constexpr int kMaxCards = 12;
 constexpr int kCardW = 104;
 constexpr int kCardH = 96;
 constexpr int kCardGap = 16;
-constexpr int kMarginX = 24;
 // 绳子与窗口
 constexpr int kRopeY = 30;
 constexpr int kRopeSag = 16;    // 悬垂深度
@@ -59,25 +58,11 @@ ClotheslineWindow::ClotheslineWindow(QWidget *parent)
 }
 
 /**
- * @brief 在宠物附近显示
+ * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/4 高度处）
  * @author chiangyang
  */
-void ClotheslineWindow::showNear(PetWindow *pet) {
+void ClotheslineWindow::showFullWidth() {
     reload();
-
-    const QRect petGeo = pet->geometry();
-    QScreen *screen = QGuiApplication::screenAt(petGeo.center());
-    const QRect available = screen ? screen->availableGeometry()
-                                   : QGuiApplication::primaryScreen()->availableGeometry();
-
-    // 优先宠物上方，上方空间不足则放到下方；水平居中于宠物并夹取到屏幕内
-    int x = petGeo.center().x() - width() / 2;
-    x = qBound(available.left() + 8, x, available.right() - width() - 8);
-    int y = petGeo.top() - kWindowH - 12;
-    if (y < available.top()) {
-        y = petGeo.bottom() + 12;
-    }
-    move(x, y);
 
     show();
     raise();
@@ -124,15 +109,13 @@ void ClotheslineWindow::reload() {
         m_cards.append(c);
     }
 
-    // 宽度随卡片数量调整（空历史给一张提示卡的宽度），先定尺寸再布局锚点
-    const int n = qMax(1, m_cards.size());
-    int w = kMarginX * 2 + n * kCardW + (n - 1) * kCardGap;
-    QScreen *screen = QGuiApplication::screenAt(geometry().center());
-    if (!screen) screen = QGuiApplication::primaryScreen();
-    if (screen) {
-        w = qMin(w, int(screen->availableGeometry().width() * 0.92));
+    // 宽度铺满主屏幕，位置：顶部往下 1/4 高度处（靠屏幕上边界）
+    QScreen *screen = QGuiApplication::primaryScreen();
+    const QRect screenGeo = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
+    setFixedSize(screenGeo.width(), kWindowH);
+    if (!isVisible()) {
+        move(screenGeo.left(), screenGeo.top() + screenGeo.height() / 4);
     }
-    setFixedSize(w, kWindowH);
 
     // 重建卡片布局（锚点由绳子形状决定）
     const int cardCount = m_cards.size();
@@ -313,7 +296,7 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
 }
 
 /**
- * @brief 鼠标按下：命中卡片则复制
+ * @brief 鼠标按下：命中卡片则复制；命中空白区域则准备拖动窗口
  * @author chiangyang
  */
 void ClotheslineWindow::mousePressEvent(QMouseEvent *event) {
@@ -324,8 +307,45 @@ void ClotheslineWindow::mousePressEvent(QMouseEvent *event) {
                 return;
             }
         }
+        // 空白区域：进入拖动
+        m_dragging = true;
+        m_dragOffset = event->pos();
+        setCursor(Qt::ClosedHandCursor);
     }
     QWidget::mousePressEvent(event);
+}
+
+/**
+ * @brief 鼠标移动：拖动窗口；悬停时按区域切换光标
+ * @author chiangyang
+ */
+void ClotheslineWindow::mouseMoveEvent(QMouseEvent *event) {
+    if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        move(event->globalPosition().toPoint() - m_dragOffset);
+        return;
+    }
+    // 光标反馈：卡片上指向手型，空白处张开手型提示可拖动
+    bool overCard = false;
+    for (const Card &c : m_cards) {
+        if (c.rect.contains(event->pos())) {
+            overCard = true;
+            break;
+        }
+    }
+    setCursor(overCard ? Qt::PointingHandCursor : Qt::OpenHandCursor);
+    QWidget::mouseMoveEvent(event);
+}
+
+/**
+ * @brief 鼠标释放：结束拖动
+ * @author chiangyang
+ */
+void ClotheslineWindow::mouseReleaseEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton && m_dragging) {
+        m_dragging = false;
+        setCursor(Qt::OpenHandCursor);
+    }
+    QWidget::mouseReleaseEvent(event);
 }
 
 /**
