@@ -92,6 +92,15 @@ public:
      */
     void showOperationHint();
 
+    /**
+     * @brief 进入标注模式
+     *
+     * 懒创建标注工具栏并显示在 PinWindow 下边界贴边位置，连接工具栏信号。
+     * 公开供晾衣绳预览"标注"菜单复用（创建贴图后直接进入标注）。
+     * @author chiangyang
+     */
+    void enterAnnotationMode();
+
 protected:
     /**
      * @brief 绘制事件处理
@@ -236,14 +245,6 @@ private:
      * @author chiangyang
      */
     void performTranslate();
-
-    /**
-     * @brief 进入标注模式
-     *
-     * 懒创建标注工具栏并显示在 PinWindow 下边界贴边位置，连接工具栏信号。
-     * @author chiangyang
-     */
-    void enterAnnotationMode();
 
     /**
      * @brief 退出标注模式

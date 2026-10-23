@@ -3,6 +3,14 @@
 #include "DesktopPetManager.h"
 #include "../history/HistoryManager.h"
 #include "../core/TranslationManager.h"
+#include "../core/StyleManager.h"
+#include "../widgets/PinWindow.h"
+#include "../widgets/TranslateOverlayWindow.h"
+#include "../ocr/OcrEngine.h"
+#include "../ocr/OcrAsyncHelper.h"
+#include "../ocr/OcrResultDialog.h"
+#include "../translate/TranslateService.h"
+#include "../translate/TranslateEngine.h"
 #include "../log/Logger.h"
 
 #include <QPainter>
@@ -20,6 +28,10 @@
 #include <QCursor>
 #include <QWheelEvent>
 #include <QWindow>
+#include <QMenu>
+#include <QAction>
+#include <QMessageBox>
+#include <QContextMenuEvent>
 #include <QtMath>
 
 namespace {
@@ -62,6 +74,8 @@ constexpr qreal kZoomMax = 10.0;  // 最大缩放倍数
  * - 图片卡片：加载原图等比放大（不超过 kPreviewMaxW × kPreviewMaxH，按 DPR 输出保证清晰）
  * - 文本卡片：自动换行显示完整文本（超出最大高度时截断）
  * - 鼠标移到预览图上时滚轮可放大/缩小（类似贴图窗口），移出预览即消失
+ * - 右键预览弹出菜单（参考贴图窗口）：复制/标注/文字识别/翻译（文本卡片仅复制/翻译），
+ *   点击菜单项后预览消失并执行对应功能
  * @author chiangyang
  */
 class CardPreviewPopup : public QWidget {
@@ -142,6 +156,112 @@ protected:
     void leaveEvent(QEvent *event) override {
         hide();
         QWidget::leaveEvent(event);
+    }
+
+    /**
+     * @brief 右键菜单（参考贴图窗口）：复制/标注/文字识别/翻译
+     *
+     * 菜单弹出即隐藏预览；点击菜单项后执行对应功能：
+     * - 复制：图片写剪贴板 / 文本写剪贴板
+     * - 标注：用原图创建贴图窗口并直接进入标注模式
+     * - 文字识别：异步 OCR 后弹出识别结果对话框
+     * - 翻译：图片走 OCR→批量翻译叠加窗口；文本直接调用翻译服务并弹出译文
+     * @param event 右键菜单事件
+     * @author chiangyang
+     */
+    void contextMenuEvent(QContextMenuEvent *event) override {
+        QWidget *host = parentWidget();             // 晾衣绳窗口，作为对话框父级
+        const QPixmap image = m_original;           // 拷贝一份，预览隐藏/切换内容后仍可用
+        const QString text = m_text;
+        const bool isImage = m_isImage && !image.isNull();
+        const QPoint centerGlobal = m_centerGlobal;
+        if (!isImage && text.isEmpty()) {
+            return;
+        }
+
+        QMenu menu(host);
+        TranslationManager *tm = TranslationManager::instance();
+        menu.setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
+        menu.setAttribute(Qt::WA_TranslucentBackground);
+        menu.setStyleSheet(StyleManager::getMenuStyle());
+
+        QAction *copyAction = menu.addAction(tm->get("pinwindow.copy", "Copy"));
+        QAction *annotateAction = nullptr;
+        QAction *ocrAction = nullptr;
+        if (isImage) {
+            annotateAction = menu.addAction(tm->get("pinwindow.annotate", "Annotate"));
+            ocrAction = menu.addAction(tm->get("ocr.button"));
+        }
+        QAction *translateAction = menu.addAction(tm->get("translate.button"));
+
+        hide();  // 菜单弹出即隐藏预览
+
+        QAction *chosen = menu.exec(event->globalPos());
+        if (!chosen) {
+            return;
+        }
+
+        if (chosen == copyAction) {
+            QClipboard *cb = QGuiApplication::clipboard();
+            if (isImage) {
+                cb->setPixmap(image);
+            } else {
+                cb->setText(text);
+            }
+            LOG_INFO("ClotheslineWindow: preview content copied from context menu");
+        } else if (chosen == annotateAction) {
+            // 标注需要稳定窗口：用原图创建贴图并直接进入标注模式
+            auto *pin = new PinWindow(image);
+            pin->show();
+            if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
+                const QRect g = s->availableGeometry();
+                pin->move(g.center() - pin->rect().center());
+            }
+            pin->enterAnnotationMode();
+            LOG_INFO("ClotheslineWindow: preview annotate -> pin window with annotation mode");
+        } else if (chosen == ocrAction) {
+            OcrAsync::run(host, image.toImage(), QRect(), false,
+                          [host, centerGlobal](const OcrEngine::OcrResult &result) {
+                auto *dialog = new OcrResultDialog(result);
+                dialog->adjustSize();
+                if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
+                    dialog->move(s->availableGeometry().center() - dialog->rect().center());
+                }
+                dialog->show();
+            });
+        } else if (chosen == translateAction) {
+            if (!TranslateService::checkEnabledAndPrivacy(host)) {
+                return;
+            }
+            if (isImage) {
+                // 图片：OCR 识别 → 批量翻译 → 译文叠加窗口（与贴图窗口一致）
+                OcrAsync::run(host, image.toImage(), QRect(), true,
+                              [host, image, centerGlobal](const OcrEngine::OcrResult &result) {
+                    const QPoint pos = centerGlobal - QPoint(image.width() / 2, image.height() / 2);
+                    TranslateOverlayWindow::translateAndShow(
+                        host, image, result.texts, result.polygons, pos, QRect(pos, image.size()));
+                });
+            } else {
+                // 文本：直接调用翻译服务，译文复用识别结果对话框展示
+                TranslateService *ts = TranslateService::instance();
+                connect(ts, &TranslateService::finished, host,
+                        [centerGlobal](const QString &, const QString &translated) {
+                    OcrEngine::OcrResult r;
+                    r.texts = {translated};
+                    auto *dialog = new OcrResultDialog(r);
+                    dialog->adjustSize();
+                    if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
+                        dialog->move(s->availableGeometry().center() - dialog->rect().center());
+                    }
+                    dialog->show();
+                }, Qt::SingleShotConnection);
+                connect(ts, &TranslateService::failed, host,
+                        [host](TranslateEngine::TranslateError code, const QString &) {
+                    QMessageBox::warning(host, QString(), TranslateService::errorMessage(code));
+                }, Qt::SingleShotConnection);
+                ts->translate(text);
+            }
+        }
     }
 
     /**
@@ -856,7 +976,8 @@ bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
                 }
             }
             QWidget *top = w ? w->window() : nullptr;
-            if (top && (top->inherits("SnipScreen") || top->inherits("RecordingControlWindow"))) {
+            if (top && (top->inherits("SnipScreen") || top->inherits("RecordingControlWindow")
+                        || top->inherits("QMenu"))) {  // 预览右键菜单等弹出菜单交互不关闭
                 return QWidget::eventFilter(watched, event);
             }
             // 诊断日志：记录触发关闭的事件来源（定位晾衣绳被误关闭的根因）
