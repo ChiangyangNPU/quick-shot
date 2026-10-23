@@ -10,7 +10,7 @@ QuickShot 的标注系统是跨场景复用的图形标注功能，支持**截�
 
 | 工具 | ToolId | 控制点 | 支持拖动 | 说明 |
 |---|---|---|---|---|
-| 矩形 | Rectangle=0 | 8 个（4 角 + 4 边中点） | ✅ | 框选区域 |
+| 矩形 | Rectangle=0 | 8 个（4 角 + 4 边中点） | ✅ | 框选区域；子工具栏形状下拉可切换矩形/椭圆/三角形（shapeType 1/2/3） |
 | 椭圆 | Ellipse=1 | 4 个（左/右/上/下） | ✅ | 圈选区域 |
 | 箭头 | Arrow=2 | 2 个（起点/终点） | ✅ | 指向性标注 |
 | 画笔 | Pen=3 | — | ✅ | 自由书写 |
@@ -18,6 +18,8 @@ QuickShot 的标注系统是跨场景复用的图形标注功能，支持**截�
 | 文本 | Text=5 | — | ✅ | 输入文字，字号/颜色可调 |
 | 马赛克 | Mosaic=6 | — | ❌ | 对敏感信息做像素化模糊（块大小可全局配置） |
 | 橡皮擦 | Eraser=7 | — | ❌ | 局部擦除任意标注笔迹（支持撤销） |
+
+除上表 8 个工具按钮外，矩形按钮的形状下拉还会创建 `TriangleAnnotation`（三角形，3 个顶点控制点），与椭圆共用 `m_currentShapeType`（`AnnotationInteractionHandler::createAnnotation` 中 switch 分支创建）。
 
 ### 1.2 快捷键
 
@@ -94,12 +96,14 @@ classDiagram
         -QPoint m_end
         -QColor m_color
         -int m_penWidth
+        -Qt::PenStyle m_penStyle
         +AnnotationType type()
         +QPoint start()
         +QPoint end()
         +QRect rect()
         +QColor color()
         +int penWidth()
+        +Qt::PenStyle penStyle()
         +void setStart(QPoint)
         +void setEnd(QPoint)
         +void translate(QPoint)
@@ -184,6 +188,7 @@ classDiagram
         -int m_currentPenWidth
         -int m_currentFontSize
         -int m_currentShapeType
+        -bool m_currentDashed
         -bool m_isAnnotating
         -bool m_isErasing
         -bool m_isMosing
@@ -207,6 +212,8 @@ classDiagram
         +void setFontSize(int)
         +int shapeType()
         +void setShapeType(int)
+        +bool isDashed()
+        +void setDashed(bool)
         +AnnotationManager& manager()
     }
 
@@ -352,7 +359,7 @@ graph LR
 
 ### 3.3 AnnotationInteractionHandler（Mixin 工具类）
 
-统一 SnipScreen 和 PinWindow 高度重复的标注交互。内部持有 `AnnotationManager` 实例和一组**属性状态**（tool/color/penWidth/fontSize/shapeType）。
+统一 SnipScreen 和 PinWindow 高度重复的标注交互。内部持有 `AnnotationManager` 实例和一组**属性状态**（tool/color/penWidth/fontSize/shapeType/dashed）。
 
 #### Host 回调接口
 
@@ -603,6 +610,15 @@ PinWindow 滚轮缩放窗口时所有标注必须随图像同步缩放否则标�
 | 橡皮擦擦除 | 已同步 | 已同步 | 无 |
 | 马赛克涂抹 | 已同步 | 已同步 | 无 |
 | 绘制矩形椭圆箭头直线画笔 | 已同步 | 已同步 | 修复前绘制过程未显示只看到最终结果 |
+
+### 5.5 实线/虚线线型（按工具记忆）
+
+几何标注与画笔支持实线/虚线切换，线型由 `Annotation` 对象自身持有（`m_penStyle`），撤销/重做、贴图缩放与既有绘制流程无需额外处理：
+
+- **作用范围**：矩形（含形状子类型椭圆/三角形）、椭圆、箭头、画笔、直线；文本、马赛克、橡皮擦不显示线型开关。箭头头部三角形保持实心填充，仅主干线为虚线。
+- **数据流**：子工具栏线型按钮（线宽滑块与颜色面板之间）→ `BaseToolBar::penStyleChanged(bool)` 信号 → 宿主调用 `AnnotationInteractionHandler::setDashed()` → `createAnnotation()` 以 `m_currentDashed ? Qt::DashLine : Qt::SolidLine` 构造标注。
+- **按工具独立记忆**：`BaseToolBar::ToolSettings` 为每个工具保存 `dashed` 偏好，持久化到配置键 `style/dashedRectangle`（矩形与三角形共用）、`style/dashedEllipse`、`style/dashedArrow`、`style/dashedPen`、`style/dashedLine`，默认实线（`false`）。
+- **绘制细节**：`draw()` 中 `QPen` 样式取 `m_penStyle`，虚线间隔随 `penWidth` 自动缩放，抗锯齿与 RoundCap/RoundJoin 不变。
 
 ---
 

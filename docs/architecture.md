@@ -1280,7 +1280,7 @@ classDiagram
     }
 
     class ScreenRecorder {
-        +bool start(captureRectPx, outputSizePx, outputFilePath, fps)
+        +bool start(captureRectPx, outputSizePx, outputFilePath, fps, format)
         +void pause()
         +void resume()
         +void stop()
@@ -1288,6 +1288,7 @@ classDiagram
         +bool isRecording()
         +bool isPaused()
         +bool isAvailable()
+        +static bool isGifSupported()
         +static QList~WindowInfo~ getAvailableWindows()
         +bool startWindowRecording(windowId, outputFilePath, width, height, fps)
         +bool startAreaRecording(captureRect, outputFilePath, fps)
@@ -1307,6 +1308,7 @@ classDiagram
         +QSize outputSizePx
         +QString outputFilePath
         +int fps
+        +bool gifMode
         +QByteArray frameBuffer
         +QImage annotationOverlay
         +QMutex annotationMutex
@@ -2242,7 +2244,7 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 
 #### 6.18.5 版本号管理
 
-- 版本号由 [CMakeLists.txt](file:///e:/develop/Code/github_new/quick-shot/CMakeLists.txt#L2) 的 `project(QuickShot VERSION x.y.z)` 统一管理
+- 版本号由 [CMakeLists.txt](../CMakeLists.txt) 的 `project(QuickShot VERSION x.y.z)` 统一管理
 - 通过 `add_compile_definitions(QUICKSHOT_VERSION="${PROJECT_VERSION}")` 注入为编译宏
 - 源码中使用 `QUICKSHOT_VERSION` 宏或 `qApp->applicationVersion()` 获取版本号
 - 打包脚本 deploy.ps1 自动从 CMakeLists.txt 解析版本号，生成 `QuickShot-{Config}-{Version}-Windows-x64` 格式的包名
@@ -2298,6 +2300,7 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 |--------|------|--------|------|
 | `record/outputPath` | String | 用户目录 | 输出路径 |
 | `record/defaultFps` | Int | `30` | 默认帧率 |
+| `record/format` | String | `mp4` | 录制输出格式（`mp4` / `gif`，GIF 固定 10fps 无音轨） |
 | `record/audioEnabled` | Bool | `false` | 音频录制 |
 | `record/microphoneEnabled` | Bool | `false` | 麦克风录制 |
 
@@ -2363,6 +2366,12 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 | `style/defaultEraserWidth` | Int | `5` | 橡皮擦默认粗细 |
 | `style/defaultMosaicSize` | Int | `5` | 马赛克默认大小 |
 | `style/toolbarButtonStyle` | String | `text` | 按钮样式（text/icon） |
+| `style/theme` | String | `light` | 主题（light / dark，见 6.16） |
+| `style/dashedRectangle` | Bool | `false` | 矩形/三角形工具默认线型（true=虚线） |
+| `style/dashedEllipse` | Bool | `false` | 椭圆工具默认线型 |
+| `style/dashedArrow` | Bool | `false` | 箭头工具默认线型 |
+| `style/dashedPen` | Bool | `false` | 画笔工具默认线型 |
+| `style/dashedLine` | Bool | `false` | 直线工具默认线型 |
 
 > **单一数据源**：以上默认值全部来自 `StyleManager::DEFAULT_*` 常量，由 `StyleManager::colorSettingTable()` 元数据表驱动；`ConfigManager` 播种、`StyleManager::initFromConfig` 启动恢复、`SettingsWindow` 设置页三者共用此表（与快捷键 `kShortcutConfigs` 同一数据驱动惯用法）。
 
@@ -2427,7 +2436,6 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
    - 截图后自动标注
 
 2. **录屏增强**
-   - GIF 录制
    - 实时滤镜
    - 水印支持
    - 视频剪辑
@@ -2435,7 +2443,6 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 3. **OCR 增强**
    - 实时 OCR（边录边识别）
    - 多页批量识别
-   - 文本翻译
    - 关键词高亮
 
 4. **协作功能**
@@ -3350,9 +3357,9 @@ src/
 │   ├── PinWindow.h/cpp    # 贴图窗口（置顶、拖拽、调整大小、标注模式、Alt+P分页、WA_DeleteOnClose）
 │   ├── PinAnnotationToolBar.h/cpp  # 贴图窗口标注工具栏
 │   ├── PrecisionSlider.h/cpp  # 精度滑块（画笔/字号）
-│   ├── RecordingToolBar.h/cpp   # 录屏工具栏（计时、快照按钮）
+│   ├── RecordingToolBar.h/cpp   # 录屏工具栏（计时、快照按钮、GIF 入口）
 │   ├── ScreenshotToolBar.h/cpp  # 截图工具栏
-│   ├── SettingsWindow.h/cpp   # 设置窗口（拖拽移动、6个选项卡、DPI适配、19种颜色数据驱动配置）
+│   ├── SettingsWindow.h/cpp   # 设置窗口（拖拽移动、6个选项卡、DPI适配、21种颜色数据驱动配置、主题切换）
 │   ├── HistoryWindow.h/cpp    # 历史记录窗口（截图+剪贴板分类、多选批量、搜索、实时刷新）
 │   ├── MessageBox.h/cpp       # 自定义消息框（统一样式：QMessageBox替代，自动翻译按钮+居中定位+Yes/No便捷方法）
 │   └── TranslateOverlayWindow.h/cpp  # 译文叠加窗口（OCR多边形位置渲染、原文/译文/对照三态视图、文字选择、复制、保存图片、翻译完成退出截图框）
@@ -3396,15 +3403,16 @@ src/
 | `src/utils/Utils.h` | 工具类（savePixmapToFile、桌面路径等） |
 | `src/widgets/BaseToolBar.h` | 基础工具栏（布局、子工具栏防闪烁、信号统一定义） |
 | `src/widgets/ScreenshotToolBar.h` | 截图工具栏（copy/save/pin/close 自有信号） |
-| `src/widgets/RecordingToolBar.h` | 录屏工具栏（计时控制、快照按钮、showControlRequested） |
+| `src/widgets/RecordingToolBar.h` | 录屏工具栏（计时控制、快照按钮、GIF 按钮、showControlRequested） |
 | `src/widgets/PinWindow.h` | 贴图窗口（置顶、滚轮缩放、标注模式、Alt+P 历史分页、WA_DeleteOnClose） |
 | `src/widgets/PinAnnotationToolBar.h` | 贴图窗口独立标注工具栏（copy/save/cancel 自有信号） |
-| `src/widgets/SettingsWindow.h` | 设置窗口（6 个选项卡、拖拽移动、19 种颜色数据驱动配置、DPI 手动适配） |
+| `src/widgets/SettingsWindow.h` | 设置窗口（6 个选项卡、拖拽移动、21 种颜色数据驱动配置、浅色/深色主题、DPI 手动适配） |
 | `src/widgets/HistoryWindow.h` | 历史记录窗口（截图+剪贴板分类、多选批量操作、搜索、实时刷新） |
 | `src/widgets/OverlayTextEdit.h` | 文本编辑框（浮动输入、拖拽缩放、边界限制、焦点冲突管理） |
 | `src/widgets/MessageBox.h` | 自定义消息框（统一样式替代 QMessageBox，自动翻译按钮、居中定位、静态便捷方法） |
-| `src/recording/ScreenRecorder.h` | 录屏器（线程、状态管理、实时标注 overlay 合成、音频设备枚举） |
-| `src/recording/RecordingControlWindow.h` | 录制控制栏（暂停/恢复/停止、系统音频+麦克风开关） |
+| `src/recording/ScreenRecorder.h` | 录屏器（线程、状态管理、实时标注 overlay 合成、音频设备枚举、OutputFormat MP4/GIF） |
+| `src/recording/GifEncoder.h` | GIF89a 编码器（纯 Qt 实现，LZW 压缩、每帧局部调色板、相同帧延迟合并） |
+| `src/recording/RecordingControlWindow.h` | 录制控制栏（暂停/恢复/停止、MP4/GIF 格式下拉、系统音频+麦克风开关） |
 | `src/history/HistoryItem.h` | 历史记录数据结构（截图/剪贴板文本） |
 | `src/history/HistoryManager.h` | 历史记录管理器（单例、SQLite、启动清理过期、addScreenshotPixmap Alt+P入库） |
 | `src/history/ClipboardMonitor.h` | 剪贴板监听器（捕获复制/剪切文本入库） |
@@ -3425,7 +3433,7 @@ src/
 ```cmake
 # CMakeLists.txt 关键选项
 cmake_minimum_required(VERSION 3.20)
-project(QuickShot VERSION 1.0.0)
+project(QuickShot VERSION 0.1.2)
 
 # 版本号注入为编译宏，源码中使用 QUICKSHOT_VERSION 或 qApp->applicationVersion()
 add_compile_definitions(QUICKSHOT_VERSION="${PROJECT_VERSION}")
@@ -3434,7 +3442,7 @@ add_compile_definitions(QUICKSHOT_VERSION="${PROJECT_VERSION}")
 set(CMAKE_CXX_STANDARD 17)
 
 # Qt 组件
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Multimedia Concurrent Sql Network)
 
 # 可选模块
 option(ENABLE_OCR "启用 OCR 功能" ON)

@@ -22,7 +22,7 @@ QuickShot/
 
 ## 版本号管理
 
-版本号由 [CMakeLists.txt](file:///e:/develop/Code/github_new/quick-shot/CMakeLists.txt#L2) 的 `project(QuickShot VERSION x.y.z)` 统一管理。打包脚本通过正则表达式自动读取版本号，无需手动指定。修改版本号后需在 CLion 中 **Reset Cache and Reload CMake Project**。
+版本号由 [CMakeLists.txt](../../CMakeLists.txt) 的 `project(QuickShot VERSION x.y.z)` 统一管理。打包脚本通过正则表达式自动读取版本号，无需手动指定。修改版本号后需在 CLion 中 **Reset Cache and Reload CMake Project**。
 
 ## 环境要求
 

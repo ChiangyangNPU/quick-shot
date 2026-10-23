@@ -13,6 +13,8 @@
 | 线程模型 | dispatch_queue_t + std::thread | 视频/音频独立调度队列 |
 | 权限检测 | CGPreflightScreenCaptureAccess / SCShareableContent | 屏幕录制权限验证 |
 
+> **GIF 输出暂不支持**：`ScreenRecorder::isGifSupported()` 在 macOS 返回 false，截图/录屏工具栏的 GIF 按钮与控制栏的 GIF 选项自动隐藏；若绕过 UI 以 `OutputFormat::Gif` 直接启动，`ScreenRecorder_mac.cpp` 会立即上报 `record.error.gifUnsupported` 错误并结束（ScreenCaptureKit 管线不产出可编码的帧缓冲）。
+
 ## 2. 架构设计
 
 ### 2.1 分层架构

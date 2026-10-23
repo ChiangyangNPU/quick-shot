@@ -9,6 +9,7 @@
 | 音频捕获 | WASAPI（Loopback + 麦克风） | 系统音频回环 + 麦克风输入 |
 | 音频编码 | Media Foundation (AAC) | 双声道音频压缩 |
 | 容器格式 | MP4 / WMV（降级） | 视频封装 |
+| GIF 编码 | GifEncoder（纯 Qt，GIF89a + LZW） | `OutputFormat::Gif` 分支，无第三方依赖 |
 | 线程模型 | std::thread + std::atomic | 视频/音频独立线程 |
 | 互斥同步 | QMutex | 标注叠加与帧缓冲并发保护 |
 
@@ -136,6 +137,26 @@ flowchart LR
 - 输入格式：RGB32，固定步长 `width * 4`
 - 帧率：可配置（默认 30fps），帧时长 = `10000000 / fps`（100ns 单位）
 
+### 3.4 GIF 录制分支（OutputFormat::Gif）
+
+`ScreenRecorder::start()` 的 `format` 参数为 `OutputFormat::Gif` 时（`ScreenRecorder::isGifSupported()` 在 Windows 返回 true），走独立于 Media Foundation 的轻量分支：
+
+```mermaid
+flowchart LR
+    A["BitBlt + StretchBlt 截帧"] --> B["标注 overlay 合成<br/>与视频分支共用"]
+    B --> C["GifEncoder::addFrame<br/>延迟 qMax(1, 100/fps) cs"]
+    C --> D{与上一待写帧相同?}
+    D -- "是" --> E["只累加延迟<br/>静态画面不重复写数据"]
+    D -- "否" --> F["刷新上一帧后挂起当前帧<br/>局部调色板 + LZW 压缩"]
+```
+
+- **跳过的初始化**：`gifMode` 时不执行 COM/Media Foundation 初始化、音频采集与 SinkWriter 创建，仅初始化 GDI 资源并 `GifEncoder::open()` 创建 `.gif` 文件（写 GIF89a 头 + Netscape 无限循环扩展）。
+- **帧写入**：录制主循环复用与视频分支相同的 BitBlt/StretchBlt 截帧与标注合成，合成后的帧交给 `GifEncoder::addFrame(frame, delayCentiseconds)`（默认 10 fps → 10cs），不再走 MF 写样本分支。
+- **调色板**：统计 5-5-5 量化后的颜色直方图，按出现次数取前 256 色生成**每帧局部色表**，未入选颜色按欧氏距离映射到最近调色板项。
+- **LZW 关键点**：字典上限 4095，满时发 Clear Code 重置；码宽必须在写出当前码之后再提升（与 giflib 一致），否则解码器错位造成花屏。
+- **结束**：取消录制时 `GifEncoder::abort()` 关闭并删除未完成文件；正常停止时 `close()` 写出最后一帧与 Trailer，随后照常 `emit stopped(path)`；非 GIF 分支才执行 `MFShutdown` / `CoUninitialize`。
+- **启动入口**：截图/录屏工具栏的 GIF 按钮经 `RecordingSession::showControlForGif()` 预选控制栏格式（`record/format` 配置键持久化），录制时强制关闭系统声音与麦克风（GIF 无音轨）。
+
 ## 4. 音频捕获流程
 
 ### 4.1 WASAPI 双源捕获
@@ -206,6 +227,8 @@ flowchart TD
     G3 --> H["进入视频捕获主循环"]
 ```
 
+> **GIF 模式**：`gifMode` 时跳过 COM/Media Foundation 初始化、音频捕获与 SinkWriter 创建（流程中 B~F1 各步），GDI 初始化后直接 `GifEncoder::open()` 进入主循环（见 3.4）。
+
 ### 5.2 主循环流程
 
 ```mermaid
@@ -253,6 +276,8 @@ flowchart TD
     J -- "否" --> L["emit stopped outputPath"]
     K --> L
 ```
+
+> **GIF 模式**：`gifMode` 时跳过 Sink Writer 的 Finalize 与音频资源释放，改为 `GifEncoder` 取消时 `abort()`（删除未完成文件）/ 正常结束时 `close()`；`MFShutdown + CoUninitialize` 仅非 GIF 分支执行。
 
 ## 6. 降级策略
 
@@ -320,16 +345,18 @@ sequenceDiagram
 | H.264 Sink Writer 创建失败 | 降级 WMV → 再失败则报告 |
 | GDI 屏幕捕获失败 | 报告错误，终止录制 |
 | 编码写入失败 | 报告错误，终止录制 |
+| GifEncoder 打开/写帧失败 | 报告错误，终止录制（`gifMode`） |
 | 系统音频初始化失败 | 警告，继续（仅麦克风） |
 | 麦克风初始化失败 | 警告，继续（仅系统音频） |
 | 音频写入失败 | 日志错误，继续视频录制 |
-| 取消录制 | 正常退出并删除文件 |
+| 取消录制 | 正常退出并删除文件（GIF 分支为 `abort()` 删除） |
 
 ## 9. 文件索引
 
 | 文件 | 说明 |
 |------|------|
 | `src/recording/platform/ScreenRecorder_win.cpp` | Windows 平台录屏完整实现 |
-| `src/recording/ScreenRecorder.h` | 跨平台录屏器接口定义 |
+| `src/recording/GifEncoder.h` / `.cpp` | GIF89a 动画编码器（纯 Qt，LZW） |
+| `src/recording/ScreenRecorder.h` | 跨平台录屏器接口定义（含 `OutputFormat` 枚举与 `isGifSupported()`） |
 | `src/recording/ScreenRecorder.cpp` | 跨平台公共逻辑 |
-| `src/recording/RecordingControlWindow.h` | 录制控制栏 UI |
+| `src/recording/RecordingControlWindow.h` | 录制控制栏 UI（MP4/GIF 格式下拉框） |

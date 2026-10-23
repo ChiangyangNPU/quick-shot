@@ -1,6 +1,6 @@
 # QuickShot 截图工具
 
-QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基于 **Qt 6** 开发，旨在提供高效、流畅的截图体验。
+QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基于 **Qt 6** 开发，支持 **Windows** 与 **macOS** 双平台（Linux 支持尚不完整，录屏暂不产出视频文件），旨在提供高效、流畅的截图体验。
 
 ## ⚠️ macOS 首次打开：未公证应用需手动放行
 
@@ -64,6 +64,7 @@ QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 
     *   **直线**: 连接两点，绘制直线标注。
     *   **箭头**: 快速指向重点内容（锐角三角形箭头，尺寸适中）。
     *   **颜色自定义**: 支持红、蓝、黑、黄、绿、白及自定义取色。
+    *   **实线/虚线切换**: 矩形、椭圆、三角形、箭头、直线、画笔均支持一键切换实线/虚线，各工具线型偏好独立记忆、重启后保持（虚线间隔随线宽自动缩放，箭头头部保持实心）。
 *   **✏️ 画笔工具**:
     *   自由书写和绘制线条。
     *   支持**粗细调节**和颜色选择。
@@ -86,7 +87,7 @@ QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 
 *   **锁定标注模式**: 选择标注工具后选区锁定，专注于绘制标注。
 
 ### 4. 📝 OCR 文字识别
-*   **一键识别**: 点击工具栏的 "OCR" 按钮，即可对截图区域进行文字识别。
+*   **一键识别**: 点击工具栏的「文字识别」按钮，即可对截图区域进行文字识别。
 *   **多语言支持**: 支持识别中英文、英文、日文、韩文和多语言混合文本。
 *   **GPU 加速**: 在设置中可启用 GPU 加速，提升识别速度。
 *   **结果展示**: 识别结果以弹窗形式展示，支持一键复制全部文本到剪贴板，支持鼠标拖动移动窗口和边缘/角落调整大小。
@@ -148,6 +149,8 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
     *   `renderAnnotationOverlay()` 的像素捕获基准 cap 与 ScreenRecorder 的 captureRect 严格对齐（= 选区减去边框），消除标注位置偏移。
     *   `AnnotationInteractionHandler::handleMouseMove` 中所有操作分支（控制点拖拽、标注拖动、橡皮擦、马赛克、几何/画笔绘制）均调用 `syncOverlay()` 同步录屏 overlay，确保录制视频中的标注过程（拖拽中间帧）完整可见，而不仅仅是最终结果。
 *   **录制控制**: 支持开始、暂停、恢复和停止录制。
+*   **录制格式**: 控制栏提供 MP4 / GIF 格式下拉框，选择全局持久化；选 GIF 时自动取消并禁用音频选项。
+*   **GIF 录制**: 截图与录屏工具栏均提供 GIF 快捷入口，一键以 GIF 格式开始录制（默认 10 fps，无音轨）。GIF 编码为纯 Qt 实现（GIF89a + LZW，每帧局部调色板，相同帧自动合并延迟），支持 Windows / Linux；macOS 暂不支持，入口自动隐藏。
 *   **取消录制**: 支持取消录制，取消时自动删除已生成的视频文件。
 *   **快照功能**: 录制过程中可将当前录制画面截图保存到剪贴板，不中断录制，并自动记录到历史供 Alt+P 分页。
 *   **原始分辨率录制**: 录屏输出分辨率等于用户框选区域的物理像素大小，保留原始画质，无缩放损失。
@@ -176,7 +179,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 右键点击系统托盘图标进入"设置"，**6 个选项卡顺序：常规 → 快捷键 → 样式 → 翻译 → 历史记录 → 关于**：
 *   **常规**: 支持中/英/日/韩/繁（香港）/繁（台湾）多语言切换、开机自启动、自定义截图和录屏保存目录、日志管理、配置文件管理、**OCR 识别语言配置**、**GPU 加速**。
 *   **快捷键**: 分为 4 个分类展示——**全局热键（可配置）**：截图/录屏/历史记录/贴图剪贴板/全屏截图/活动窗口截图/录屏暂停/录屏停止/隐藏显示贴图 9 个可自定义，ShortcutManager 通过 ShortcutConfigItem 数据表生成设置 UI 行；**标注工具（固定）**：1-8 切换标注工具；**标注操作（固定）**：复制/撤销/重做/保存/画笔宽度/循环颜色/清除/Shift 约束/Alt 中心；**贴图快捷键（固定）**：复制/保存/撤销/重做/切工具/移动/退出。修改即时生效并通过 shortcutChanged 枚举信号增量刷新托盘菜单。
-*   **样式**: **浅色/深色主题一键切换**（深色为 HUD 风格：深色底板 + 白字 + 半透明按钮，作用于整个应用 UI——截图/录屏工具栏、子工具栏、录屏控制栏、设置/历史窗口、托盘菜单、对话框，切换立即生效并持久化）；支持自定义 20+ 个 UI 颜色属性（边框颜色、工具栏背景/按钮/文字/悬停/禁用颜色、子工具栏颜色、选项卡颜色、角手柄颜色等），19 种颜色通过 `colorSettingTable()` 元数据表统一管理（含 17 个 UI 按钮颜色 + 2 个仅保存的按钮颜色），通过循环遍历数据表统一加载/保存；按钮显示模式（文字/图标）、子工具栏/控制栏/选项卡颜色定制。
+*   **样式**: **浅色/深色主题一键切换**（深色为 HUD 风格：深色底板 + 白字 + 半透明按钮，作用于整个应用 UI——截图/录屏工具栏、子工具栏、录屏控制栏、设置/历史窗口、托盘菜单、对话框，切换立即生效并持久化）；支持自定义 20+ 个 UI 颜色属性（边框颜色、工具栏背景/按钮/文字/悬停/禁用颜色、子工具栏颜色、选项卡颜色、角手柄颜色等），21 种颜色通过 `colorSettingTable()` 元数据表统一管理（含 17 个 UI 按钮颜色 + 4 个仅保存的颜色），通过循环遍历数据表统一加载/保存；按钮显示模式（文字/图标）、子工具栏/控制栏/选项卡颜色定制。
 *   **翻译（在样式与历史记录之间）**: 选择翻译引擎（MyMemory 免注册 / 百度 / DeepL / LibreTranslate）、配置目标语言（默认英文，下拉选择）、填写对应引擎的 API Key / URL、启用翻译功能开关、首次翻译隐私提示开关；首次使用时弹窗说明文本将发送到第三方服务（自定义 MessageBox 居中定位到选区）。
 *   **历史记录**: 支持开关截图历史记录和剪贴板历史记录、设置保留时间（7/30/90/180/365 天）和最大记录数（500/1000/2000/5000 条）、清理过期记录（软件启动时 HistoryManager 自动调用 cleanupExpired()）、清空所有历史、查看存储占用统计。
 *   **关于**: 查看版本信息及官网链接。
@@ -196,7 +199,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 
 > **Windows 环境搭建与路径配置**（Qt / MinGW / CMake / ONNX Runtime 的路径指定、CLion 工具链、常见问题）详见 [Windows 构建指南](docs/build-windows.md)。
 
-> **版本号管理**：版本号由 [CMakeLists.txt](file:///e:/develop/Code/github_new/quick-shot/CMakeLists.txt#L2) 的 `project(QuickShot VERSION x.y.z)` 统一管理，通过 `QUICKSHOT_VERSION` 宏注入源码。修改版本号后需在 CLion 中 **Reset Cache and Reload CMake Project**。
+> **版本号管理**：版本号由 [CMakeLists.txt](CMakeLists.txt) 的 `project(QuickShot VERSION x.y.z)` 统一管理，通过 `QUICKSHOT_VERSION` 宏注入源码。修改版本号后需在 CLion 中 **Reset Cache and Reload CMake Project**。
 
 ### 快速打包
 项目提供了自动化打包脚本，无需手动复制 DLL。打包脚本自动从 CMakeLists.txt 读取版本号。
@@ -238,7 +241,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **翻译引擎**: 基于 Qt6::Network 多引擎抽象（TranslateEngine 接口 + MyMemory/Baidu/DeepL/LibreTranslate 4 种实现），默认 MyMemory 免注册可用，TranslateError 8 种错误码本地化（tm->get）、批量翻译状态机失败单段回退原文不中断流程、首次隐私提示（自定义 MessageBox 居中定位到选区）。
 *   **工具栏动态定位**: 根据选区位置和屏幕空间自动计算工具栏位置（一级→子→控制栏三级堆叠），优先下方不足翻转上方，全屏时从底部向上排列，支持多显示器。
 *   **录屏实时标注合成（零重影 + 过程可见）**: 录屏开始 SnipScreen 调用 SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) 排除捕获；overlay cap 与 ScreenRecorder::captureRect（选区减边框）对齐；AnnotationInteractionHandler handleMouseMove 所有分支调用 syncOverlay()，拖拽过程中间帧也会被合成到视频。
-*   **跨平台录屏**: Windows 使用 Media Foundation + WASAPI；macOS 使用 ScreenCaptureKit + AVAssetWriter（H.264）+ AVCaptureSession 麦克风；Linux 目前仅实现 X11 帧采集，视频编码/音频待接入（暂不产出视频文件），录屏以 Windows/macOS 为准。
+*   **跨平台录屏**: Windows 使用 Media Foundation + WASAPI；macOS 使用 ScreenCaptureKit + AVAssetWriter（H.264）+ AVCaptureSession 麦克风；Linux 目前仅实现 X11 帧采集，视频编码/音频待接入（暂不产出视频文件），录屏以 Windows/macOS 为准。输出格式支持 MP4 与 GIF（GIF 为纯 Qt 编码器，Windows/Linux 可用，macOS 暂不支持）。
 *   **标注交互统一 AnnotationInteractionHandler**: 截屏/录屏/贴图三处标注逻辑通过 Host 回调策略注入窗口差异（坐标限制、录屏同步、选区限制、工具栏碰撞检测等）共享同一套实现，包括：鼠标事件优先级（工具栏→文本框完成→橡皮擦→马赛克→控制点→文本→拖动→创建）、控制点光标样式、Shift/Alt 约束、橡皮擦/马赛克半径联动画笔粗细 × 2、全局马赛克算法、undo/redo 移动优先。
 *   **快捷键系统 ShortcutManager**: 9 个全局热键 ShortcutType 枚举 + ShortcutConfigItem 数据表（单一事实源）；ShortcutManager 外观模式统一 API；ShortcutRegistry 注册表管理 GlobalShortcut 生命周期；AnnotationShortcutController + IShortcutHandler + QShortcut(Qt::WindowShortcut) 统一管理 SnipScreen/PinWindow 标注快捷键；setBareKeysEnabled(false/true) 处理文本编辑冲突。
 *   **工具栏子工具栏防闪烁**: BaseToolBar 切换工具时使用同步 `delete` 立即释放布局空间；`showSubTools` 包裹 `setUpdatesEnabled(false/true)` 阻塞中间绘制；PinWindow 独立顶层子工具栏窗口设置 `WA_NoSystemBackground` 阻止系统级背景清除。

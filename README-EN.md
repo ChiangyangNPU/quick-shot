@@ -1,6 +1,6 @@
 # QuickShot Screen Capture Tool
 
-QuickShot is a lightweight, powerful screen capture and recording tool developed with Qt 6, designed to provide an efficient and smooth screenshot experience.
+QuickShot is a lightweight, powerful screen capture and recording tool developed with **Qt 6**. It runs on **Windows** and **macOS** (Linux support is still incomplete — recording does not yet produce video files), designed to provide an efficient and smooth screenshot experience.
 
 ## ⚠️ macOS First Open: Manually Allow the Un-notarized App
 
@@ -64,6 +64,7 @@ Once a screenshot area is selected, the bottom toolbar provides rich editing fun
     *   **Line**: Connect two points with a line annotation.
     *   **Arrow**: Point to key content (acute triangle arrow with moderate size).
     *   **Custom Colors**: Supports Red, Blue, Black, Yellow, Green, White, and custom color picker.
+    *   **Solid/Dashed Line Switching**: Rectangle, ellipse, triangle, arrow, line and pen tools support one-click solid/dashed switching; the line-style preference is remembered per tool and persists across restarts (dash intervals scale with stroke width; arrowheads stay solid).
 *   **✏️ Pen Tool**:
     *   Freehand drawing and writing.
     *   Supports **stroke width adjustment** and color selection.
@@ -86,7 +87,7 @@ Once a screenshot area is selected, the bottom toolbar provides rich editing fun
 *   **Locked Annotation Mode**: Selecting an annotation tool locks the selection area for focused annotation.
 
 ### 4. 📝 OCR Text Recognition
-*   **One-click Recognition**: Click the "OCR" button on the toolbar to recognize text in the screenshot area.
+*   **One-click Recognition**: Click the "Text Recognition" button on the toolbar to recognize text in the screenshot area.
 *   **Multi-language Support**: Supports recognizing Chinese + English, English, Japanese, Korean, and multilingual mixed text.
 *   **GPU Acceleration**: Enable GPU acceleration in Settings to improve recognition speed.
 *   **Result Display**: Recognition results are displayed in a dialog, with one-click copy to clipboard, and support for dragging to move and resizing from edges/corners.
@@ -148,6 +149,8 @@ QuickShot provides two translation forms based on OCR results, translating recog
     *   The pixel-capture base cap inside `renderAnnotationOverlay()` is strictly aligned with ScreenRecorder::captureRect (= selection minus border), eliminating annotation position offset.
     *   Every operation branch in `AnnotationInteractionHandler::handleMouseMove` (control-point drag, annotation drag, eraser, mosaic, geometry/pen drawing) calls `syncOverlay()` to push the recording overlay, ensuring the drag-intermediate frames of the annotation process are fully visible in the recorded video, not just the final result.
 *   **Recording Control**: Supports start, pause, resume, and stop recording.
+*   **Recording Format**: The control bar provides an MP4 / GIF format dropdown, globally persisted; selecting GIF automatically unchecks and disables the audio options.
+*   **GIF Recording**: Both the screenshot and recording toolbars offer a one-click GIF entry to start recording in GIF format (10 fps by default, no audio track). The GIF encoder is a pure-Qt implementation (GIF89a + LZW, per-frame local palette, identical frames merge their delays), available on Windows / Linux; not yet supported on macOS, where the entry is hidden automatically.
 *   **Cancel Recording**: Supports canceling recording, automatically deleting the generated video file upon cancellation.
 *   **Snapshot**: Capture the current recording frame to the clipboard without stopping the recording; the snapshot is also written to history automatically for Alt+P pagination.
 *   **Original Resolution Recording**: The recording output resolution equals the physical pixel size of the user-selected region, preserving original quality without scaling loss.
@@ -176,7 +179,7 @@ QuickShot provides two translation forms based on OCR results, translating recog
 Right-click the system tray icon to access "Settings". **Six tabs in order: General → Shortcuts → Style → Translate → History → About**:
 *   **General**: Switch between 6 languages (Simplified Chinese, English, Traditional Chinese HK/TW, Japanese, Korean), enable Auto-start on boot, customize screenshot and recording save directories, log management, config file management, **OCR recognition language configuration**, **GPU acceleration**.
 *   **Shortcuts**: Organized into 4 categories—**Global Hotkeys (Configurable)**: 9 customizable (capture/record/history/pin/fullscreen/active window/record pause/record stop/toggle pins). ShortcutManager drives the Settings UI rows from the ShortcutConfigItem data table; **Annotation Tools (Fixed)**: 1-8 switch tools; **Annotation Operations (Fixed)**: copy/undo/redo/save/pen width/cycle color/clear/Shift constraint/Alt center; **Pin Shortcuts (Fixed)**: copy/save/undo/redo/switch tool/move/exit. Changes take effect immediately and the tray menu is refreshed incrementally via the `shortcutChanged(ShortcutType, QKeySequence)` enum signal.
-*   **Style**: **One-click Light/Dark theme switching** (dark theme is HUD-style: dark panels + white text + translucent buttons, applied to the entire app UI — snip/record toolbars, sub-toolbars, recording control bar, settings/history windows, tray menu, dialogs; takes effect immediately and persists). Customize 20+ UI color properties (border colors, toolbar background/button/text/hover/disabled colors, sub-toolbar colors, tab colors, handle colors, etc.). 19 colors are centrally managed via the `colorSettingTable()` metadata table (17 colors with UI buttons + 2 button colors for save/load only); table-looping replaces the 34 scattered member variables. Button display mode (text/icon), sub-toolbar/control bar/tab color customization.
+*   **Style**: **One-click Light/Dark theme switching** (dark theme is HUD-style: dark panels + white text + translucent buttons, applied to the entire app UI — snip/record toolbars, sub-toolbars, recording control bar, settings/history windows, tray menu, dialogs; takes effect immediately and persists). Customize 20+ UI color properties (border colors, toolbar background/button/text/hover/disabled colors, sub-toolbar colors, tab colors, handle colors, etc.). 21 colors are centrally managed via the `colorSettingTable()` metadata table (17 colors with UI buttons + 4 colors for save/load only); table-looping replaces the 34 scattered member variables. Button display mode (text/icon), sub-toolbar/control bar/tab color customization.
 *   **Translate (between Style and History tabs)**: Select translation engine (MyMemory no-registration / Baidu / DeepL / LibreTranslate), configure target language (English by default, dropdown selection), fill in the API Key / URL for the chosen engine, toggle translation feature, toggle first-use privacy prompt. On first use a dialog appears (custom MessageBox centered on the current selection) explaining that text will be sent to third-party services.
 *   **History**: Toggle screenshot history and clipboard history recording, set retention period (7/30/90/180/365 days) and max record count (500/1000/2000/5000 items), clean expired records (HistoryManager calls cleanupExpired() automatically on app startup), clear all history, view storage usage statistics.
 *   **About**: View version information and website link.
@@ -194,7 +197,7 @@ Right-click the system tray icon to access "Settings". **Six tabs in order: Gene
     cmake --build .
     ```
 
-> **Version Management**: The version is managed centrally by [CMakeLists.txt](file:///e:/develop/Code/github_new/quick-shot/CMakeLists.txt#L2) via `project(QuickShot VERSION x.y.z)` and injected into source code through the `QUICKSHOT_VERSION` macro. After changing the version, use **Reset Cache and Reload CMake Project** in CLion.
+> **Version Management**: The version is managed centrally by [CMakeLists.txt](CMakeLists.txt) via `project(QuickShot VERSION x.y.z)` and injected into source code through the `QUICKSHOT_VERSION` macro. After changing the version, use **Reset Cache and Reload CMake Project** in CLion.
 
 ### Quick Packaging
 The project provides automated packaging scripts, no need to manually copy DLLs. The script reads the version number automatically from CMakeLists.txt.
@@ -236,7 +239,7 @@ The project provides automated packaging scripts, no need to manually copy DLLs.
 *   **Translation Engine**: Multi-engine abstraction over Qt6::Network (TranslateEngine interface + 4 implementations: MyMemory/Baidu/DeepL/LibreTranslate), defaults to MyMemory with no registration required. 8 TranslateError codes are localized via tm->get(); batch-translation state machine falls segment failures back to original text without aborting; first-use privacy prompt uses a custom MessageBox centered on the current selection.
 *   **Dynamic Toolbar Positioning**: Automatically calculates the position hierarchy (main → sub → control bar three-level stacking) based on selection area and screen space; preferred below the selection, flipped above if space is insufficient; arranged from bottom up for full-screen mode; multi-monitor aware.
 *   **Real-time Recording Annotation (Zero Ghost + Process Visible)**: Recording start calls SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) to exclude SnipScreen from capture; overlay cap is strictly aligned to ScreenRecorder::captureRect (selection minus border); every branch of AnnotationInteractionHandler handleMouseMove invokes syncOverlay() so drag-intermediate frames are composited into the video, not just final results.
-*   **Cross-Platform Recording**: Windows uses Media Foundation + WASAPI; macOS uses ScreenCaptureKit + AVAssetWriter (H.264) + AVCaptureSession microphone; Linux currently has X11 frame capture only — video encoding/audio are not yet integrated (no video file is produced); recording is fully supported on Windows/macOS.
+*   **Cross-Platform Recording**: Windows uses Media Foundation + WASAPI; macOS uses ScreenCaptureKit + AVAssetWriter (H.264) + AVCaptureSession microphone; Linux currently has X11 frame capture only — video encoding/audio are not yet integrated (no video file is produced); recording is fully supported on Windows/macOS. Output formats include MP4 and GIF (GIF via a pure-Qt encoder, available on Windows/Linux; not yet supported on macOS).
 *   **Unified Annotation Interaction (AnnotationInteractionHandler)**: Capture / recording / pin-window share the same annotation logic through Host-callback strategy injection of per-window differences (position clamping, recording sync, selection constraint, toolbar hit testing, etc.). Shared features: mouse-event priority (toolbar → text-finalize → eraser → mosaic → control point → text → drag → create), control-point cursors, Shift/Alt constraints, eraser/mosaic radius linked to penWidth × 2, global mosaic algorithm, undo/redo with move operations first.
 *   **Shortcut System (ShortcutManager)**: The 9 global hotkeys use a ShortcutType enum + ShortcutConfigItem data table (single source of truth); ShortcutManager (Facade) provides unified APIs; ShortcutRegistry (Registry pattern) manages GlobalShortcut lifetimes; AnnotationShortcutController + IShortcutHandler + QShortcut(Qt::WindowShortcut) uniformly manages SnipScreen / PinWindow annotation shortcuts; setBareKeysEnabled(false/true) handles text-edit conflicts.
 *   **Anti-Flicker Sub-toolbars**: `BaseToolBar::clearSubToolbarLayout` uses synchronous `delete` to free layout space immediately; `showSubTools` wraps creation in `setUpdatesEnabled(false/true)` to suppress intermediate paints; PinWindow top-level sub-toolbar window sets WA_NoSystemBackground to prevent the OS from clearing its background.

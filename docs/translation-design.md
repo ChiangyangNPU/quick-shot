@@ -260,7 +260,7 @@ classDiagram
 
 ### 4.1 抽象接口 TranslateEngine
 
-文件：[TranslateEngine.h](file:///e:/develop/Code/github_new/quick-shot/src/translate/TranslateEngine.h)
+文件：[TranslateEngine.h](../src/translate/TranslateEngine.h)
 
 错误码枚举：
 

@@ -469,7 +469,7 @@ sequenceDiagram
     participant ONNX_Runtime
     participant OcrResultDialog
 
-    User->>SnipScreen: 点击 OCR 按钮
+    User->>SnipScreen: 点击「文字识别」(OCR) 按钮
     SnipScreen->>SnipScreen: captureSelectionForOcr()
     SnipScreen->>SnipScreen: 显示加载提示
     SnipScreen->>QFutureWatcher: 创建 watcher
