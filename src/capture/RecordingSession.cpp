@@ -9,6 +9,7 @@
 #include "CaptureSession.h"
 #include "../core/StyleManager.h"
 #include "../log/Logger.h"
+#include "../pet/DesktopPetManager.h"
 
 #include <QDateTime>
 #include <QPainter>
@@ -233,6 +234,8 @@ void RecordingSession::connectSignals() {
         QPixmap pixmap = m_host->captureSelectionForOcr();
         if (!pixmap.isNull()) {
             CaptureSession::publish(pixmap);
+            // 桌面宠物投喂动画：快照从选区飞入宠物（宠物未开启时内部直接返回）
+            DesktopPetManager::instance()->feed(pixmap, m_host->selector()->selected());
             LOG_INFO("[SnipScreen] Snapshot copied to clipboard");
         }
     });

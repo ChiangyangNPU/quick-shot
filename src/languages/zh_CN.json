@@ -176,7 +176,7 @@
   "pet.group": "桌面宠物",
   "pet.enable": "打开桌面宠物",
   "pet.resetPosition": "重置宠物位置",
-  "pet.description": "开启后，截图点击复制或贴图时，图像会以动画飞入宠物口中；点击宠物可打开晾衣绳，查看最近的截图与复制的文字。",
+  "pet.description": "开启后，截图点击复制或贴图、录屏中点击快照时，图像会以动画飞入宠物口中；点击宠物可打开晾衣绳，查看最近的截图与复制的文字。",
   "pet.empty": "暂无历史记录",
   "history.recordSettings": "记录设置",
   "history.enableScreenshot": "记录截图历史",

@@ -176,7 +176,7 @@
   "pet.group": "Desktop Pet",
   "pet.enable": "Enable Desktop Pet",
   "pet.resetPosition": "Reset Pet Position",
-  "pet.description": "When enabled, screenshots fly into the pet's mouth after copy or pin. Click the pet to open the clothesline and view recent screenshots and copied text.",
+  "pet.description": "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording. Click the pet to open the clothesline and view recent screenshots and copied text.",
   "pet.empty": "No history yet",
   "history.recordSettings": "Record Settings",
   "history.enableScreenshot": "Record Screenshot History",
