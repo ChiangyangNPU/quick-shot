@@ -28,14 +28,17 @@ constexpr int kCardGap = 16;
 // 绳子与窗口
 constexpr int kRopeY = 30;
 constexpr int kRopeSag = 16;    // 悬垂深度
-constexpr int kPinLen = 10;     // 衣夹长度（锚点到卡片顶）
-constexpr int kWindowH = 168;
+constexpr int kPinLen = 24;     // 挂绳长度（绳子锚点到卡片顶）
+// 窗口默认高度：绳子最低点 + 挂绳 + 卡片 + 底部边距，保证卡片不超出窗口下边界
+constexpr int kBottomMargin = 16;
+constexpr int kWindowH = kRopeY + kRopeSag + kPinLen + kCardH + kBottomMargin;
 // 边缘调整与关闭按钮
 constexpr int kResizeMargin = 6;    // 上下边界调整区厚度
 constexpr int kCornerSize = 18;     // 角落调整区边长
 constexpr int kCloseBtnSize = 24;   // 关闭按钮边长
 constexpr int kMinW = 360;          // 窗口最小宽度
-constexpr int kMinH = 150;          // 窗口最小高度
+// 窗口最小高度：保证卡片完整可见（底部仅留 8px 边距）
+constexpr int kMinH = kRopeY + kRopeSag + kPinLen + kCardH + 8;
 // 动画
 constexpr int kTickMs = 33;
 constexpr qreal kSwayDeg = 3.0; // 摆动幅度（度）
