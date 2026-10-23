@@ -16,7 +16,13 @@
 #include <QTimer>
 #include <QHash>
 #include <QTextOption>
+#include <QFontMetrics>
+#include <QCursor>
 #include <QtMath>
+
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
 
 namespace {
 // 最多展示的卡片数量
@@ -42,7 +48,152 @@ constexpr int kMinH = kRopeY + kRopeSag + kPinLen + kCardH + 8;
 // 动画
 constexpr int kTickMs = 33;
 constexpr qreal kSwayDeg = 3.0; // 摆动幅度（度）
+// 悬停放大预览
+constexpr int kPreviewMaxW = 1920; // 预览内容最大宽度
+constexpr int kPreviewMaxH = 1440; // 预览内容最大高度
+constexpr int kPreviewPad = 10;   // 预览卡片内边距
 }
+
+/**
+ * @brief 卡片悬停放大预览弹窗
+ *
+ * 鼠标悬停在晾衣绳卡片上时，以晾衣绳窗口中心为基准居中弹出：
+ * - 图片卡片：等比放大显示缩略图（不超过 kPreviewMaxW × kPreviewMaxH）
+ * - 文本卡片：自动换行显示完整文本（超出最大高度时截断）
+ * 设置 WA_TransparentForMouseEvents 不接收鼠标事件，避免遮挡卡片的悬停跟踪。
+ * @author chiangyang
+ */
+class CardPreviewPopup : public QWidget {
+public:
+    /**
+     * @brief 构造函数：无边框置顶工具窗，不抢焦点、不响应鼠标
+     * @author chiangyang
+     */
+    explicit CardPreviewPopup(QWidget *parent = nullptr)
+        : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool) {
+        setAttribute(Qt::WA_TranslucentBackground);
+        setAttribute(Qt::WA_TransparentForMouseEvents);
+        setAttribute(Qt::WA_ShowWithoutActivating);
+        hide();
+    }
+
+    /**
+     * @brief 显示图片预览（等比放大）
+     * @param pix 原图/缩略图
+     * @param centerGlobal 期望中心的全局坐标（晾衣绳窗口中心）
+     * @author chiangyang
+     */
+    void showImage(const QPixmap &pix, const QPoint &centerGlobal) {
+        if (pix.isNull()) {
+            hide();
+            return;
+        }
+        m_isImage = true;
+        m_text.clear();
+        const QSize maxSize = effectiveMaxSize(centerGlobal);
+        m_pix = pix.scaled(maxSize, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+        place(centerGlobal, m_pix.size() + QSize(kPreviewPad * 2, kPreviewPad * 2));
+    }
+
+    /**
+     * @brief 显示文本预览（自动换行，限宽限高）
+     * @param text 文本内容
+     * @param centerGlobal 期望中心的全局坐标（晾衣绳窗口中心）
+     * @author chiangyang
+     */
+    void showText(const QString &text, const QPoint &centerGlobal) {
+        if (text.isEmpty()) {
+            hide();
+            return;
+        }
+        m_isImage = false;
+        m_pix = QPixmap();
+        m_text = text;
+        // 以最大宽度换行测量文本尺寸，高度夹取到最大值
+        const QSize maxSize = effectiveMaxSize(centerGlobal);
+        const QFontMetrics fm(font());
+        const QRect br = fm.boundingRect(QRect(0, 0, maxSize.width(), 100000),
+                                         Qt::AlignHCenter | Qt::AlignVCenter | Qt::TextWordWrap,
+                                         text);
+        const QSize content(qMin(br.width(), maxSize.width()), qMin(br.height(), maxSize.height()));
+        place(centerGlobal, content + QSize(kPreviewPad * 2, kPreviewPad * 2));
+    }
+
+protected:
+    /**
+     * @brief 显示时强制输入穿透（WS_EX_TRANSPARENT）
+     * @note Qt 的 WA_TransparentForMouseEvents 对 Translucent 分层窗口在 Windows 上
+     *       不一定生效；若预览盖住鼠标所在卡片且未穿透，会引发 显示→Leave→隐藏→显示
+     *       的闪烁循环，因此显示时通过 Win32 强制设置扩展样式
+     * @author chiangyang
+     */
+    void showEvent(QShowEvent *event) override {
+        QWidget::showEvent(event);
+#ifdef Q_OS_WIN
+        HWND hwnd = reinterpret_cast<HWND>(winId());
+        LONG_PTR ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+        SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+#endif
+    }
+
+    /**
+     * @brief 绘制预览卡片：白底圆角 + 图片/文本内容
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(QPen(QColor(0, 0, 0, 40), 1));
+        p.setBrush(Qt::white);
+        p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 10, 10);
+        if (m_isImage) {
+            if (!m_pix.isNull()) {
+                p.drawPixmap(kPreviewPad, kPreviewPad, m_pix);
+            }
+        } else {
+            p.setPen(QColor(60, 60, 60));
+            p.drawText(rect().adjusted(kPreviewPad, kPreviewPad, -kPreviewPad, -kPreviewPad),
+                       Qt::AlignHCenter | Qt::AlignVCenter | Qt::TextWordWrap, m_text);
+        }
+    }
+
+private:
+    /**
+     * @brief 预览内容有效最大尺寸：kPreviewMaxW×kPreviewMaxH 夹取到所在屏幕
+     *        可用区域（四边各留 20px 边距），避免预览超出屏幕
+     * @author chiangyang
+     */
+    QSize effectiveMaxSize(const QPoint &centerGlobal) const {
+        QSize maxSize(kPreviewMaxW, kPreviewMaxH);
+        if (QScreen *screen = QGuiApplication::screenAt(centerGlobal)) {
+            maxSize = maxSize.boundedTo(screen->availableGeometry().size() - QSize(40, 40));
+        }
+        return maxSize;
+    }
+
+    /**
+     * @brief 以期望中心定位并显示（夹取到所在屏幕可用区域内）
+     * @author chiangyang
+     */
+    void place(const QPoint &centerGlobal, const QSize &windowSize) {
+        setFixedSize(windowSize);
+        QPoint pos = centerGlobal - QPoint(windowSize.width() / 2, windowSize.height() / 2);
+        if (QScreen *screen = QGuiApplication::screenAt(centerGlobal)) {
+            const QRect sg = screen->availableGeometry();
+            pos.setX(qBound(sg.left(), pos.x(), sg.right() - windowSize.width() + 1));
+            pos.setY(qBound(sg.top(), pos.y(), sg.bottom() - windowSize.height() + 1));
+        }
+        move(pos);
+        show();
+        raise();
+    }
+
+    QPixmap m_pix;              ///< 图片预览内容
+    QString m_text;             ///< 文本预览内容
+    bool m_isImage = true;      ///< 当前是图片预览还是文本预览
+};
 
 /**
  * @brief 构造函数
@@ -61,6 +212,9 @@ ClotheslineWindow::ClotheslineWindow(QWidget *parent)
     m_animTimer = new QTimer(this);
     m_animTimer->setInterval(kTickMs);
     connect(m_animTimer, &QTimer::timeout, this, &ClotheslineWindow::onTick);
+
+    // 悬停放大预览弹窗（随本窗口销毁）
+    m_preview = new CardPreviewPopup(this);
 
     // 历史增删时实时刷新卡片
     HistoryManager *history = HistoryManager::instance();
@@ -111,6 +265,7 @@ void ClotheslineWindow::reload() {
     }
 
     m_cards.clear();
+    hidePreview(); // 卡片重建后悬停态失效
     for (const HistoryItem &item : items) {
         Card c;
         c.id = item.id;
@@ -395,11 +550,58 @@ void ClotheslineWindow::updateHoverCursor(const QPoint &pos) {
 }
 
 /**
+ * @brief 更新卡片悬停预览：悬停卡片时以窗口中心为基准弹出放大预览
+ * @param pos 窗口局部坐标
+ * @author chiangyang
+ */
+void ClotheslineWindow::updateHoverPreview(const QPoint &pos) {
+    if (m_dragging || m_resizeMode != ResizeNone) {
+        hidePreview();
+        return;
+    }
+    int idx = -1;
+    for (int i = 0; i < m_cards.size(); ++i) {
+        if (m_cards[i].rect.contains(pos)) {
+            idx = i;
+            break;
+        }
+    }
+    if (idx == m_hoverIndex) {
+        return; // 悬停卡片未变化，避免重复弹窗
+    }
+    m_hoverIndex = idx;
+    if (idx < 0) {
+        hidePreview();
+        return;
+    }
+    // 以晾衣绳窗口中心为基准居中弹出预览
+    const Card &c = m_cards[idx];
+    const QPoint center = mapToGlobal(QPoint(width() / 2, height() / 2));
+    if (c.isImage && !c.thumb.isNull()) {
+        m_preview->showImage(c.thumb, center);
+    } else {
+        m_preview->showText(c.text, center);
+    }
+}
+
+/**
+ * @brief 隐藏卡片放大预览弹窗
+ * @author chiangyang
+ */
+void ClotheslineWindow::hidePreview() {
+    m_hoverIndex = -1;
+    if (m_preview) {
+        m_preview->hide();
+    }
+}
+
+/**
  * @brief 鼠标按下：关闭按钮 > 边缘调整 > 卡片复制 > 空白拖动
  * @author chiangyang
  */
 void ClotheslineWindow::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
+        hidePreview(); // 按下即关闭预览
         // 关闭按钮（不立即关闭，等 release 消化本次点击后再关，防止事件穿透到桌面）
         if (closeButtonRect().contains(event->pos())) {
             m_pendingClose = true;
@@ -430,12 +632,13 @@ void ClotheslineWindow::mousePressEvent(QMouseEvent *event) {
 }
 
 /**
- * @brief 鼠标移动：处理边缘调整与窗口拖动；空闲时更新悬停光标
+ * @brief 鼠标移动：处理边缘调整与窗口拖动；空闲时更新悬停光标与放大预览
  * @author chiangyang
  */
 void ClotheslineWindow::mouseMoveEvent(QMouseEvent *event) {
     // 边缘/角落调整大小
     if (m_resizeMode != ResizeNone && (event->buttons() & Qt::LeftButton)) {
+        hidePreview();
         const QPoint delta = event->globalPosition().toPoint() - m_resizeStartGlobal;
         QRect geo = m_resizeStartGeo;
         switch (m_resizeMode) {
@@ -464,10 +667,12 @@ void ClotheslineWindow::mouseMoveEvent(QMouseEvent *event) {
     }
     // 窗口拖动
     if (m_dragging && (event->buttons() & Qt::LeftButton)) {
+        hidePreview();
         move(event->globalPosition().toPoint() - m_dragOffset);
         return;
     }
     updateHoverCursor(event->pos());
+    updateHoverPreview(event->pos());
     QWidget::mouseMoveEvent(event);
 }
 
@@ -535,6 +740,10 @@ void ClotheslineWindow::leaveEvent(QEvent *event) {
     if (!m_dragging && m_resizeMode == ResizeNone) {
         unsetCursor();
     }
+    // 预览弹窗盖住鼠标时可能误发 Leave：光标仍在窗口几何内则不隐藏预览（兜底防闪烁）
+    if (!geometry().contains(QCursor::pos())) {
+        hidePreview();
+    }
     QWidget::leaveEvent(event);
 }
 
@@ -583,6 +792,7 @@ bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
 void ClotheslineWindow::closeEvent(QCloseEvent *event) {
     qApp->removeEventFilter(this);
     m_animTimer->stop();
+    hidePreview();
     QWidget::closeEvent(event);
     deleteLater();
 }

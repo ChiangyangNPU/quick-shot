@@ -6,6 +6,8 @@
 #include <QElapsedTimer>
 #include <QList>
 
+class CardPreviewPopup;
+
 /**
  * @brief 晾衣绳历史窗口
  *
@@ -13,6 +15,7 @@
  * 往下 1/4 高度处），绳上挂着最近的截图与剪贴板文本（数据来源 HistoryManager），
  * 卡片带入场下落与轻微摆动动画。
  * - 拖动空白区域可移动窗口位置；单击卡片：把对应截图/文本重新复制到系统剪贴板
+ * - 悬停卡片：以晾衣绳窗口中心为基准弹出放大预览，移出卡片即消失
  * - 双击空白区域：隐藏晾衣绳；左上角/右上角/左下角/右下角与上下边界可拖拽调整窗口大小；右上角 × 按钮关闭
  * - 关闭：× 按钮、双击空白、Esc、再次点击宠物、点击窗口外
  * - 历史增删时实时刷新（刷新时保留用户拖动后的位置）
@@ -128,6 +131,20 @@ private:
      */
     void updateHoverCursor(const QPoint &pos);
 
+    /**
+     * @brief 更新卡片悬停预览：悬停卡片时以窗口中心为基准弹出放大预览，
+     *        移出卡片/拖动/调整大小时隐藏
+     * @param pos 窗口局部坐标
+     * @author chiangyang
+     */
+    void updateHoverPreview(const QPoint &pos);
+
+    /**
+     * @brief 隐藏卡片放大预览弹窗
+     * @author chiangyang
+     */
+    void hidePreview();
+
     QList<Card> m_cards;            ///< 卡片列表
     QTimer *m_animTimer = nullptr;  ///< 摆动/入场动画定时器
     qreal m_phase = 0.0;            ///< 摆动相位
@@ -141,6 +158,8 @@ private:
     QRect m_resizeStartGeo;         ///< 调整开始时的窗口全局几何
     bool m_closeHovered = false;    ///< 鼠标悬停在关闭按钮上
     bool m_pendingClose = false;    ///< 双击空白区域请求关闭（等本次鼠标序列结束后执行，防止事件穿透到桌面）
+    CardPreviewPopup *m_preview = nullptr; ///< 悬停放大预览弹窗（不接收鼠标事件）
+    int m_hoverIndex = -1;          ///< 当前悬停的卡片下标（-1 表示无悬停）
 };
 
 #endif // CLOTHESLINEWINDOW_H
