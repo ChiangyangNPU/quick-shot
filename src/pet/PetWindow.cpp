@@ -5,6 +5,7 @@
 #include <QMouseEvent>
 #include <QPropertyAnimation>
 #include <QSequentialAnimationGroup>
+#include <QParallelAnimationGroup>
 #include <QTimer>
 #include <QRandomGenerator>
 #include <QtMath>
@@ -82,33 +83,44 @@ void PetWindow::openMouth() {
 }
 
 /**
- * @brief 咀嚼吞下：闭嘴 + 三轮咀嚼挤压回弹，完成后左眼闪星星
+ * @brief 咀嚼吞下：嘴巴反复张合咀嚼（3 次，拉长咀嚼感），
+ *        身体挤压回弹保持原时长并与嘴巴并行，完成后左眼闪星星
  * @author chiangyang
  */
 void PetWindow::chew() {
-    // 闭嘴
+    // 嘴巴咀嚼：先含住食物，再反复张合 3 次（总时长约 870ms）
+    auto *mouthSeq = new QSequentialAnimationGroup;
     QPropertyAnimation *closeMouth = new QPropertyAnimation(this, "mouthOpen");
-    closeMouth->setDuration(150);
+    closeMouth->setDuration(120);
     closeMouth->setStartValue(m_mouthOpen);
     closeMouth->setEndValue(0.0);
-
-    // 三轮咀嚼挤压回弹（每轮 320ms），拉长咀嚼过程更有满足感
-    auto *chewCycles = new QSequentialAnimationGroup;
+    mouthSeq->addAnimation(closeMouth);
     for (int i = 0; i < 3; ++i) {
-        QPropertyAnimation *cycle = new QPropertyAnimation(this, "chewScale");
-        cycle->setDuration(320);
-        cycle->setKeyValueAt(0.0, 1.0);
-        cycle->setKeyValueAt(0.4, 0.84);
-        cycle->setKeyValueAt(0.75, 1.06);
-        cycle->setKeyValueAt(1.0, 1.0);
-        chewCycles->addAnimation(cycle);
+        QPropertyAnimation *open = new QPropertyAnimation(this, "mouthOpen");
+        open->setDuration(120);
+        open->setStartValue(0.0);
+        open->setEndValue(0.65);
+        mouthSeq->addAnimation(open);
+        QPropertyAnimation *close = new QPropertyAnimation(this, "mouthOpen");
+        close->setDuration(130);
+        close->setStartValue(0.65);
+        close->setEndValue(0.0);
+        mouthSeq->addAnimation(close);
     }
 
-    QSequentialAnimationGroup *group = new QSequentialAnimationGroup(this);
-    group->addAnimation(closeMouth);
-    group->addAnimation(chewCycles);
-    // 咀嚼完成：左眼闪一颗星星
-    connect(group, &QSequentialAnimationGroup::finished, this, &PetWindow::sparkleStar);
+    // 身体挤压回弹（保持原来的时长）：1.0 → 0.82 → 1.08 → 1.0
+    QPropertyAnimation *squish = new QPropertyAnimation(this, "chewScale");
+    squish->setDuration(360);
+    squish->setKeyValueAt(0.0, 1.0);
+    squish->setKeyValueAt(0.35, 0.82);
+    squish->setKeyValueAt(0.7, 1.08);
+    squish->setKeyValueAt(1.0, 1.0);
+
+    // 嘴巴咀嚼与身体回弹并行，全部完成后闪星星
+    auto *group = new QParallelAnimationGroup(this);
+    group->addAnimation(mouthSeq);
+    group->addAnimation(squish);
+    connect(group, &QParallelAnimationGroup::finished, this, &PetWindow::sparkleStar);
     group->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
