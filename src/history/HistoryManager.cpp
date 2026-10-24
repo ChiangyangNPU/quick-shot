@@ -199,7 +199,7 @@ qint64 HistoryManager::addScreenshot(const QString &filePath,
     QMutexLocker locker(&m_mutex);
 
     QString timestampStr = QDateTime::currentDateTime().toString(Qt::ISODate);
-    QString thumbnailPath = thumbnailDirPath() + QString("/thumb_%1_%2.png")
+    QString thumbnailPath = thumbnailDirPath() + QString("/thumb_%1.png")
                                 .arg(QDateTime::currentMSecsSinceEpoch());
 
     // 创建缩略图
