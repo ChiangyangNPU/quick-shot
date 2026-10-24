@@ -42,7 +42,7 @@
 
 **[BaseToolBar.h](file:///e:/develop/Code/github_new/quick-shot/src/widgets/BaseToolBar.h)** 新增信号 `void gifRecordRequested();`。
 
-- [ScreenshotToolBar.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/ScreenshotToolBar.cpp)：GIF 按钮放在右侧操作区（OCR/翻译之后、复制之前），通过 `makeActionButton({&m_gifBtn, "record.gif", ":/icons/gif.svg"}, ...)` 创建；`!ScreenRecorder::isGifSupported()` 时隐藏。
+- [ScreenshotToolBar.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/ScreenshotToolBar.cpp)：GIF 按钮放在右侧操作区（OCR/翻译之后、滚动截图之前；实际顺序 OCR L98 → 翻译 L104 → GIF L111 → 滚动截图 L119-139 → 复制 L144），通过 `makeActionButton({&m_gifBtn, "record.gif", ":/icons/gif.svg"}, ...)` 创建；`!ScreenRecorder::isGifSupported()` 时隐藏。
 - [RecordingToolBar.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/RecordingToolBar.cpp)：GIF 按钮放在操作区（快照之后、取消之前），创建方式相同。
 - 两个按钮都注册进操作按钮表，图标/文字模式切换与翻译统一由 `updateActionButtons` / `retranslateActionButtons` 处理；新增图标 [gif.svg](file:///e:/develop/Code/github_new/quick-shot/icons/gif.svg) 并在 [resources.qrc](file:///e:/develop/Code/github_new/quick-shot/src/resources.qrc) 注册为 `:/icons/gif.svg`。
 - 接线：[SnipScreen.cpp](file:///e:/develop/Code/github_new/quick-shot/src/capture/SnipScreen.cpp) 中截图工具栏的 `gifRecordRequested → switchToRecordingMode() + showControlForGif()`；[RecordingSession.cpp](file:///e:/develop/Code/github_new/quick-shot/src/capture/RecordingSession.cpp) 中录屏工具栏的 `gifRecordRequested → showControlForGif()`。

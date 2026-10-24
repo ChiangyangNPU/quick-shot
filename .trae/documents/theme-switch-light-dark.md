@@ -22,11 +22,12 @@ cmbTheme 切换 → StyleManager::applyTheme(theme, cm)
   ├─ 批量 setColor + 写全部颜色键 + 写 theme 键
   ├─ reapplyGlobalStyleSheet()（占位符重填值）
   ├─ SettingsStyleTab 刷新色块按钮/容器背景/各输入框样式
-  └─ emit themeChanged → SettingsWindow 转发 → main.cpp 接线：
-      ├─ SnipScreen::refreshTheme()（刷 m_toolbar）
-      ├─ RecordingSession::refreshTheme()（刷 m_toolbar + 控制窗口）
+  └─ emit themeChanged → SettingsWindow 转发 → main.cpp 接线（main.cpp:222-232）：
+      ├─ SnipScreen::refreshTheme()（刷 m_toolbar；RecordingSession::refreshTheme() 由
+      │   SnipScreen 内部转发调用——SnipScreen.cpp:1987，刷录屏工具栏 + 控制窗口）
       ├─ HistoryWindow::updateWindowColors()（复用现有）
-      └─ PinWindow::refreshAllTheme()（新增静态槽）
+      ├─ PinWindow::refreshAllTheme()（新增静态槽）
+      └─ trayMenu 立即重设样式 trayMenu->setStyleSheet(getMenuStyle())（main.cpp:229-232）
 ```
 
 ## 实现步骤
@@ -47,6 +48,7 @@ cmbTheme 切换 → StyleManager::applyTheme(theme, cm)
 | ToolbarButtonHover | QColor(255,255,255,78) | hover |
 | ToolbarButtonDisabled | QColor(255,255,255,20) | 禁用 |
 | ToolbarButtonChecked | #0078d7 保留 | 深色下蓝色高亮清晰 |
+| SettingButtonBg | QColor(255,255,255,48) | 设置页按钮填充（SettingButtonText 同步 #f2f2f2；StyleManager.cpp:292） |
 | TabWidgetBg | #1a1a1e | 设置/历史主背景（实色） |
 | TabButtonBg | QColor(255,255,255,30)；TabButtonSelectedBg | #23232a；TabButtonSelectedText | #ffffff |
 | CaptureBorder / RecordBorder / HandleCircle / HandleClose / CloseButton* | 不变 | 屏幕叠加物/红色语义不随主题 |
@@ -61,7 +63,7 @@ cmbTheme 切换 → StyleManager::applyTheme(theme, cm)
 
 ### 4. app.qss 主题化：占位符替换方案
 
-硬编码颜色仅 6 类，改占位符（`@textColor`、`@groupBoxBorder`、`@inputBorder`、`@inputBorderFocus`、`@scrollBg`、`@scrollHandle`、`@scrollHandleHover`、`@sliderGroove`、`@sliderHandle`、`@colorButtonBorder`），避免两份 qss 的重复维护。
+硬编码颜色仅 6 类，改占位符共 **18 个**（`@textColor`、`@groupBoxBorder`、`@inputBorder`、`@inputBorderFocus`、`@scrollBg`、`@scrollHandle`、`@scrollHandleHover`、`@sliderGroove`、`@sliderHandle`、`@colorButtonBorder`、`@viewBg`、`@separatorColor`、`@checkBoxBorder`、`@checkBoxBg`、`@checkBoxBorderHover`、`@checkBoxChecked`、`@checkBoxDisabledBorder`、`@checkBoxDisabledBg`，见 StyleManager.cpp:644-661），避免两份 qss 的重复维护。
 
 - StyleManager.cpp 新增内部 `loadGlobalStyleSheet()`：读 `:/stylesheets/app.qss`，按 `themeMode()` 替换占位符（浅色用原值；深色用 `#f2f2f2`、`rgba(255,255,255,55/80/160)`、`#2a2a2e/#5a5a60/#7a7a80`、`#3a3a3e/#c0c0c4` 等）
 - `reapplyGlobalStyleSheet()` 与 main.cpp 启动加载处统一走 `loadGlobalStyleSheet()`
@@ -74,7 +76,7 @@ cmbTheme 切换 → StyleManager::applyTheme(theme, cm)
 
 - `loadSvgIcon` 新增带 `const QColor& tint` 的重载：render 后 `CompositionMode_SourceIn` + `fillRect(tint)`；原重载委托新版传 `QColor()` 不染色，不破坏现有调用
 - 新增 `toolbarIconTint()`：深色返回 `#f2f2f2`，浅色返回无效色
-- 调用点：[BaseToolBarActions.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/BaseToolBarActions.cpp#L195)、[RecordingControlWindow.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/RecordingControlWindow.cpp#L344-L356) 4 处加 tint
+- 调用点：[BaseToolBarActions.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/BaseToolBarActions.cpp#L195)、[RecordingControlWindow.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/RecordingControlWindow.cpp#L345-L357) 4 处加 tint（L345/349/353/357）
 - `getSettingsComboBoxStyle()` 里 QSS `image:` 引用的 spinner-up/down.svg 无法动态染色：新增白色版 `spinner-up-dark.svg`/`spinner-down-dark.svg`（注册进 qrc），深色分支换 URL
 
 ### 7. SettingsStyleTab UI
@@ -88,7 +90,7 @@ cmbTheme 切换 → StyleManager::applyTheme(theme, cm)
 
 - StyleManager 是静态类不能发信号：`SettingsStyleTab::themeChanged` → `SettingsWindow::themeChanged`（转发）→ main.cpp `ensureSettingsWindow` 内接线
 - 新增槽：`SnipScreen::refreshTheme()`（m_toolbar 重设 `getToolbarBackgroundStyle()` + 按钮样式/图标重建）、`RecordingSession::refreshTheme()`（同理 + m_controlWindow 调已存在的 `updateBackgroundStyle()/updateButtonStyles()`）、`PinWindow::refreshAllTheme()`（仿 `refreshAllToolDefaults` 静态遍历）、`SettingsWindow::refreshAllStyles()`（循环调各 Tab 的 `refreshStyles()` + 自身背景）
-- HistoryWindow 复用现有 `updateWindowColors()`；托盘菜单下次弹出自动取新 `getMenuStyle()`，无需即时刷新
+- HistoryWindow 复用现有 `updateWindowColors()`；托盘菜单在 `themeChanged` 时由 main.cpp **立即**重设样式 `trayMenu->setStyleSheet(StyleManager::getMenuStyle())`（main.cpp:229-232），非等下次弹出时自动取新值
 
 ### 9. 翻译（src/languages/*.json × 6）
 
@@ -99,6 +101,11 @@ cmbTheme 切换 → StyleManager::applyTheme(theme, cm)
 - `docs/architecture.md`：StyleManager 章节加"主题模式"小节（ThemeMode/applyTheme 与颜色表关系、占位符 qss、信号链）
 - `README.md` / `README-EN.md`：功能特性加主题切换说明
 - 新增方法全部补中文 Doxygen 注释（`@brief/@param/@return/@note/@author chiangyang`），重要段落加 `LOG_INFO`（英文）
+
+### 11. 深色标题栏（applyDarkTitleBar）
+
+- `StyleManager::applyDarkTitleBar(WId windowId)`（StyleManager.h:183-190）：Windows 经 DWM 沉浸式深色标题栏（`DwmSetWindowAttribute` + `DWMWA_USE_IMMERSIVE_DARK_MODE`），macOS 经 `NSWindow.appearance`（DarkAqua/Aqua），其他平台空实现
+- 各窗口创建后与主题切换时一并应用，使原生标题栏随主题同步变深/变浅
 
 ## 验证（用户自行编译后人工验证）
 
