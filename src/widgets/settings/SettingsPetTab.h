@@ -47,6 +47,8 @@ private:
     QGroupBox *m_petGroup;              ///< 桌面宠物分组
     QCheckBox *m_enablePetCheck;        ///< 打开桌面宠物复选框
     QLabel *m_styleLabel;               ///< 外观样式标签
+    QLabel *m_classicLabel;             ///< 经典样式分组标签（第一行）
+    QLabel *m_zodiacLabel;              ///< 十二生肖分组标签（第二行起，FlowLayout 自动换行）
     QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
     QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标）
     QPushButton *m_btnResetPos;         ///< 重置宠物位置按钮

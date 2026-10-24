@@ -240,6 +240,7 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/SettingsWindow.cpp
         src/widgets/SettingsWindow.h
         src/widgets/ElidedLabel.h
+        src/widgets/FlowLayout.h
         src/widgets/settings/SettingsAboutTab.cpp
         src/widgets/settings/SettingsAboutTab.h
         src/widgets/settings/SettingsHistoryTab.cpp

@@ -30,22 +30,38 @@ class PetWindow : public QWidget {
 public:
     /**
      * @brief 宠物外观样式
+     *
+     * 枚举值稳定不变（pet/style 按数字持久化）。UI 分组由设置页
+     * （SettingsPetTab 的 kClassicStyles/kZodiacStyles 下标表）决定：
+     * 经典组 = 猫/熊猫/企鹅/青蛙；十二生肖组（按传统顺序鼠牛虎兔龙蛇马羊
+     * 猴鸡狗猪）中，兔复用 Bunny 造型、狗复用 Shiba 造型（显示名"兔/狗"），
+     * 其余十种为生肖专属造型。
      * @author chiangyang
      */
     enum class PetStyle {
-        Cat = 0,      ///< 小橘猫（默认）
-        Shiba = 1,    ///< 柴犬
-        Panda = 2,    ///< 熊猫
-        Bunny = 3,    ///< 兔子
-        Penguin = 4,  ///< 企鹅
-        Frog = 5      ///< 青蛙
+        Cat = 0,      ///< 小橘猫（默认，经典组）
+        Shiba = 1,    ///< 狗（柴犬造型，生肖组）
+        Panda = 2,    ///< 熊猫（经典组）
+        Bunny = 3,    ///< 兔（长耳造型，生肖组）
+        Penguin = 4,  ///< 企鹅（经典组）
+        Frog = 5,     ///< 青蛙（经典组）
+        Mouse = 6,    ///< 生肖·鼠
+        Ox = 7,       ///< 生肖·牛
+        Tiger = 8,    ///< 生肖·虎
+        Dragon = 9,   ///< 生肖·龙
+        Snake = 10,   ///< 生肖·蛇
+        Horse = 11,   ///< 生肖·马
+        Goat = 12,    ///< 生肖·羊
+        Monkey = 13,  ///< 生肖·猴
+        Rooster = 14, ///< 生肖·鸡
+        Pig = 15      ///< 生肖·猪
     };
 
     /**
      * @brief 样式总数（设置页遍历用）
      * @author chiangyang
      */
-    static constexpr int petStyleCount() { return 6; }
+    static constexpr int petStyleCount() { return 16; }
 
     /**
      * @brief 构造函数

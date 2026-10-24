@@ -4,18 +4,38 @@
 #include "../../pet/DesktopPetManager.h"
 #include "../../pet/PetWindow.h"
 #include "../../pet/PetUiScale.h"
+#include "../FlowLayout.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 
 namespace {
-// 样式名 i18n 键与英文兜底文案（下标对应 PetWindow::PetStyle 枚举值）
+// 样式名 i18n 键与英文兜底文案（下标对应 PetWindow::PetStyle 枚举值；
+// 经典组 = 猫/熊猫/企鹅/青蛙，生肖组含全部 12 属相，兔/狗复用 Bunny/Shiba 造型）
 constexpr const char *kStyleKeys[] = {
     "pet.style.cat", "pet.style.shiba", "pet.style.panda",
-    "pet.style.bunny", "pet.style.penguin", "pet.style.frog"
+    "pet.style.bunny", "pet.style.penguin", "pet.style.frog",
+    "pet.style.mouse", "pet.style.ox", "pet.style.tiger", "pet.style.dragon",
+    "pet.style.snake", "pet.style.horse", "pet.style.goat",
+    "pet.style.monkey", "pet.style.rooster", "pet.style.pig"
 };
 constexpr const char *kStyleFallbacks[] = {
-    "Orange Cat", "Shiba", "Panda", "Bunny", "Penguin", "Frog"
+    "Orange Cat", "Dog", "Panda", "Rabbit", "Penguin", "Frog",
+    "Rat", "Ox", "Tiger", "Dragon", "Snake", "Horse",
+    "Goat", "Monkey", "Rooster", "Pig"
+};
+
+// 分组归属（下标为 PetStyle 枚举值）。枚举值保持稳定保证 pet/style 持久化兼容，
+// 分组只是 UI 摆放：柴犬/兔子造型归入生肖组，显示名改为"狗/兔"（i18n 键值）
+constexpr int kClassicStyles[] = {
+    0,  // 猫
+    2,  // 熊猫
+    4,  // 企鹅
+    5   // 青蛙
+};
+// 十二生肖按传统顺序：鼠牛虎兔龙蛇马羊猴鸡狗猪（兔=Bunny、狗=Shiba 复用造型）
+constexpr int kZodiacStyles[] = {
+    6, 7, 8, 3, 9, 10, 11, 12, 13, 14, 1, 15
 };
 }
 
@@ -77,12 +97,24 @@ void SettingsPetTab::setupUi() {
         DesktopPetManager::instance()->setPetStyle(static_cast<PetWindow::PetStyle>(id));
     });
 
+    // 第一行：经典样式
+    m_classicLabel = new QLabel(tm->get("pet.classicGroup", "Classic"), m_petGroup);
     QHBoxLayout *styleRow = new QHBoxLayout();
     styleRow->setSpacing(PetUi::scaled(6));
-    for (QToolButton *btn : m_styleButtons) {
-        styleRow->addWidget(btn);
+    for (int idx : kClassicStyles) {
+        if (idx < m_styleButtons.size()) styleRow->addWidget(m_styleButtons[idx]);
     }
     styleRow->addStretch();
+
+    // 第二行起：十二生肖（12 个按传统顺序；FlowLayout 自动换行）
+    // 注意：FlowLayout 不能以 m_petGroup 为父构造——QLayout 构造函数会设置
+    // QObject 父子关系，导致 addLayout 拒绝挂载（布局成孤儿，按钮不显示），
+    // 必须无父创建后交由 addLayout 收养
+    m_zodiacLabel = new QLabel(tm->get("pet.zodiacGroup", "Zodiac"), m_petGroup);
+    auto *zodiacRow = new FlowLayout(nullptr, PetUi::scaled(6), PetUi::scaled(6));
+    for (int idx : kZodiacStyles) {
+        if (idx < m_styleButtons.size()) zodiacRow->addWidget(m_styleButtons[idx]);
+    }
 
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_petGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
@@ -97,7 +129,10 @@ void SettingsPetTab::setupUi() {
 
     petLayout->addWidget(m_enablePetCheck);
     petLayout->addWidget(m_styleLabel);
+    petLayout->addWidget(m_classicLabel);
     petLayout->addLayout(styleRow);
+    petLayout->addWidget(m_zodiacLabel);
+    petLayout->addLayout(zodiacRow);
     petLayout->addWidget(m_btnResetPos);
     petLayout->addWidget(m_descLabel);
 
@@ -114,6 +149,8 @@ void SettingsPetTab::retranslateUi() {
     if (m_petGroup) m_petGroup->setTitle(tm->get("pet.group", "Desktop Pet"));
     if (m_enablePetCheck) m_enablePetCheck->setText(tm->get("pet.enable", "Enable Desktop Pet"));
     if (m_styleLabel) m_styleLabel->setText(tm->get("pet.styleLabel", "Pet Style"));
+    if (m_classicLabel) m_classicLabel->setText(tm->get("pet.classicGroup", "Classic"));
+    if (m_zodiacLabel) m_zodiacLabel->setText(tm->get("pet.zodiacGroup", "Zodiac"));
     for (int i = 0; i < m_styleButtons.size() && i < PetWindow::petStyleCount(); ++i) {
         m_styleButtons[i]->setText(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
         m_styleButtons[i]->setToolTip(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
