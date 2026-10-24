@@ -102,10 +102,28 @@ QComboBox QAbstractItemView {
     padding: 0.2em;
 }
 
-/* 复选框指示器跟随字体 */
+/* 复选框指示器跟随字体；边框/背景/对勾随主题适配。
+   注：任何 QSS 都会让 QCheckBox 退出原生主题绘制，若只设尺寸则指示器
+   由原生调色板绘制——深色模式下原生对勾不可见，故这里显式完整绘制：
+   未勾选=描边空框，勾选=应用强调色底 + 白色对勾图标，禁用态弱化。 */
 QCheckBox::indicator {
     width: 1.1em;
     height: 1.1em;
+    border: 1px solid @checkBoxBorder;
+    border-radius: 0.2em;
+    background: @checkBoxBg;
+}
+QCheckBox::indicator:hover {
+    border-color: @checkBoxBorderHover;
+}
+QCheckBox::indicator:checked {
+    border-color: @checkBoxChecked;
+    background-color: @checkBoxChecked;
+    image: url(:/icons/check.svg);
+}
+QCheckBox::indicator:disabled {
+    border-color: @checkBoxDisabledBorder;
+    background: @checkBoxDisabledBg;
 }
 
 /* 滚动条

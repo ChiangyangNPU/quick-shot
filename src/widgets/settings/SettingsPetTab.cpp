@@ -105,7 +105,7 @@ void SettingsPetTab::setupUi() {
     });
 
     m_descLabel = new QLabel(tm->get("pet.description",
-        "When enabled, screenshots fly into the pet after copy/pin. Click the pet to view the clothesline of recent screenshots and copied text."), m_petGroup);
+        "When enabled, screenshots fly into the pet after copy/pin. \nClick the pet to view the clothesline of recent screenshots and copied text."), m_petGroup);
     m_descLabel->setWordWrap(false);
 
     petLayout->addWidget(m_enablePetCheck);

@@ -650,6 +650,12 @@ QString StyleManager::loadGlobalStyleSheet() {
             { "@colorButtonBorder", "rgba(255,255,255,55)" },
             { "@viewBg",            "#1a1a1e" },
             { "@separatorColor",    "rgba(255,255,255,60)" },
+            { "@checkBoxBorder",    "rgba(255,255,255,120)" },
+            { "@checkBoxBg",        "#2a2a2e" },
+            { "@checkBoxBorderHover", "rgba(255,255,255,200)" },
+            { "@checkBoxChecked",   "#0078d7" },
+            { "@checkBoxDisabledBorder", "rgba(255,255,255,40)" },
+            { "@checkBoxDisabledBg", "rgba(255,255,255,12)" },
         }
         : QHash<QString, QString>{
             { "@textColor",         "#000" },
@@ -664,6 +670,12 @@ QString StyleManager::loadGlobalStyleSheet() {
             { "@colorButtonBorder", "#ccc" },
             { "@viewBg",            "#ffffff" },
             { "@separatorColor",    "rgba(0,0,0,40)" },
+            { "@checkBoxBorder",    "#848484" },
+            { "@checkBoxBg",        "#ffffff" },
+            { "@checkBoxBorderHover", "#2a2a2a" },
+            { "@checkBoxChecked",   "#0078d7" },
+            { "@checkBoxDisabledBorder", "#c0c0c0" },
+            { "@checkBoxDisabledBg", "#f0f0f0" },
         };
     for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
         sheet.replace(it.key(), it.value());

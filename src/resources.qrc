@@ -18,6 +18,7 @@
     <file alias="erase.svg">../icons/erase.svg</file>
     <file alias="undo.svg">../icons/undo.svg</file>
     <file alias="redo.svg">../icons/redo.svg</file>
+    <file alias="check.svg">../icons/check.svg</file>
     <file alias="clear.svg">../icons/clear.svg</file>
     <file alias="ocr.svg">../icons/ocr.svg</file>
     <file alias="translate.svg">../icons/translate.svg</file>
