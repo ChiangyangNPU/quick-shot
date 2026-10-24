@@ -39,6 +39,7 @@ QuickShot 是一款跨平台的截图与录屏工具，基于 **Qt 6.10.2** 框�
 - **可配置全局热键**：9 个可自定义全局热键（截图/录屏/历史/贴图/全屏/活动窗口/录屏暂停/录屏停止/隐藏贴图），通过 ShortcutManager 集中管理
 - **标注快捷键统一**：SnipScreen 与 PinWindow 通过 AnnotationShortcutController + QShortcut 统一注册标注快捷键（数字键1-8切换工具、[/]调笔宽、Tab循环颜色等），文本编辑框获得焦点时自动禁用裸键避免输入冲突
 - **历史记录**：截图与剪贴板文本历史记录，支持多选、批量删除、搜索、自动清理
+- **桌面宠物**：6 种外观（猫/柴犬/熊猫/兔子/企鹅/青蛙）常驻桌宠，单击开关晾衣绳历史快捷面板（最近 12 条记录卡片、悬停放大预览、右键复制/标注/OCR/翻译），截图复制/贴图/快照与文本复制触发投喂飞入动画
 - **多语言界面**：简体中文、繁体中文（台湾）、繁体中文（香港）、英文、日文、韩文
 - **单实例互斥**：QLockFile 锁（应用数据目录，按用户隔离）；第二实例弹本地化提示后立即退出，避免热键静默失效、剪贴板历史重复记录与配置/数据库双写；崩溃残留死锁按 PID 存活自动清理，锁文件不可写时降级为无防护继续运行
 - **跨平台**：Windows、macOS、Linux
@@ -61,6 +62,7 @@ graph TB
         E[RecordingControlWindow 录制控制]
         F2[HistoryWindow 历史记录窗口]
         TW[TranslateOverlayWindow 译文叠加窗口]
+        PET[PetWindow 宠物 / ClotheslineWindow 晾衣绳]
     end
 
     subgraph 业务逻辑层
@@ -270,6 +272,14 @@ graph LR
         Utils
     end
 
+    subgraph 桌面宠物模块
+        DesktopPetManager
+        PetWindow
+        ClotheslineWindow
+        CardPreviewPopup
+        FlyAnimationWidget
+    end
+
     main.cpp --> SnipScreen
     main.cpp --> SettingsWindow
     main.cpp --> ShortcutManager
@@ -279,6 +289,15 @@ graph LR
     main.cpp --> HistoryManager
     main.cpp --> ClipboardMonitor
     main.cpp --> HistoryWindow
+    main.cpp --> DesktopPetManager
+
+    DesktopPetManager --> PetWindow
+    DesktopPetManager --> ClotheslineWindow
+    DesktopPetManager --> FlyAnimationWidget
+    DesktopPetManager --> HistoryManager
+    ClotheslineWindow --> CardPreviewPopup
+    ClotheslineWindow --> HistoryManager
+    SnipScreen --> DesktopPetManager
 
     ShortcutManager --> ShortcutRegistry
     ShortcutManager --> TrayMenuBuilder
@@ -399,24 +418,25 @@ classDiagram
     class SnipScreen {
         -Selector* m_selector
         -ScreenshotToolBar* m_toolbar
-        -RecordingToolBar* m_recordingToolbar
-        -RecordingControlWindow* m_recordingControl
-        -ScreenRecorder* m_screenRecorder
+        -RecordingSession* m_recordingSession
+        -ScrollCaptureSession* m_scrollSession
         -unique_ptr~AnnotationInteractionHandler~ m_annotationHandler
-        -AnnotationShortcutController* m_annotationShortcutController
+        -AnnotationShortcutController* m_annotationController
         -QPixmap m_background
-        -QPixmap m_annotatedBackground
         -QRect m_virtualGeometry
-        -QPoint m_globalOffset
         -int m_pinHistoryIndex
         -QPoint m_lastPinPos
         -QPointer~PinWindow~ m_lastPinHistoryWindow
-        -bool m_isRecordingMode
-        -bool m_isRecordingCanceled
         -OverlayTextEdit* m_textEdit
         -QTimer* m_screenWatchTimer
         +void start()
         +void startRecording()
+        +void startScrollCapture(orientation)
+        +void togglePauseRecording()
+        +void stopRecording()
+        +void refreshAnnotationToolDefaults()
+        +void refreshTheme()
+        +void performTranslate()
         +void exit()
         +void copy()
         +void save()
@@ -440,27 +460,26 @@ classDiagram
         -QPixmap captureSelectionForOcr()
         -void performOcr(pixmap)
         -void finalizeTextEdit()
-        -QImage renderAnnotationOverlay()
-        -void pushAnnotationOverlay()
-        -void updateInputMask()
         -void updateToolBarState(...)
         -bool isMouseInToolBar(...)
         -QPoint clampToSelection(pos)
         -QPoint mapToSelection(globalPos)
         -void checkScreenSwitch()
-        -void excludeFromCapture(exclude)
-        +bool canAnnotate()
-        +void onToolSwitch(id)
-        +void onCopy()
-        +void onSave()
-        +void onUndo()
-        +void onRedo()
-        +void onClear()
-        +void onPenWidthChange(delta)
-        +void onCycleColor()
-        +void onCancel()
-        +void onRefresh()
+        -bool canAnnotate()
+        -void onToolSwitch(id)
+        -void onCopy()
+        -void onSave()
+        -void onUndo()
+        -void onRedo()
+        -void onClear()
+        -void onPenWidthChange(delta)
+        -void onCycleColor()
+        -void onCancel()
+        -void onRefresh()
+        -void onSwitchMode()
     }
+
+    note for SnipScreen "录屏的 WDA 排除捕获、overlay 渲染/推送、输入遮罩，以及控制栏/录制器均内聚在 RecordingSession；滚动截图抓帧/拼接/提示条内聚在 ScrollCaptureSession"
 
     class AnnotationInteractionHandler {
         -AnnotationManager m_annotationManager
@@ -1013,8 +1032,9 @@ classDiagram
 
     class GlobalShortcut {
         +registerShortcut(sequence, callback)
-        +void updateShortcut(sequence)
-        +void unregister()
+        +void updateShortcut(newSequence)
+        +void unregisterShortcut()
+        +void triggerCallback()
     }
 
     class Logger {
@@ -1052,6 +1072,7 @@ classDiagram
         +qint64 addClipboardText(text, sourceApp)
         +QList~HistoryItem~ getItems(type, page, pageSize)
         +QList~HistoryItem~ searchItems(keyword, type)
+        +QList~HistoryItem~ searchItems(keyword, type, page, pageSize)
         +int getItemCount(type)
         +HistoryItem getItemById(id)
         +bool removeItem(id)
@@ -1063,7 +1084,12 @@ classDiagram
         +void setClipboardEnabled(enabled)
         +void setRetentionDays(days)
         +void setMaxItems(count)
+        +itemAdded(item) signal
+        +itemRemoved(id) signal
+        +cleared() signal
     }
+
+    note for HistoryManager "itemAdded/itemRemoved/cleared 驱动晾衣绳窗口实时刷新与文字复制投喂（DesktopPetManager）"
 
     class HistoryItem {
         +qint64 id
@@ -1079,12 +1105,16 @@ classDiagram
     }
 
     class ClipboardMonitor {
+        <<Singleton>>
+        -ClipboardMonitor* s_instance
         -QClipboard* m_clipboard
         -QString m_lastText
         -bool m_isActive
+        +ClipboardMonitor* instance()
         +void start()
         +void stop()
         +bool isActive() const
+        +void markTextAsRecorded(text)
         -void onClipboardChanged()
         -QString getClipboardText()
         -QString getSourceAppName()
@@ -1409,10 +1439,12 @@ classDiagram
 
     class ShortcutConfigItem {
         +type: ShortcutType
-        +configKey: QString
-        +defaultValue: QString
-        +trayTextKey: QString
-        +trayFallback: QString
+        +configKey: const char*
+        +defaultValue: const char*
+        +trayTextKey: const char*
+        +trayFallback: const char*
+        +settingsLabelKey: const char*
+        +settingsLabelFallback: const char*
     }
 
     class ShortcutTypes {
@@ -1423,6 +1455,7 @@ classDiagram
         +getShortcutConfig(type)
         +getShortcutSequence(config)
         +getAllShortcutConfigs()
+        +dispatchShortcutAction(type, snipScreen, historyWindow)
     }
 
     class AnnotationShortcutController {
@@ -1451,12 +1484,15 @@ classDiagram
         +void onCycleColor()
         +void onCancel()
         +void onRefresh()
+        +void onSwitchMode()
     }
 
     class GlobalShortcut {
         +registerShortcut(sequence, callback)
-        +updateShortcut(sequence)
-        +unregister()
+        +updateShortcut(newSequence)
+        +unregisterShortcut()
+        +triggerCallback()
+        +setFnKeyCallback(callback)
     }
 
     ShortcutManager o-- ShortcutRegistry
@@ -1481,7 +1517,7 @@ classDiagram
 ```
 
 > **快捷键系统说明**：
-> - 新增 9 个快捷键仅需修改 3 处：`ShortcutTypes.h` 数据表加 1 项、`ShortcutManager::registerAll()` 绑定回调、`main.cpp` switch 分发改名；新增标注快捷键仅需 `AnnotationShortcutController::registerAll()` 增加 1 行注册。
+> - 新增全局快捷键仅需修改 2 处：`ShortcutTypes.h` 数据表加 1 项、`ShortcutTypes.cpp` 的 `dispatchShortcutAction()` 加 1 个分发分支（registerAll 与 TrayMenuBuilder 共用该分发，main.cpp 的 switch 已抽离）；新增标注快捷键仅需 `AnnotationShortcutController::registerAll()` 增加 1 行注册。
 > - ShortcutManager 使用**外观模式**提供统一 API，内部协调 ShortcutRegistry（注册表模式管理 GlobalShortcut 生命周期）和 TrayMenuBuilder（数据驱动构建托盘菜单）。
 > - ShortcutConfigItem 数据表为**单一事实源**：一份配置同时服务于注册、设置 UI、托盘菜单、默认值读取，修改一处全部生效。
 > - AnnotationShortcutController 基于**策略模式**，持有 IShortcutHandler 接口（SnipScreen / PinWindow 分别实现），统一用 QShortcut + setEnabled 机制管理标注快捷键。
@@ -1962,6 +1998,8 @@ macOS（尤其是 Sidecar/AirPlay 副屏）不支持跨多屏的透明窗口，�
 - `OcrEngine`：唯一 OCR 引擎实例（全接口共用一把可重入互斥锁，`recognize()` 全程持锁串行化；main 启动时在主线程预热构造，避免单例在 QtConcurrent 工作线程首次创建导致线程亲和性错位）
 - `HistoryManager`：唯一历史记录管理器实例，管理 SQLite 数据库和自动清理
 - `TranslateService`：唯一文本翻译服务实例，管理多引擎切换与批量翻译状态机
+- `DesktopPetManager`：唯一桌面宠物管理器实例，管理宠物开关/位置/外观持久化、投喂与晾衣绳显隐
+- `ClipboardMonitor`：唯一剪贴板监听器实例
 - `Logger`：全局日志记录器
 
 ### 6.4 工具栏动态定位
@@ -2042,7 +2080,7 @@ Host回调（窗口差异注入）
 - **TrayMenuBuilder（工厂方法 + 数据驱动）**：遍历 ShortcutConfigItem 数据表逐项创建 QAction，自动拼接"文案 + (快捷键)"；监听 shortcutChanged 信号自动刷新显示；ShortcutConfigItem.trayTextKey 为 nullptr 的类型不生成托盘菜单项
 
 **6.9.2 标注快捷键子系统（AnnotationShortcutController + IShortcutHandler）**
-- **IShortcutHandler（策略接口）**：定义 10 个标注动作命令（canAnnotate/onToolSwitch/onCopy/onSave/onUndo/onRedo/onClear/onPenWidthChange/onCycleColor/onCancel/onRefresh），SnipScreen 与 PinWindow 各自实现
+- **IShortcutHandler（策略接口）**：定义 12 个标注动作命令（canAnnotate/onToolSwitch/onCopy/onSave/onUndo/onRedo/onClear/onPenWidthChange/onCycleColor/onCancel/onRefresh/onSwitchMode），SnipScreen 与 PinWindow 各自实现（onSwitchMode 仅 SnipScreen 有意义，PinWindow 空实现）
 - **AnnotationShortcutController（策略持有）**：统一使用 `QShortcut + Qt::WindowShortcut + setEnabled(true/false)` 机制管理标注快捷键的注册与启用状态
 - **文本编辑冲突管理**：OverlayTextEdit 获取焦点时，`setBareKeysEnabled(false)` 批量禁用数字键/[/]/Tab/Delete/Backspace/Ctrl+C 等裸键，让按键正常交给文本框输入；失焦时恢复
 - **canAnnotate() 前置检查**：控制器在调用具体 action 前统一判断，SnipScreen 要求选区状态 Captured/Locked，PinWindow 要求处于标注模式
@@ -2265,6 +2303,16 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 - **异常恢复**：连续 8 帧（约 1.2 秒）无法定位时，以当前帧重设匹配基准并显示「已重新对齐」，避免页面跳转或快速滚动后永久卡住。
 - **结果交付**：完成后交给 `SnipScreen::pinPixmap`，用 PinWindow 承载，复用复制/保存/标注/翻译；超长图按屏幕可用高度等比缩放显示，内部保留原图。
 
+### 6.20 桌面宠物模块（src/pet）
+
+宠物模块由管理器单例 + 三个窗口 + 一个动画控件组成，全部按屏幕 DPI 缩放（PetUiScale，系数 = 主屏 logicalDotsPerInch/96，夹取 1.0–3.0）：
+
+- **DesktopPetManager（单例）**：管理 `pet/enabled`、`pet/posX`、`pet/posY`、`pet/style` 四个配置键的持久化与启动恢复；提供截图 `feed()`（复制/贴图/快照流程显式调用）与文本 `feedText()`（监听 `HistoryManager::itemAdded` 非截图记录自动触发，即"文字复制投喂"）两种投喂入口；管理晾衣绳窗口显隐切换（宠物点击 toggle）。
+- **PetWindow**：无边框透明置顶窗口，纯 QPainter 绘制 6 种外观样式（猫/柴犬/熊猫/兔子/企鹅/青蛙）；共用闭嘴/张嘴/咀嚼三态动画 + 待机随机眨眼 + 咀嚼后左眼闪星星；拖动结束发射 `dragFinished` 持久化位置，单击（与拖动按移动距离区分）发射 `clicked` 驱动晾衣绳开关；`renderStylePreview()` 供设置页生成样式预览图。
+- **ClotheslineWindow**：点击宠物弹出的历史快捷面板——铺满主屏宽度、顶部往下 1/4 高度处，悬链线（二次贝塞尔）绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；卡片悬停弹出 `CardPreviewPopup`，单击卡片复制到剪贴板（文本先 `markTextAsRecorded` 去重）；支持拖动与边缘/四角调整大小；关闭途径：右上角 ×、双击空白、Esc、点击窗口外、再次点击宠物；经 `itemAdded`/`itemRemoved`/`cleared` 信号实时刷新。**点窗外自动关闭**的全局事件过滤按顶层窗口类型豁免工作流窗口（SnipScreen/RecordingControlWindow/QMenu/PinWindow/PinAnnotationToolBar/OcrResultDialog/TranslateOverlayWindow），注意顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow），需经 `QWidget::find` 映射回 widget 再判断。
+- **CardPreviewPopup**：悬停放大预览弹窗——图片加载原图（按 DPR 从原图出图保证清晰）并支持滚轮 0.2–10 倍缩放，文本自动换行；右键菜单接入复制 / 标注（创建 PinWindow 并直接进入标注模式）/ 文字识别 / 翻译。
+- **FlyAnimationWidget**：透明、鼠标穿透的置顶动画窗口，携带截图从来源区域沿曲线缩小飞到宠物嘴部坐标，到达后发射 `arrived()` 并自毁。
+
 ---
 
 ## 7. 配置项
@@ -2380,11 +2428,22 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 | 语言代码 | 语言名称 | 翻译文件 |
 |----------|----------|----------|
 | `zh_CN` | 简体中文 | `zh_CN.json` |
-| `zh_TW` | 繁體中文 | `zh_TW.json` |
-| `zh_HK` | 粵語 | `zh_HK.json` |
+| `zh_TW` | 繁體中文（台灣） | `zh_TW.json` |
+| `zh_HK` | 繁體中文（香港） | `zh_HK.json` |
 | `en_US` | English | `en_US.json` |
 | `ja_JP` | 日本語 | `ja_JP.json` |
 | `ko_KR` | 한국어 | `ko_KR.json` |
+
+### 7.8 桌面宠物配置
+
+由 ConfigManager 启动时播种默认值（ConfigManager.cpp 播种段），SettingsPetTab / DesktopPetManager 读写：
+
+| 配置键 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `pet/enabled` | Bool | `false` | 是否启用桌面宠物 |
+| `pet/posX` | Int | `-1` | 宠物窗口 X 坐标（-1 = 使用默认右下角位置） |
+| `pet/posY` | Int | `-1` | 宠物窗口 Y 坐标（-1 = 使用默认右下角位置） |
+| `pet/style` | Int | `0` | 宠物外观样式（PetStyle 枚举 0-5：猫/柴犬/熊猫/兔子/企鹅/青蛙） |
 
 ---
 
@@ -2508,6 +2567,7 @@ graph TB
         A5[HistoryWindow]
         A6[RecordingControlWindow]
         A7[TranslateOverlayWindow]
+        A8[PetWindow / ClotheslineWindow]
     end
 
     subgraph 快捷键系统层
@@ -2642,6 +2702,9 @@ mindmap
 | HistoryManager | src/history/HistoryManager.h | SQLite 历史记录管理 |
 | OcrEngine | src/ocr/OcrEngine.h | ONNX Runtime OCR 引擎 |
 | ShortcutManager | src/shortcut/ShortcutManager.h | 全局热键管理器 |
+| TranslateService | src/translate/TranslateService.h | 文本翻译服务（多引擎、批量状态机） |
+| DesktopPetManager | src/pet/DesktopPetManager.h | 桌面宠物管理器（开关/位置/外观持久化、投喂、晾衣绳显隐） |
+| ClipboardMonitor | src/history/ClipboardMonitor.h | 剪贴板监听器（文本记录 + markTextAsRecorded 去重） |
 
 **实现特点**：
 - 使用 QObject 基类，支持信号/槽
@@ -3213,7 +3276,7 @@ graph TD
     end
 
     subgraph 单例
-        Sig[Singleton 单例模式<br/>7 个全局管理器]
+        Sig[Singleton 单例模式<br/>10 个全局管理器]
     end
 
     subgraph 运行时
@@ -3262,11 +3325,18 @@ graph TD
 | 测试目标 | 被测对象 | 覆盖内容 |
 |---|---|---|
 | `AnnotationManagerTest` | AnnotationManager | 撤销/重做状态机：三操作流（标注/橡皮擦组/马赛克组）序号合并、清除快照（undo 完整恢复/redo 再清除）、移动记录（位置恢复、无位移不记录、Pen 路径点恢复）、新标注使移动历史失效、scaleAll 同步栈内与快照内容 |
+| `MosaicPaintCacheTest` | AnnotationManager | 马赛克两级离屏缓存重绘等价性：同状态重绘逐字节一致、新增笔迹旧区域像素不变、contentVersion/背景变化触发基础层重建 |
 | `OcrDetPostprocessTest` | OcrDetPostprocess | DB 检测后处理（纯计算，无 GUI 依赖） |
+| `OcrPreprocessTest` | OcrPreprocess | Det/Rec 预处理（缩放、归一化、通道布局） |
+| `OcrRecPostprocessTest` | OcrRecPostprocess | CTC 解码（argmax+softmax、去 blank、字典映射） |
 | `StyleManagerTest` | StyleManager | 颜色配置表完整性与存取回环 |
 | `TranslationManagerTest` | TranslationManager | 翻译键回退契约、六语言文件可加载且 currentLanguage 跟随、加载失败不污染状态、config.* 错误文案词条六语言齐备 |
 | `UpdateManagerVersionTest` | UpdateManager | 版本比较与 release API 解析 |
 | `ScrollStitcherTest` | ScrollStitcher | 垂直/水平拼接、固定表头与固定页脚（含像素级校验）、白底稀疏页面、重复帧/无纹理帧丢弃、最大长度、页面跳转与快速滚动后的基准重设 |
+| `GlobalShortcutKeyMapTest` | ShortcutKeyMap | Qt 键 → Windows VK / macOS keycode 映射表 |
+| `HistoryManagerTest` | HistoryManager | 记录增删查、去重、保留天数清理 |
+| `ResizerTest` | Resizer | 选区边缘/角落尺寸调整计算 |
+| `SecretStoreTest` | SecretStore | 凭据加密存储与旧明文迁移 |
 
 本地运行：
 
@@ -3291,40 +3361,53 @@ src/
 │   ├── Annotation.h      # 标注类定义（矩形/椭圆/三角形/画笔/箭头/直线/文本/马赛克）
 │   ├── AnnotationManager.h/cpp  # 标注管理器（撤销/重做/清除/橡皮擦/马赛克）
 │   ├── AnnotationInteractionHandler.h/cpp  # 标注交互处理器（SnipScreen/PinWindow复用，Host回调策略模式）
+│   ├── AnnotationTextUtils.h/cpp # 文本标注构造公共几何计算
+│   ├── CaptureSession.h  # 截图产物统一分发（剪贴板 + 历史入库，头文件内联）
+│   ├── CaptureComposer.h/cpp # 背景+标注+马赛克离屏合成（纯函数）
 │   ├── Resizer.h         # 选区尺寸管理
 │   ├── Selector.h/cpp    # 选区组件（状态机、交互逻辑）
 │   ├── RecordingSession.h/cpp # 录屏编排协调器（工具栏/控制栏/录制器接线、WDA排除捕获、overlay推送、输入遮罩）
+│   ├── ScrollCaptureSession.h/cpp # 滚动截图会话（垂直/水平滚动采集编排）
+│   ├── ScrollStitcher.h/cpp # 滚动拼接（行指纹投票定位、页脚排除）
 │   └── SnipScreen.h/cpp  # 主窗口（截图路径协调 + 模式切换入口）
 ├── core/                 # 核心服务
 │   ├── ConfigManager.h/cpp      # 配置管理（单例、QSettings 持久化封装）
 │   ├── SecretStore.h/cpp        # 凭据安全存储（Windows DPAPI / macOS Keychain / Linux 明文降级 + 旧明文自动迁移）
 │   ├── DisplayInfo.h/cpp # 显示器信息（平台相关）
 │   ├── Hunter.h/cpp      # 窗口捕捉（窗口/显示器枚举与吸附）
+│   ├── IPreyDetector.h   # 猎物检测抽象接口（解耦 Selector 与 Hunter）
 │   ├── StyleManager.h/cpp       # 样式管理（颜色主题、QSS样式）
 │   └── TranslationManager.h/cpp # 翻译管理（UI多语言，区别于文本翻译服务）
 ├── history/              # 历史记录功能
 │   ├── HistoryItem.h             # 历史记录数据结构（截图/剪贴板文本）
 │   ├── HistoryManager.h/cpp      # 历史记录管理器（单例、SQLite、自动清理）
-│   ├── HistoryWindow.h/cpp       # 历史记录查看窗口（多选、搜索、批量删除）
-│   └── ClipboardMonitor.h/cpp    # 剪贴板监听器（捕获复制/剪切）
+│   └── ClipboardMonitor.h/cpp    # 剪贴板监听器（单例，捕获复制/剪切，markTextAsRecorded 去重）
 ├── languages/            # 语言文件
 │   ├── zh_CN.json        # 简体中文
 │   ├── en_US.json        # 英文
 │   ├── ja_JP.json        # 日文
 │   ├── ko_KR.json        # 韩文
-│   ├── zh_TW.json        # 繁体中文
-│   └── zh_HK.json        # 粤语
+│   ├── zh_TW.json        # 繁体中文（台湾）
+│   └── zh_HK.json        # 繁体中文（香港）
 ├── log/                  # 日志系统
 │   └── Logger.h/cpp      # 日志记录器（单例）
 ├── ocr/                  # OCR 功能
-│   ├── OcrEngine.h/cpp           # OCR 引擎（单例、模型管理）
+│   ├── OcrEngine.h/cpp           # OCR 引擎（单例、模型管理、GPU 加速 DirectML/CoreML）
+│   ├── OcrAsyncHelper.h/cpp      # 异步识别助手（加载提示 + QtConcurrent + 结果回调统一封装）
 │   ├── OcrPreprocess.h/cpp       # 预处理（图像缩放、归一化）
 │   ├── OcrDetPostprocess.h/cpp   # 检测后处理（二值化、轮廓检测）
 │   ├── OcrRecPostprocess.h/cpp   # 识别后处理（CTC解码）
-│   └── OcrResultDialog.h/cpp     # 结果弹窗（支持拖拽、调整大小）
+│   └── OcrResultDialog.h/cpp     # 结果弹窗（拖拽、调整大小、翻译按钮、原文/译文/对照三态视图）
+├── pet/                  # 桌面宠物模块
+│   ├── DesktopPetManager.h/cpp   # 宠物管理器（单例：开关/位置/外观持久化、投喂入口、晾衣绳显隐）
+│   ├── PetWindow.h/cpp           # 宠物窗口（QPainter 绘制 6 种外观、张嘴/咀嚼/眨眼动画、拖动/单击）
+│   ├── ClotheslineWindow.h/cpp   # 晾衣绳窗口（悬链绳挂历史卡片、摆动动画、点窗外关闭豁免）
+│   ├── CardPreviewPopup.h/cpp    # 卡片悬停放大预览弹窗（原图+滚轮缩放、右键复制/标注/OCR/翻译）
+│   ├── FlyAnimationWidget.h/cpp  # 飞入宠物动画窗口（透明、鼠标穿透、到达自毁）
+│   └── PetUiScale.h              # pet 模块 DPI 缩放工具（PetUi 命名空间，系数夹取 1.0–3.0）
 ├── recording/            # 录屏功能
 │   ├── ScreenRecorder.h/cpp             # 录屏器（录制线程、状态管理、实时标注合成）
-│   ├── RecordingControlWindow.h/cpp     # 录制控制栏（暂停/继续/停止）
+│   ├── GifEncoder.h/cpp                 # GIF 编码器（纯 Qt：GIF89a + LZW，每帧局部调色板）
 │   └── platform/                        # 平台特定实现
 │       ├── ScreenRecorder_win.cpp       # Windows 实现（GDI + Media Foundation + WASAPI）
 │       ├── ScreenRecorder_mac.cpp      # macOS 实现（ScreenCaptureKit + AVAssetWriter）
@@ -3332,7 +3415,8 @@ src/
 │       ├── ScreenRecorder_mac_helper.mm # macOS 辅助实现（ObjC++）
 │       └── ScreenRecorder_linux.cpp     # Linux 实现（X11 帧采集，编码待接入）
 ├── shortcut/             # 快捷键系统（重构：ShortcutManager外观+Registry注册表+TrayMenuBuilder数据驱动）
-│   ├── ShortcutTypes.h            # ShortcutType枚举+ShortcutConfigItem数据表（单一事实源）
+│   ├── ShortcutTypes.h/cpp        # ShortcutType枚举+ShortcutConfigItem数据表（单一事实源）+dispatchShortcutAction分发
+│   ├── ShortcutKeyMap.h/cpp       # 键值映射表（Qt 键 → Windows VK / macOS keycode）
 │   ├── ShortcutManager.h/cpp      # 快捷键管理器（单例，外观模式）
 │   ├── ShortcutRegistry.h/cpp     # 全局热键注册表（注册表模式，管理GlobalShortcut生命周期）
 │   ├── TrayMenuBuilder.h/cpp      # 托盘菜单构建器（工厂方法+数据驱动遍历配置表）
@@ -3353,14 +3437,25 @@ src/
 ├── widgets/              # 通用组件
 │   ├── BaseToolBar.h/cpp  # 基础工具栏核心骨架（布局、子工具栏变体系统、定位、eventFilter）
 │   ├── BaseToolBarActions.cpp # 基础工具栏动作与样式层（动作按钮注册表、ToolDef元数据表、按钮样式、画笔/颜色/形状操作、状态切换）
+│   ├── ElidedLabel.h/cpp  # 省略号文本标签
+│   ├── FloatingWidget.h/cpp   # 可拖拽/角点缩放浮动控件基类（OverlayTextEdit 的父类）
 │   ├── OverlayTextEdit.h/cpp  # 文本编辑框（浮动输入、拖拽缩放、边界限制、焦点冲突管理）
 │   ├── PinWindow.h/cpp    # 贴图窗口（置顶、拖拽、调整大小、标注模式、Alt+P分页、WA_DeleteOnClose）
 │   ├── PinAnnotationToolBar.h/cpp  # 贴图窗口标注工具栏
 │   ├── PrecisionSlider.h/cpp  # 精度滑块（画笔/字号）
 │   ├── RecordingToolBar.h/cpp   # 录屏工具栏（计时、快照按钮、GIF 入口）
 │   ├── ScreenshotToolBar.h/cpp  # 截图工具栏
-│   ├── SettingsWindow.h/cpp   # 设置窗口（拖拽移动、6个选项卡、DPI适配、21种颜色数据驱动配置、主题切换）
+│   ├── settings/            # 设置窗口各选项卡（独立类）
+│   │   ├── SettingsGeneralTab.h/cpp    # 常规（语言/自启/目录/日志/OCR语言/GPU）
+│   │   ├── SettingsShortcutsTab.h/cpp  # 快捷键（数据驱动行生成）
+│   │   ├── SettingsStyleTab.h/cpp      # 样式（主题/21色自定义）
+│   │   ├── SettingsTranslateTab.h/cpp  # 翻译（引擎/目标语言/Key）
+│   │   ├── SettingsHistoryTab.h/cpp    # 历史记录（开关/保留/清理/统计）
+│   │   ├── SettingsPetTab.h/cpp        # 宠物（开关/6种外观点选/重置位置）
+│   │   └── SettingsAboutTab.h/cpp      # 关于（版本/官网）
+│   ├── SettingsWindow.h/cpp   # 设置窗口（拖拽移动、7个选项卡、DPI适配、21种颜色数据驱动配置、主题切换）
 │   ├── HistoryWindow.h/cpp    # 历史记录窗口（截图+剪贴板分类、多选批量、搜索、实时刷新）
+│   ├── RecordingControlWindow.h/cpp  # 录制控制栏（暂停/继续/停止）
 │   ├── MessageBox.h/cpp       # 自定义消息框（统一样式：QMessageBox替代，自动翻译按钮+居中定位+Yes/No便捷方法）
 │   └── TranslateOverlayWindow.h/cpp  # 译文叠加窗口（OCR多边形位置渲染、原文/译文/对照三态视图、文字选择、复制、保存图片、翻译完成退出截图框）
 ├── resources/            # 资源目录
@@ -3391,7 +3486,7 @@ src/
 | `src/shortcut/ShortcutRegistry.h` | 全局热键注册表（注册表模式，管理 GlobalShortcut 生命周期） |
 | `src/shortcut/TrayMenuBuilder.h` | 托盘菜单构建器（工厂方法+数据驱动遍历配置表、refresh/retranslate） |
 | `src/shortcut/AnnotationShortcutController.h` | 标注快捷键控制器（QShortcut + setBareKeysEnabled 文本冲突） |
-| `src/shortcut/IShortcutHandler.h` | 标注快捷键处理策略接口（SnipScreen/PinWindow 实现 10 个动作命令） |
+| `src/shortcut/IShortcutHandler.h` | 标注快捷键处理策略接口（SnipScreen/PinWindow 实现 12 个动作命令） |
 | `src/shortcut/GlobalShortcut.h` | 全局热键底层实现（Win32 RegisterHotKey / macOS Carbon RegisterEventHotKey） |
 | `src/core/Hunter.h` | 窗口捕捉（窗口/显示器枚举、contains/Contained 层级） |
 | `src/core/Hunter.cpp` | 窗口捕捉实现 |
@@ -3406,7 +3501,7 @@ src/
 | `src/widgets/RecordingToolBar.h` | 录屏工具栏（计时控制、快照按钮、GIF 按钮、showControlRequested） |
 | `src/widgets/PinWindow.h` | 贴图窗口（置顶、滚轮缩放、标注模式、Alt+P 历史分页、WA_DeleteOnClose） |
 | `src/widgets/PinAnnotationToolBar.h` | 贴图窗口独立标注工具栏（copy/save/cancel 自有信号） |
-| `src/widgets/SettingsWindow.h` | 设置窗口（6 个选项卡、拖拽移动、21 种颜色数据驱动配置、浅色/深色主题、DPI 手动适配） |
+| `src/widgets/SettingsWindow.h` | 设置窗口（7 个选项卡、拖拽移动、21 种颜色数据驱动配置、浅色/深色主题、DPI 手动适配） |
 | `src/widgets/HistoryWindow.h` | 历史记录窗口（截图+剪贴板分类、多选批量操作、搜索、实时刷新） |
 | `src/widgets/OverlayTextEdit.h` | 文本编辑框（浮动输入、拖拽缩放、边界限制、焦点冲突管理） |
 | `src/widgets/MessageBox.h` | 自定义消息框（统一样式替代 QMessageBox，自动翻译按钮、居中定位、静态便捷方法） |
@@ -3430,13 +3525,14 @@ src/
 
 ### C. 构建配置
 
+以下为 CMakeLists.txt 的关键结构（以实际文件为准，源文件为显式逐文件列表而非 GLOB）：
+
 ```cmake
 # CMakeLists.txt 关键选项
 cmake_minimum_required(VERSION 3.20)
 project(QuickShot VERSION 0.1.2)
 
 # 版本号注入为编译宏，源码中使用 QUICKSHOT_VERSION 或 qApp->applicationVersion()
-add_compile_definitions(QUICKSHOT_VERSION="${PROJECT_VERSION}")
 
 # C++ 标准
 set(CMAKE_CXX_STANDARD 17)
@@ -3444,47 +3540,16 @@ set(CMAKE_CXX_STANDARD 17)
 # Qt 组件
 find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Multimedia Concurrent Sql Network)
 
-# 可选模块
-option(ENABLE_OCR "启用 OCR 功能" ON)
-option(ENABLE_OCR_GPU_ACCELERATION "启用 GPU 加速" OFF)
-option(ENABLE_AUDIO_RECORDING "启用音频录制" ON)
+# GPU 加速（DirectML / CoreML）：独立 option，默认 ON
+option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR (DirectML/CoreML)" ON)
 
-# 平台检测
-if(WIN32)
-    add_definitions(-DWIN32)
-    # Windows 特定源文件
-    set(PLATFORM_SOURCES
-        src/recording/platform/ScreenRecorder_win.cpp
-    )
-elseif(APPLE)
-    add_definitions(-DMACOS)
-    # macOS 特定源文件
-    set(PLATFORM_SOURCES
-        src/recording/platform/ScreenRecorder_mac.cpp
-        src/recording/platform/ScreenRecorder_mac_helper.mm
-    )
-elseif(UNIX)
-    add_definitions(-DLINUX)
-    # Linux 特定源文件
-    set(PLATFORM_SOURCES
-        src/recording/platform/ScreenRecorder_linux.cpp
-    )
-endif()
+# OCR 是否编译由 ONNX Runtime 探测结果决定（third_party/onnxruntime 或
+# 环境变量 ONNXRUNTIME_ROOT，均缺失时自动下载），探测成功才定义 ENABLE_OCR 宏
 
-# 源文件
-file(GLOB_RECURSE SOURCES
-    "src/*.cpp"
-    "src/*.h"
-)
-
-# 添加可执行文件
-add_executable(QuickShot ${SOURCES} ${PLATFORM_SOURCES})
-
-# 条件编译 OCR
-if(ENABLE_OCR)
-    target_compile_definitions(QuickShot PRIVATE ENABLE_OCR)
-    # 添加 ONNX Runtime 等依赖
-endif()
+# 源文件为显式逐文件列表（src/ 各模块），平台特定文件用 target_sources 追加：
+#   Windows: ScreenRecorder_win.cpp；macOS: ScreenRecorder_mac.cpp + mac_helper.mm；
+#   Linux: ScreenRecorder_linux.cpp
+# 测试由 QUICKSHOT_BUILD_TESTS（默认 ON）控制，见 tests/CMakeLists.txt
 ```
 
 ### D. 状态机转换表
@@ -3508,7 +3573,7 @@ endif()
 ---
 
 
-*文档版本: 1.9*
-*最后更新: 2026-08-11*
+*文档版本: 2.0*
+*最后更新: 2026-10-24*
 *作者: QuickShot Team - chiangyang*
 ---

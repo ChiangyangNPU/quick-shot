@@ -18,9 +18,10 @@ QuickShot 的 OCR（光学字符识别）功能基于 **PaddleOCR v4** 模型，
 
 - **多语言支持**：中英文、英文、日文、韩文、多语言
 - **双模型架构**：检测模型（Det）+ 识别模型（Rec）
-- **异步识别**：使用 QFutureWatcher 异步执行，不阻塞 UI
-- **自动资源管理**：识别完成后自动释放模型资源
-- **模型热切换**：支持运行时切换识别语言
+- **异步识别**：统一经 `OcrAsync::run`（OcrAsyncHelper）封装——加载提示 + QtConcurrent 异步执行 + 结果回调，不阻塞 UI
+- **自动资源管理**：截图/录屏/翻译链路识别完成后自动释放模型；贴图窗口与晾衣绳预览入口识别后保持模型常驻（加速连续识别），可通过 `releaseAfter` 参数控制
+- **语言切换**：设置页切换识别语言（写配置 + `release()` + 下次识别按新语言重载模型）
+- **GPU 加速**：Windows DirectML / macOS CoreML，失败自动回退 CPU（详见 10.1）
 - **无第三方依赖**：仅依赖 Qt 和 ONNX Runtime
 
 ---
@@ -97,6 +98,7 @@ graph LR
     subgraph 调用方
         SnipScreen
         PinWindow
+        CardPreviewPopup[CardPreviewPopup 晾衣绳预览]
     end
 
     subgraph 核心模块
@@ -114,6 +116,7 @@ graph LR
 
     SnipScreen --> OcrEngine
     PinWindow --> OcrEngine
+    CardPreviewPopup --> OcrEngine
     OcrEngine --> OcrPreprocess
     OcrEngine --> OcrDetPostprocess
     OcrEngine --> OcrRecPostprocess
@@ -121,7 +124,6 @@ graph LR
     OcrEngine --> ConfigManager
     OcrEngine --> Logger
     OcrDetPostprocess --> Logger
-    OcrEngine --> OcrResultDialog
 
     style SnipScreen fill:#ffcdd2
     style PinWindow fill:#ffcdd2
@@ -222,6 +224,8 @@ classDiagram
         -QTextEdit* m_textEdit
         -QPushButton* m_copyButton
         -QPushButton* m_closeButton
+        -QPushButton* m_translateButton
+        -QComboBox* m_viewModeCombo
         -QString m_fullText
         -bool m_isDragging
         -QPoint m_dragStartPos
@@ -241,12 +245,15 @@ classDiagram
         -Qt::CursorShape cursorForEdge(edge)
         -void setupUi()
         -void copyToClipboard()
+        -void onTranslate()
+        -void onTranslateFinished(translated)
+        -void onTranslateFailed(code, message)
     }
 
     OcrEngine ..> OcrPreprocess : 使用
     OcrEngine ..> OcrDetPostprocess : 使用
     OcrEngine ..> OcrRecPostprocess : 使用
-    OcrEngine ..> OcrResultDialog : 创建
+    note for OcrResultDialog "由调用方（SnipScreen/PinWindow/CardPreviewPopup）创建，OcrEngine 不创建对话框"
 ```
 
 ### 3.2 数据结构类图
@@ -461,8 +468,9 @@ flowchart TD
 sequenceDiagram
     participant User
     participant SnipScreen
-    participant OcrEngine
+    participant OcrAsync as OcrAsync::run<br/>(OcrAsyncHelper)
     participant QFutureWatcher
+    participant OcrEngine
     participant OcrPreprocess
     participant OcrDetPostprocess
     participant OcrRecPostprocess
@@ -471,9 +479,10 @@ sequenceDiagram
 
     User->>SnipScreen: 点击「文字识别」(OCR) 按钮
     SnipScreen->>SnipScreen: captureSelectionForOcr()
-    SnipScreen->>SnipScreen: 显示加载提示
-    SnipScreen->>QFutureWatcher: 创建 watcher
-    SnipScreen->>OcrEngine: recognize(image)
+    SnipScreen->>OcrAsync: run(parent, image, ..., onResult)
+    OcrAsync->>OcrAsync: 创建加载提示（居中选区）
+    OcrAsync->>QFutureWatcher: 创建 watcher（QtConcurrent）
+    QFutureWatcher->>OcrEngine: recognize(image)
     
     OcrEngine->>OcrEngine: 检查引擎状态
     alt 引擎未就绪
@@ -510,16 +519,17 @@ sequenceDiagram
     
     OcrEngine->>OcrEngine: 重置 m_isRecognizing
     OcrEngine-->>QFutureWatcher: 设置 future
-    
-    QFutureWatcher-->>SnipScreen: 发射 finished 信号
-    SnipScreen->>SnipScreen: 隐藏加载提示
-    
+
+    QFutureWatcher-->>OcrAsync: 发射 finished 信号
+    OcrAsync->>OcrAsync: 关闭加载提示
+
     alt 识别成功
+        OcrAsync-->>SnipScreen: 回调 onResult(result)
         SnipScreen->>OcrResultDialog: 创建对话框
         OcrResultDialog->>OcrResultDialog: 显示识别结果
         SnipScreen->>OcrEngine: release() 释放模型
     else 无文本
-        SnipScreen->>SnipScreen: 显示无文本提示
+        OcrAsync->>OcrAsync: 显示无文本提示（2s 后自毁）
         SnipScreen->>OcrEngine: release() 释放模型
     end
 ```
@@ -538,16 +548,12 @@ sequenceDiagram
     SettingsWindow->>ConfigManager: setValue("ocr/language", langKey)
     ConfigManager->>ConfigManager: sync() 保存配置
     SettingsWindow->>OcrEngine: release()
-    
-    alt 正在识别中
-        OcrEngine->>OcrEngine: 设置 m_pendingRelease = true
-        Note over OcrEngine: 延迟释放，等待当前识别完成
-    else 未在识别
-        OcrEngine->>ONNX_Runtime: 释放 Det Session
-        OcrEngine->>ONNX_Runtime: 释放 Rec Session
-        OcrEngine->>OcrEngine: m_ready = false
-    end
-    
+
+    Note over OcrEngine: release() 经可重入锁阻塞至当前识别结束（若正在识别）；<br/>m_pendingRelease 仅用于嵌套调用的防御路径
+    OcrEngine->>ONNX_Runtime: 释放 Det Session
+    OcrEngine->>ONNX_Runtime: 释放 Rec Session
+    OcrEngine->>OcrEngine: m_ready = false
+
     User->>SnipScreen: 再次触发 OCR
     SnipScreen->>OcrEngine: recognize(image)
     OcrEngine->>OcrEngine: 检查 m_ready == false
@@ -761,9 +767,9 @@ models/ocr/
 │   ├── en_dict_ppocrv4.txt          # 英文字典
 │   ├── japan_dict.txt              # 日文字典
 │   └── korean_dict.txt             # 韩文字典
-└── server/
-    └── ...                          # 服务端模型（备用，之前实现过，性能上不一定划算，所以移除了）
 ```
+
+> 服务端模型（server/）之前实现过，性能上不一定划算，已移除；当前仅保留 mobile/ 一套模型。
 
 ---
 
@@ -791,10 +797,9 @@ models/ocr/
 
 ### 8.3 识别后释放
 
-每次识别完成后自动释放模型资源：
-- 降低内存占用
-- 支持语言热切换
-- 下次识别时自动重新初始化
+是否识别后释放模型由 `OcrAsync::run` 的 `releaseAfter` 参数按入口决定：
+- **识别后释放**（`releaseAfter=true` 或回调内显式 `release()`）：截图工具栏、录屏工具栏、三个翻译入口——降低内存占用，下次识别时自动重新初始化
+- **保持常驻**（`releaseAfter=false` 且不显式释放）：贴图窗口 OCR、晾衣绳预览 OCR——模型常驻加速连续识别
 
 ### 8.4 延迟释放机制
 
@@ -856,9 +861,11 @@ models/ocr/
 
 ### 10.1 可预见的改进
 
-1. **GPU 加速**
-   - 已预留 `ENABLE_OCR_GPU_ACCELERATION` 编译开关
-   - 可集成 CUDA/OpenVINO 推理后端
+1. **GPU 加速（已实现）**
+   - Windows 使用 DirectML（`DirectML.dll` 经 `LoadLibrary` 运行时动态加载，不链接 d3d12/dxgi，无 DirectX 12 的机器不受影响），macOS 使用 CoreML（`dlsym` 动态加载，GPU-only 失败自动回退自动模式）
+   - GPU 初始化失败自动回退 CPU；`OcrEngine::isUsingGpu()` 可查询当前是否走 GPU
+   - 编译开关 `ENABLE_OCR_GPU_ACCELERATION`（CMake option，默认 `ON`），设置页「GPU 加速」开关写入 `ocr/useGpu`（默认 `false`，即 CPU）
+   - 后续可再集成 CUDA/OpenVINO 等推理后端
 
 2. **模型版本升级**
    - 支持 PP-OCRv5 等更新版本
@@ -931,6 +938,8 @@ graph TB
 |----------|------|
 | `src/ocr/OcrEngine.h` | OCR 引擎头文件 |
 | `src/ocr/OcrEngine.cpp` | OCR 引擎实现 |
+| `src/ocr/OcrAsyncHelper.h` | 异步识别助手头文件（加载提示 + QtConcurrent + 结果回调统一封装） |
+| `src/ocr/OcrAsyncHelper.cpp` | 异步识别助手实现（SnipScreen/PinWindow/CardPreviewPopup 统一入口） |
 | `src/ocr/OcrPreprocess.h` | 预处理头文件 |
 | `src/ocr/OcrPreprocess.cpp` | 预处理实现 |
 | `src/ocr/OcrDetPostprocess.h` | 检测后处理头文件 |
@@ -941,7 +950,8 @@ graph TB
 | `src/ocr/OcrResultDialog.cpp` | 结果弹窗实现 |
 | `src/capture/SnipScreen.cpp` | 截图窗口 OCR 调用 |
 | `src/widgets/PinWindow.cpp` | 钉图窗口 OCR 调用 |
-| `src/widgets/SettingsWindow.cpp` | OCR 设置界面 |
+| `src/pet/CardPreviewPopup.cpp` | 晾衣绳预览右键「文字识别」调用 |
+| `src/widgets/SettingsWindow.cpp` | OCR 设置界面（语言选择、GPU 加速开关） |
 
 ### B. PaddleOCR 模型信息
 
@@ -953,22 +963,21 @@ graph TB
 
 ### C. 编译配置
 
-OCR 功能通过编译宏控制：
+OCR 功能通过编译宏控制（以 CMakeLists.txt 实际配置为准）：
 
 ```cmake
 # CMakeLists.txt
-option(ENABLE_OCR "Enable OCR functionality" ON)
-option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR" OFF)
+# OCR 是否编译由 ONNX Runtime 探测结果决定（探测成功自动定义 ENABLE_OCR 宏），
+# 不是 option 开关；GPU 加速为独立 option，默认 ON：
+option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR (DirectML/CoreML)" ON)
 
-# 源文件条件编译
-if(ENABLE_OCR)
-    add_definitions(-DENABLE_OCR)
-    add_definitions(-DENABLE_OCR_GPU_ACCELERATION)
+if(ENABLE_OCR_GPU_ACCELERATION)
+    target_compile_definitions(QuickShot PRIVATE ENABLE_OCR_GPU_ACCELERATION)
 endif()
 ```
 
 ---
 
-*文档版本: 1.0*
-*最后更新: 2026-07-26*
+*文档版本: 1.1*
+*最后更新: 2026-10-24*
 *作者: QuickShot Team - chiangyang*

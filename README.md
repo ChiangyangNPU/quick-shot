@@ -63,7 +63,7 @@ QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 
     *   **三角形**: 标记重要区域，适合指向性标注。
     *   **直线**: 连接两点，绘制直线标注。
     *   **箭头**: 快速指向重点内容（锐角三角形箭头，尺寸适中）。
-    *   **颜色自定义**: 支持红、蓝、黑、黄、绿、白及自定义取色。
+    *   **颜色选择**: 12 色预设面板（红/绿/蓝/黄/青/品红/黑/白/灰/暗红/暗绿/暗蓝），`Tab` 键按面板顺序循环切换。
     *   **实线/虚线切换**: 矩形、椭圆、三角形、箭头、直线、画笔均支持一键切换实线/虚线，各工具线型偏好独立记忆、重启后保持（虚线间隔随线宽自动缩放，箭头头部保持实心）。
 *   **✏️ 画笔工具**:
     *   自由书写和绘制线条。
@@ -93,7 +93,7 @@ QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 
 *   **结果展示**: 识别结果以弹窗形式展示，支持一键复制全部文本到剪贴板，支持鼠标拖动移动窗口和边缘/角落调整大小。
 *   **录屏集成**: 在录屏模式下同样支持 OCR 文字识别功能。
 *   **贴图识别**: 在贴图窗口右键菜单中可直接对贴图进行 OCR 识别。
-*   **自动资源管理**: 识别完成后自动释放模型，节省内存。
+*   **自动资源管理**: 识别在后台线程异步执行；截图/录屏/翻译链路识别完成后自动释放模型，贴图窗口与晾衣绳预览入口保持模型常驻。
 
 ### 5. 🌐 文字翻译功能
 QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为目标语言，支持 4 种翻译引擎：
@@ -103,7 +103,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   采用整段翻译，请求次数少、额度消耗低。
 
 #### 形式二：译文叠加显示（位置感知）
-*   **三处入口**：截图工具栏翻译按钮、录屏工具栏翻译按钮、贴图窗口右键「翻译」项。
+*   **四处入口**：截图工具栏翻译按钮、录屏工具栏翻译按钮、贴图窗口右键「翻译」项、晾衣绳卡片悬停预览右键「翻译」项（图片走 OCR→译文叠加；文本直接调翻译服务弹出译文）。
 *   **位置叠加**：译文按 OCR 识别到的文字位置叠加回原图，保留原版式。
 *   **独立窗口**：弹出独立的 `TranslateOverlayWindow` 窗口，支持：
     *   视图模式切换：仅原文 / 仅译文 / 对照（原文下方追加译文）。
@@ -164,7 +164,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **截图历史**: 自动记录所有截图（包括保存和复制到剪贴板的截图），生成缩略图便于快速浏览。
 *   **剪贴板历史**: 自动记录复制/剪切的文本内容，包含来源应用信息。
 *   **分类查看**: 支持按"全部 / 截图 / 文本"分类查看历史记录。
-*   **搜索筛选**: 支持按关键词搜索内容，按时间范围（全部/今天/最近7天/最近30天）筛选。
+*   **搜索筛选**: 支持按关键词搜索内容（时间范围下拉框为预留 UI，暂未接入查询逻辑）。
 *   **多选与批量操作**:
     *   支持鼠标拖拽框选多选、Ctrl+点击追加选中、Shift+点击范围选中。
     *   支持批量删除多条记录。
@@ -176,15 +176,26 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **本地存储**: 所有历史记录仅存储在本地 SQLite 数据库，不上传任何服务器，保护隐私安全。
 
 ### 9. ⚙️ 设置中心
-右键点击系统托盘图标进入"设置"，**6 个选项卡顺序：常规 → 快捷键 → 样式 → 翻译 → 历史记录 → 关于**：
+右键点击系统托盘图标进入"设置"，**7 个选项卡顺序：常规 → 快捷键 → 样式 → 翻译 → 历史记录 → 宠物 → 关于**：
 *   **常规**: 支持中/英/日/韩/繁（香港）/繁（台湾）多语言切换、开机自启动、自定义截图和录屏保存目录、日志管理、配置文件管理、**OCR 识别语言配置**、**GPU 加速**。
-*   **快捷键**: 分为 4 个分类展示——**全局热键（可配置）**：截图/录屏/历史记录/贴图剪贴板/全屏截图/活动窗口截图/录屏暂停/录屏停止/隐藏显示贴图 9 个可自定义，ShortcutManager 通过 ShortcutConfigItem 数据表生成设置 UI 行；**标注工具（固定）**：1-8 切换标注工具；**标注操作（固定）**：复制/撤销/重做/保存/画笔宽度/循环颜色/清除/Shift 约束/Alt 中心；**贴图快捷键（固定）**：复制/保存/撤销/重做/切工具/移动/退出。修改即时生效并通过 shortcutChanged 枚举信号增量刷新托盘菜单。
+*   **快捷键**: 分为 4 个分类展示——**全局热键（可配置）**：截图/录屏/历史记录/贴图剪贴板/全屏截图/活动窗口截图/录屏暂停/录屏停止/隐藏显示贴图 9 个可自定义，ShortcutManager 通过 ShortcutConfigItem 数据表生成设置 UI 行；**标注工具（固定）**：`` ` `` 切换截图/录屏模式、1-8 切换标注工具；**标注操作（固定）**：复制并退出/取消/保存/撤销/重做/刷新/画笔宽度/循环颜色/清除/Shift 约束/Alt 中心；**贴图快捷键（固定）**：复制/保存/撤销/重做/切工具/循环颜色/画笔宽度/清除/移动/快速移动/退出。修改即时生效并通过 shortcutChanged 枚举信号增量刷新托盘菜单。
 *   **样式**: **浅色/深色主题一键切换**（深色为 HUD 风格：深色底板 + 白字 + 半透明按钮，作用于整个应用 UI——截图/录屏工具栏、子工具栏、录屏控制栏、设置/历史窗口、托盘菜单、对话框，切换立即生效并持久化）；支持自定义 20+ 个 UI 颜色属性（边框颜色、工具栏背景/按钮/文字/悬停/禁用颜色、子工具栏颜色、选项卡颜色、角手柄颜色等），21 种颜色通过 `colorSettingTable()` 元数据表统一管理（含 17 个 UI 按钮颜色 + 4 个仅保存的颜色），通过循环遍历数据表统一加载/保存；按钮显示模式（文字/图标）、子工具栏/控制栏/选项卡颜色定制。
 *   **翻译（在样式与历史记录之间）**: 选择翻译引擎（MyMemory 免注册 / 百度 / DeepL / LibreTranslate）、配置目标语言（默认英文，下拉选择）、填写对应引擎的 API Key / URL、启用翻译功能开关、首次翻译隐私提示开关；首次使用时弹窗说明文本将发送到第三方服务（自定义 MessageBox 居中定位到选区）。
 *   **历史记录**: 支持开关截图历史记录和剪贴板历史记录、设置保留时间（7/30/90/180/365 天）和最大记录数（500/1000/2000/5000 条）、清理过期记录（软件启动时 HistoryManager 自动调用 cleanupExpired()）、清空所有历史、查看存储占用统计。
+*   **宠物**: 桌面宠物开关、6 种外观样式（猫/柴犬/熊猫/兔子/企鹅/青蛙）平铺图标点选即时切换、重置宠物位置。
 *   **关于**: 查看版本信息及官网链接。
 *   **DPI 手动适配**: SettingsWindow 与 HistoryWindow 因项目禁用 Qt 自动高 DPI 缩放（QT_ENABLE_HIGHDPI_SCALING=0），DPI 变化时自动调用 StyleManager::reapplyGlobalStyleSheet() 重新加载全局 QSS，SettingsWindow 重新计算宽度/控件尺寸并根据选项卡类型（滚动/非滚动）适配高度；HistoryWindow 重新计算初始尺寸与控件大小。
 *   **统一消息框样式**: 所有确认/提示对话框使用自定义 `MessageBox` 类（继承 QMessageBox），自动应用项目消息框 QSS 样式、加载应用图标、按钮文本自动 tm->get 翻译（确定/是/否），支持 Yes/No 询问框默认否按钮、居中定位到选区/父窗口、静态便捷方法（information/warning/critical/question）一行调用。
+
+### 10. 🐾 桌面宠物
+*   **开关与外观**: 设置 → 宠物选项卡开启；6 种外观样式（猫/柴犬/熊猫/兔子/企鹅/青蛙）平铺图标点选即时切换；开关、位置、样式均持久化，重启自动恢复。整个宠物模块按屏幕 DPI 缩放（PetUiScale）。
+*   **宠物交互**: 常驻桌面（默认主屏右下角，可拖动、可一键重置位置）的无边框透明置顶窗口，纯 QPainter 矢量绘制；待机随机眨眼，投喂时提前张嘴等待，咀嚼弹跳，完成后左眼闪星星。
+*   **投喂动画**: 截图复制/贴图/快照后，截图从原位置缩小飞入宠物嘴中（FlyAnimationWidget）；复制文本时文字渲染成圆角小卡片从鼠标位置飞入宠物（文字复制投喂）。
+*   **晾衣绳（历史快捷面板）**: 单击宠物弹出/收起，铺满主屏幕宽度，悬垂绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；历史增删实时刷新。
+    *   **悬停放大预览**: 卡片悬停弹出放大预览，图片加载原图并支持滚轮 0.2–10 倍缩放，文本自动换行展示。
+    *   **单击复制**: 点击卡片将内容重新复制到剪贴板（文本复制经 markTextAsRecorded 去重，不重复入库）。
+    *   **右键菜单**: 预览上右键弹出复制 / 标注（创建贴图并直接进入标注模式）/ 文字识别 / 翻译。
+    *   **窗口操作**: 支持拖动、上下边缘与四角调整大小；右上角 ×、双击空白、Esc、点击窗口外、再次点击宠物均可关闭；与截图/录屏/贴图/标注等工作流窗口交互不会误关。
 
 ## 📦 安装与部署
 
@@ -238,7 +249,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **系统级集成**: 拥有系统托盘图标，TrayMenuBuilder 按 ShortcutConfigItem 数据表数据驱动构建菜单项（自动拼接"文案 + (快捷键)"），shortcutChanged 信号增量刷新显示；支持 Windows 开机自启。
 *   **国际化**: 支持 6 种语言（简体中文、English、繁體中文（香港）、繁體中文（台灣）、日本語、한국어），TranslationManager + JSON 文件运行时可动态切换，TranslationManager::languageChanged 信号统一驱动 SettingsWindow/TrayMenuBuilder/ShortcutManager retranslate。
 *   **OCR 引擎**: 基于 ONNX Runtime + PP-OCRv4 模型，支持中英文、英文、日文、韩文识别，支持 GPU 加速；OcrResultDialog 使用自定义样式与窗口图标。
-*   **翻译引擎**: 基于 Qt6::Network 多引擎抽象（TranslateEngine 接口 + MyMemory/Baidu/DeepL/LibreTranslate 4 种实现），默认 MyMemory 免注册可用，TranslateError 8 种错误码本地化（tm->get）、批量翻译状态机失败单段回退原文不中断流程、首次隐私提示（自定义 MessageBox 居中定位到选区）。
+*   **翻译引擎**: 基于 Qt6::Network 多引擎抽象（TranslateEngine 接口 + MyMemory/Baidu/DeepL/LibreTranslate 4 种实现），默认 MyMemory 免注册可用，TranslateError 9 种错误码本地化（tm->get）、批量翻译状态机失败单段回退原文不中断流程、首次隐私提示（自定义 MessageBox 居中定位到选区）。
 *   **工具栏动态定位**: 根据选区位置和屏幕空间自动计算工具栏位置（一级→子→控制栏三级堆叠），优先下方不足翻转上方，全屏时从底部向上排列，支持多显示器。
 *   **录屏实时标注合成（零重影 + 过程可见）**: 录屏开始 SnipScreen 调用 SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE) 排除捕获；overlay cap 与 ScreenRecorder::captureRect（选区减边框）对齐；AnnotationInteractionHandler handleMouseMove 所有分支调用 syncOverlay()，拖拽过程中间帧也会被合成到视频。
 *   **跨平台录屏**: Windows 使用 Media Foundation + WASAPI；macOS 使用 ScreenCaptureKit + AVAssetWriter（H.264）+ AVCaptureSession 麦克风；Linux 目前仅实现 X11 帧采集，视频编码/音频待接入（暂不产出视频文件），录屏以 Windows/macOS 为准。输出格式支持 MP4 与 GIF（GIF 为纯 Qt 编码器，Windows/Linux 可用，macOS 暂不支持）。
@@ -247,6 +258,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **工具栏子工具栏防闪烁**: BaseToolBar 切换工具时使用同步 `delete` 立即释放布局空间；`showSubTools` 包裹 `setUpdatesEnabled(false/true)` 阻塞中间绘制；PinWindow 独立顶层子工具栏窗口设置 `WA_NoSystemBackground` 阻止系统级背景清除。
 *   **历史记录**: 基于 SQLite 数据库存储截图和剪贴板文本，支持多选（拖拽框选/Ctrl追加/Shift范围选）、批量删除、自动清理（启动自动 cleanupExpired：7 天保留 + 1000 最大条数）、实时刷新（300ms 防抖）；HistoryManager::addScreenshotPixmap() 由所有截图生成路径统一调用（copy/save/pin/grabFullscreen/grabActiveWindow/snapshotRequested），供 Alt+P 贴图历史分页循环显示。
 *   **Alt+P 贴图剪贴板历史分页**: SnipScreen::pinClipboard() 基于 HistoryManager 时间倒序截图列表，首次按下在鼠标屏幕中心显示（QCursor::pos - QPoint(w/2, h/2)），后续按下 m_pinHistoryIndex++ 取模，窗口位置继承前一窗口 + (24,24)，qBound 夹到屏幕边界；QPointer<PinWindow> 安全跟踪，PinWindow WA_DeleteOnClose 关闭后指针自动置空。
+*   **桌面宠物模块 src/pet**: DesktopPetManager 单例统一管理开关/位置/外观持久化（pet/enabled、pet/posX、pet/posY、pet/style）与两种投喂入口（截图 feed() / 文本 feedText()）；PetWindow 纯 QPainter 绘制 6 种外观（猫/柴犬/熊猫/兔子/企鹅/青蛙）+ 张嘴/咀嚼/眨眼动画；ClotheslineWindow 悬链线晾衣绳挂载最近 12 条历史卡片（HistoryManager 信号驱动实时刷新），CardPreviewPopup 悬停放大预览（原图 + 滚轮缩放）右键接入复制/标注/文字识别/翻译；FlyAnimationWidget 飞入动画；PetUiScale 按主屏 DPI 缩放（夹取 1.0–3.0）；晾衣绳"点击窗口外关闭"事件过滤按顶层窗口类型豁免截图/录屏/贴图/标注/OCR/翻译等工作流窗口。
 *   **自定义统一 MessageBox**: 所有对话框（提示/确认/隐私/翻译错误详情）使用 src/widgets/MessageBox.h，继承 QMessageBox 自动 applyProjectStyle()（getMessageBoxStyle QSS + loadAppIcon 图标），提供 addOkButton()/addYesNoButtons()（tm->get("yes/no") 翻译按钮，默认否按钮）/centerOn(rect) 居中定位到选区、information/warning/critical/question 静态便捷方法一行调用；翻译错误支持「详细信息」次级 MessageBox。
 *   **配置持久化**: 使用 QSettings 持久化配置，ConfigManager 单例支持 saveConfigAsync()/loadConfigAsync() 异步读写，支持配置文件切换/重置/打开位置。
 *   **代码注释规范**: 采用标准的 Doxygen 风格注释（@brief、@param、@return、@note、@author），所有公共方法均有中文方法注释，确保代码的可读性和可维护性。

@@ -31,7 +31,7 @@ QuickShot 的翻译功能基于截图 OCR 识别结果，将识别出的文字�
 - **译文位置叠加**：译文按 OCR polygons 位置叠加回原图
 - **独立叠加窗口**：TranslateOverlayWindow 支持三态切换、滚轮缩放、拖动、另存、复制原文/译文
 - **文字选择模式**：叠加窗口内勾选「选择文字」，可自由跨段拖选复制
-- **错误码本地化**：8 种错误分类 → 查翻译键显示，「详细信息」保留原始报错
+- **错误码本地化**：9 种错误分类 → 查翻译键显示，「详细信息」保留原始报错
 - **公共方法复用**：TranslateService 统一前置检查 + 错误消息；TranslateOverlayWindow::translateAndShow 封装批量翻译全流程
 
 ---
@@ -48,6 +48,7 @@ flowchart LR
         B["截图工具栏翻译"]
         C["录屏工具栏翻译"]
         D["钉图窗口右键翻译"]
+        D2["晾衣绳预览右键翻译"]
     end
 
     subgraph 翻译服务层
@@ -273,6 +274,7 @@ enum class TranslateError {
     NotConfigured,   ///< 引擎未配置（缺 Key/URL）
     ApiError,        ///< 引擎业务错误（非 200）
     EmptyText,       ///< 空文本
+    Busy,            ///< 翻译服务忙（批量翻译进行中，暂不接受新请求）
     Unknown          ///< 未知错误兜底
 };
 ```
@@ -309,7 +311,7 @@ enum class TranslateError {
 
 ### 5.1 SettingsWindow 翻译选项卡
 
-位置在「样式」与「历史记录」之间：**常规 / 快捷键 / 样式 / 翻译 / 历史记录 / 关于**。
+位置在「样式」与「历史记录」之间：**常规 / 快捷键 / 样式 / 翻译 / 历史记录 / 宠物 / 关于**。
 
 ```mermaid
 flowchart TD
@@ -423,13 +425,14 @@ stateDiagram-v2
 
 ## 7. 形式二：译文叠加显示
 
-### 7.1 三处入口
+### 7.1 四处入口
 
 | 入口 | 触发方式 | OCR 时机 |
 |---|---|---|
 | 截图工具栏 | ScreenshotToolBar 点击翻译按钮 | 截取当前选区图像 → OCR |
 | 录屏工具栏 | RecordingToolBar 点击翻译按钮 | 截取当前选区图像 → OCR |
 | 钉图窗口右键 | PinWindow 右键菜单「翻译」（复制→OCR→翻译→保存） | 对钉图 m_pixmap → OCR |
+| 晾衣绳预览右键 | 晾衣绳卡片悬停预览（CardPreviewPopup）右键菜单「翻译」 | 图片：对预览原图 → OCR（模型常驻不释放）；文本：跳过 OCR，直接调用 TranslateService 弹译文结果框 |
 
 ### 7.2 完整流程图
 

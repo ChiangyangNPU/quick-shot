@@ -24,7 +24,7 @@ QuickShot 的快捷键系统分为四大类，与「设置 → 快捷键」选�
 | 截图 | `Alt+Q` | `shortcut_snip` | `Snip` | 进入区域截图模式 |
 | 录屏 | `Alt+S` | `shortcut_record` | `Record` | 进入区域录屏模式 |
 | 历史记录 | `Alt+H` | `shortcut_history` | `History` | 打开历史记录窗口 |
-| 贴图（剪贴板） | `Alt+P` | `shortcut_pin` | `Pin` | 将剪贴板中的图片贴到桌面（鼠标所在屏幕中央） |
+| 贴图（剪贴板） | `Alt+P` | `shortcut_pin` | `Pin` | 按时间倒序循环贴出历史截图：首次按下在鼠标所在屏幕中央贴出最新截图，后续按下依次贴出更早记录（位置偏移 (24,24)，夹到屏幕边界内），到达最旧后循环回最新 |
 | 全屏截图 | `Alt+Shift+F` | `shortcut_fullscreen` | `Fullscreen` | 截取整个虚拟桌面（多屏拼接），直接复制到剪贴板 |
 | 活动窗口截图 | `Alt+Shift+W` | `shortcut_activewindow` | `ActiveWindow` | 截取当前前台窗口（含标题栏与边框），直接复制到剪贴板 |
 | 录屏暂停/恢复 | `Alt+Shift+S` | `shortcut_recordpause` | `RecordPause` | 录制中暂停 / 恢复（非录制状态无效） |
@@ -53,19 +53,19 @@ QuickShot 的快捷键系统分为四大类，与「设置 → 快捷键」选�
 
 ```cpp
 static const ShortcutConfigItem kShortcutConfigs[] = {
-    { ShortcutType::Snip,         "shortcut_snip",         "Alt+Q",        "trayCapture",      "Capture" },
-    { ShortcutType::Record,       "shortcut_record",       "Alt+S",        "trayRecord",       "Record" },
-    { ShortcutType::History,      "shortcut_history",      "Alt+H",        "tray.history",     "History" },
-    { ShortcutType::Pin,          "shortcut_pin",          "Alt+P",        "tray.pin",         "Pin Clipboard" },
-    { ShortcutType::Fullscreen,   "shortcut_fullscreen",   "Alt+Shift+F",  "tray.fullscreen",  "Fullscreen Capture" },
-    { ShortcutType::ActiveWindow, "shortcut_activewindow", "Alt+Shift+W",  "tray.activewindow","Active Window Capture" },
-    { ShortcutType::RecordPause,  "shortcut_recordpause",  "Alt+Shift+S",  "tray.recordpause", "Record Pause/Resume" },
-    { ShortcutType::RecordStop,   "shortcut_recordstop",   "Alt+Shift+Q",  "tray.recordstop",  "Record Stop" },
-    { ShortcutType::TogglePins,   "shortcut_togglepins",   "Alt+Shift+P",  "tray.togglepins",  "Toggle All Pins" },
+    { ShortcutType::Snip,         "shortcut_snip",         "Alt+Q",        "trayCapture",      "Capture",                "shortcut.snip.label",         "Snip" },
+    { ShortcutType::Record,       "shortcut_record",       "Alt+S",        "trayRecord",       "Record",                 "shortcut.record.label",       "Record" },
+    { ShortcutType::History,      "shortcut_history",      "Alt+H",        "tray.history",     "History",                "shortcut.history.label",      "History" },
+    { ShortcutType::Pin,          "shortcut_pin",          "Alt+P",        "tray.pin",         "Pin Clipboard",          "shortcut.pin.label",          "Pin Clipboard" },
+    { ShortcutType::Fullscreen,   "shortcut_fullscreen",   "Alt+Shift+F",  "tray.fullscreen",  "Fullscreen Capture",     "shortcut.fullscreen.label",   "Fullscreen Capture" },
+    { ShortcutType::ActiveWindow, "shortcut_activewindow", "Alt+Shift+W",  "tray.activewindow","Active Window Capture",  "shortcut.activewindow.label", "Active Window Capture" },
+    { ShortcutType::RecordPause,  "shortcut_recordpause",  "Alt+Shift+S",  "tray.recordpause", "Record Pause/Resume",    "shortcut.recordpause.label",  "Record Pause/Resume" },
+    { ShortcutType::RecordStop,   "shortcut_recordstop",   "Alt+Shift+Q",  "tray.recordstop",  "Record Stop",            "shortcut.recordstop.label",   "Record Stop" },
+    { ShortcutType::TogglePins,   "shortcut_togglepins",   "Alt+Shift+P",  "tray.togglepins",  "Toggle All Pins",        "shortcut.togglepins.label",   "Toggle All Pins" },
 };
 ```
 
-每个配置项包含：类型枚举、配置文件键名、默认快捷键、托盘菜单翻译键、托盘菜单回退文案。
+每个配置项包含：类型枚举、配置文件键名、默认快捷键、托盘菜单翻译键、托盘菜单回退文案、设置页标签翻译键、设置页标签回退文案。
 
 ---
 
@@ -73,8 +73,9 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 
 截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 进入标注模式后生效。数字键与标注工具一一对应（工具 ID 与 `AnnotationType` 枚举值 0-7 对应）：
 
-| 快捷键 | 工具 | AnnotationType |
+| 快捷键 | 功能 | 说明 |
 |---|---|---|
+| `` ` `` | 切换截图/录屏模式 | 反引号（数字 1 左侧）；仅 SnipScreen 生效（PinWindow 空实现），选区前后均可切换 |
 | `1` | 矩形 | `Rectangle` (0) |
 | `2` | 椭圆 | `Ellipse` (1) |
 | `3` | 箭头 | `Arrow` (2) |
@@ -90,7 +91,7 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 
 ## 三、标注操作（固定）
 
-截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 标注模式下生效。所有标注快捷键由 `AnnotationShortcutController` 统一注册管理，通过 `IShortcutHandler` 策略接口回调到 SnipWindow 或 PinWindow 的具体实现。
+截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 标注模式下生效。所有标注快捷键由 `AnnotationShortcutController` 统一注册管理，通过 `IShortcutHandler` 策略接口回调到 SnipScreen 或 PinWindow 的具体实现。
 
 ### 3.1 通用操作
 
@@ -198,6 +199,39 @@ PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，�
 | 左键拖动 | 移动贴图窗口 |
 | 右键点击 | 弹出菜单（复制 / 标注 / OCR / 翻译 / 保存） |
 | 滚轮滚动 | 缩放贴图（每次 ±10%，标注与图像同步缩放） |
+
+---
+
+## 五、桌面宠物 / 晾衣绳交互（固定）
+
+桌面宠物（PetWindow）与晾衣绳（ClotheslineWindow）的交互约定为固定行为，不进设置界面。宠物本体无键盘快捷键。
+
+### 5.1 宠物（PetWindow）
+
+| 操作 | 功能 |
+|---|---|
+| 左键单击 | 打开 / 收起晾衣绳（按移动距离与拖动区分） |
+| 左键拖动 | 移动宠物位置（松手后持久化，设置页可一键重置） |
+
+### 5.2 晾衣绳（ClotheslineWindow）
+
+| 快捷键 / 操作 | 功能 |
+|---|---|
+| `Esc` | 关闭晾衣绳 |
+| 双击空白区域 | 隐藏晾衣绳（卡片/关闭按钮/调整区上双击不触发） |
+| 左键单击卡片 | 复制内容到剪贴板（文本复制经去重标记不重复入库） |
+| 右键点击卡片 | 弹出悬停预览的右键菜单（复制/标注/文字识别/翻译） |
+| 左键拖动空白 | 移动窗口 |
+| 边缘 / 四角拖动 | 调整窗口大小 |
+| 点击窗口外 | 关闭（截图/录屏/贴图/标注/OCR/翻译等工作流窗口除外） |
+
+### 5.3 卡片悬停预览（CardPreviewPopup）
+
+| 快捷键 / 操作 | 功能 |
+|---|---|
+| 悬停卡片 | 弹出放大预览（图片加载原图，文本自动换行） |
+| 滚轮 | 缩放预览（0.2–10 倍，文本同步调整字号） |
+| 右键 | 弹出菜单：复制 / 标注（创建贴图并进入标注模式）/ 文字识别 / 翻译 |
 
 ---
 
@@ -344,6 +378,7 @@ classDiagram
         +void onCycleColor()
         +void onCancel()
         +void onRefresh()
+        +void onSwitchMode()
     }
 
     class TrayMenuBuilder {
@@ -645,7 +680,7 @@ flowchart TD
     
     F --> F1[addShortcutRow ×9<br/>snip/record/history/pin/fullscreen/<br/>activewindow/recordpause/<br/>recordstop/togglepins]
     
-    G --> G1[addFixedShortcutRow ×8<br/>1-8 对应 8 种标注工具]
+    G --> G1[addFixedShortcutRow ×9<br/>` 切换截图/录制 +<br/>1-8 对应 8 种标注工具]
     
     H --> H1[addFixedShortcutRow ×12<br/>复制/取消/保存/撤销/重做/<br/>刷新/画笔宽度-/画笔宽度+/<br/>循环颜色/清除/Shift约束/Alt中心]
     
@@ -724,7 +759,7 @@ sequenceDiagram
 快捷键选项卡采用数据驱动的 4 分类结构，与代码实现一一对应：
 
 1. **全局热键（可配置）**：9 个可自定义全局热键，通过 `addShortcutRow` 数据驱动创建 `QKeySequenceEdit` + OK/Cancel/Reset 三按钮。配置来自 `kShortcutConfigs[]` 数据表。
-2. **标注工具（固定）**：8 行，通过 `addFixedShortcutRow` 添加，展示数字键 1-8 与对应工具。
+2. **标注工具（固定）**：9 行，通过 `addFixedShortcutRow` 添加，展示 `` ` ``（切换截图/录制）与数字键 1-8 对应工具。
 3. **标注操作（固定）**：12 行，展示复制/取消/保存/撤销/重做/刷新/画笔宽度-/画笔宽度+/循环颜色/清除/Shift 约束/Alt 中心。
 4. **贴图快捷键（固定）**：12 行，展示 PinWindow 的复制/保存/撤销/重做/切工具/循环颜色/画笔宽度-/画笔宽度+/清除/移动/快速移动/退出。
 
@@ -771,6 +806,6 @@ macOS 的 `setFnKeyCallback` 接口在 Carbon 方案下仅保留兼容（Carbon 
 
 ---
 
-*文档版本: 3.0*
-*最后更新: 2026-08-08*
+*文档版本: 3.1*
+*最后更新: 2026-10-24*
 *作者: QuickShot Team - chiangyang*

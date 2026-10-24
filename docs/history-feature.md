@@ -79,17 +79,18 @@ target_link_libraries(QuickShot
 
 ## 三、模块划分
 
-在 `src/` 下新增 `history/` 模块：
+在 `src/` 下新增 `history/` 模块（`HistoryWindow` 实际位于 `src/widgets/`）：
 
 ```
 src/history/
 ├── HistoryItem.h         // 历史记录数据结构
 ├── HistoryManager.h      // 历史记录管理器（单例）
 ├── HistoryManager.cpp
-├── HistoryWindow.h       // 历史记录查看窗口
-├── HistoryWindow.cpp
-├── ClipboardMonitor.h    // 剪贴板监听器
+├── ClipboardMonitor.h    // 剪贴板监听器（单例）
 └── ClipboardMonitor.cpp
+src/widgets/
+├── HistoryWindow.h       // 历史记录查看窗口
+└── HistoryWindow.cpp
 ```
 
 ### 3.1 模块职责
@@ -150,7 +151,8 @@ graph TB
 
 | 文件 | 修改内容 |
 |------|----------|
-| `src/capture/SnipScreen.cpp` | 截图保存后调用 `addScreenshot()` 记录历史；复制操作调用 `addScreenshotPixmap()` |
+| `src/capture/SnipScreen.cpp` | 截图产物经 `CaptureSession::publish()` 统一分发（写剪贴板 + 调用 `addScreenshotPixmap()` 入库） |
+| `src/pet/`（桌面宠物模块） | 晾衣绳窗口（ClotheslineWindow）读取最近 12 条记录渲染成卡片，连接 `itemAdded`/`itemRemoved`/`cleared` 实时刷新；DesktopPetManager 监听 `itemAdded`，文本记录触发"文字复制投喂"动画；复制文本前调 `ClipboardMonitor::markTextAsRecorded()` 去重 |
 | `src/widgets/SettingsWindow.h/cpp` | 新增"历史记录"选项卡（记录开关、存储设置、数据管理、统计信息） |
 | `src/widgets/SettingsWindow.cpp` | 快捷键选项卡新增历史记录快捷键设置行 |
 | `src/main.cpp` | 初始化 HistoryManager、启动 ClipboardMonitor、注册快捷键、添加托盘菜单项 |
@@ -234,8 +236,9 @@ CREATE INDEX IF NOT EXISTS idx_history_content
 | `history/enableClipboard` | `true` | 是否记录剪贴板历史 |
 | `history/maxItems` | `1000` | 最大记录数 |
 | `history/retentionDays` | `7` | 保留天数 |
-| `history/shortcut` | `Alt+H` | 打开历史记录快捷键 |
 | `history/thumbnailSize` | `200` | 缩略图尺寸（像素） |
+
+> 快捷键配置键已更名为 `shortcut_history`，`history/shortcut` 仅作为旧配置的兼容回退键保留（新键为空时回退读取旧键）。
 
 ### 4.4 数据存储路径
 
@@ -285,6 +288,8 @@ public:
     // 记录查询
     QList<HistoryItem> getItems(HistoryType type, int page, int pageSize);
     QList<HistoryItem> searchItems(const QString &keyword, HistoryType type);
+    QList<HistoryItem> searchItems(const QString &keyword, HistoryType type,
+                                   int page, int pageSize);   ///< 分页搜索重载（HistoryWindow 使用）
     int getItemCount(HistoryType type);
     HistoryItem getItemById(qint64 id);
 
@@ -353,7 +358,7 @@ private:
 
 ```cpp
 /**
- * @brief 剪贴板监听器类
+ * @brief 剪贴板监听器类（单例）
  *
  * 监听系统剪贴板变化，捕获用户的复制/剪切操作。
  * Windows/Linux 经 QClipboard::dataChanged 信号；macOS 经 1s 轮询
@@ -364,21 +369,25 @@ class ClipboardMonitor : public QObject {
     Q_OBJECT
 
 public:
-    explicit ClipboardMonitor(QObject *parent = nullptr);
+    static ClipboardMonitor *instance();   ///< 单例访问（构造函数私有）
     void start();                 ///< 启动剪贴板监听
     void stop();                  ///< 停止剪贴板监听
     bool isActive() const;        ///< 获取当前监听状态
+    void markTextAsRecorded(const QString &text);  ///< 标记文本已记录（晾衣绳/预览弹窗复制文本前调用，避免复制动作本身再生成重复记录）
 
 private slots:
     void onClipboardChanged();    ///< 剪贴板变化处理槽函数
 
 private:
+    explicit ClipboardMonitor(QObject *parent = nullptr);   ///< 私有构造（单例）
     QString getClipboardText();   ///< 获取剪贴板文本内容
     QString getSourceAppName();   ///< 获取来源应用名称（前台应用真实进程名：Win32 GetForegroundWindow+镜像名 / macOS NSWorkspace frontmostApplication / Linux 回退本应用名）
 
     QClipboard *m_clipboard;      ///< 系统剪贴板对象
-    QString m_lastText;           ///< 上次记录的文本，用于去重
+    QString m_lastText;           ///< 上次记录的文本，用于去重（markTextAsRecorded 复用同字段）
     bool m_isActive;              ///< 是否正在监听
+    // macOS 专用（Q_OS_MACOS 条件编译）：1s 轮询定时器 m_pollTimer 与
+    // changeCount 快照 m_lastChangeCount
 };
 ```
 
@@ -446,7 +455,7 @@ private:
     QLabel *m_searchLabel;        ///< 搜索标签
     QPushButton *m_searchBtn;     ///< 搜索按钮
     QLabel *m_filterLabel;        ///< 筛选标签
-    QComboBox *m_filterCombo;     ///< 时间筛选下拉框
+    QComboBox *m_filterCombo;     ///< 时间筛选下拉框（预留 UI，暂未接入查询逻辑）
     QListWidget *m_listWidget;    ///< 历史记录列表（ExtendedSelection 多选模式）
     QPushButton *m_copyBtn;       ///< 复制按钮
     QPushButton *m_saveBtn;       ///< 保存按钮
@@ -533,7 +542,7 @@ private:
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  搜索: [搜索关键词...              ] [搜索]  筛选: [全部时间▼]  │
+│  搜索: [搜索关键词...              ] [搜索]  筛选: [全部时间▼]  │  ← 时间筛选为预留 UI，暂未接入查询
 ├─────────────────────────────────────────────────────────────────┤
 │  [全部] [截图] [文本]                                           │
 ├─────────────────────────────────────────────────────────────────┤
@@ -664,6 +673,13 @@ flowchart TD
     F --> G[注册历史记录快捷键<br/>Alt+H → 显示 HistoryWindow]
     G --> H[托盘菜单添加<br/>历史记录选项]
 ```
+
+### 7.5 历史数据的桌面宠物消费方
+
+除 HistoryWindow 外，桌面宠物模块（`src/pet/`）是历史数据的另一组消费方：
+
+- **晾衣绳窗口（ClotheslineWindow）**：打开时经 `getItems(HistoryType::All, 0, 12)` 拉取最近 12 条记录，在悬垂绳上渲染成卡片（截图显示缩略图、文本显示摘要）；连接 `itemAdded`/`itemRemoved`/`cleared` 信号实时重建布局。单击卡片将内容重新复制到剪贴板——文本复制前调用 `ClipboardMonitor::markTextAsRecorded()` 预置去重标记，避免复制动作本身再生成一条重复记录。
+- **文字复制投喂（DesktopPetManager）**：监听 `itemAdded`，非截图记录（即剪贴板文本）触发 `feedText()`，把文本渲染成圆角小卡片从鼠标位置飞入宠物（截图记录的投喂由截图/贴图/快照流程显式调用 `feed()`）。
 
 ---
 
@@ -840,3 +856,4 @@ flowchart TD
 | 1.0.0 | 2026-07-30 | 初始版本，设计文档创建 |
 | 1.1.0 | 2026-07-31 | 更新文档以匹配实际实现：新增 `addScreenshotPixmap` 方法、`HistoryType::All` 枚举值、截图缓存目录说明、快捷键移至快捷键选项卡、补全 HistoryWindow 方法列表、修正数据库路径、添加日志规范说明 |
 | 1.2.0 | 2026-07-31 | 补充功能完善内容：软件启动时自动清理过期记录、鼠标拖拽框选多选与批量删除、右键菜单样式统一（StyleManager::getMenuStyle）、保存截图路径与主程序一致（复用 Utils::savePixmapToFile）、历史记录窗口图标、实时翻译与实时刷新、加载更多按钮隐藏策略、确认对话框 Yes/No 按钮翻译、补全翻译条目表（timeRanges/tooltip/confirmDelete 等） |
+| 1.3.0 | 2026-10-24 | 与代码同步：HistoryWindow 位置更正为 src/widgets/、ClipboardMonitor 更新为单例（含 markTextAsRecorded 去重接口）、快捷键配置键更名 shortcut_history（旧键兼容回退）、集成点更新为 CaptureSession::publish 统一分发、searchItems 分页重载、时间筛选下拉框标注为预留 UI、新增 7.5 节历史数据的桌面宠物消费方（晾衣绳 + 文字复制投喂） |
