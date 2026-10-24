@@ -7,6 +7,7 @@
 #include <QString>
 #include <QStringList>
 #include <QRect>
+#include <functional>
 
 class QSettings;
 class QWidget;
@@ -43,6 +44,22 @@ public:
      */
     static bool checkEnabledAndPrivacy(QWidget *parent = nullptr,
                                        const QRect &centerRect = QRect());
+
+    /**
+     * @brief 异步版隐私确认（结果经 onDecided 回调返回）
+     *
+     * Windows 上在置顶透明截图覆盖层之上弹应用模态框、关闭后，Qt/系统的
+     * 鼠标派发会异常（后续所有点击被派发给覆盖层内的全屏选区控件，工具栏
+     * 无法点击；macOS 无此问题），因此 Windows 用"无父窗口 + 置顶 + 非模态"
+     * 的消息框规避：不阻塞输入、不改宿主窗口、不触发模态禁用/恢复链路。
+     * macOS 保持模态行为不变。其余逻辑与 checkEnabledAndPrivacy 一致。
+     * @param parent 参考窗口（仅用于定位弹窗），可为 nullptr
+     * @param centerRect 弹窗居中区域（全局坐标），为空则居中在 parent
+     * @param onDecided 用户决定后的回调：true 可继续翻译 / false 拒绝或未启用
+     * @author chiangyang
+     */
+    static void checkEnabledAndPrivacyAsync(QWidget *parent, const QRect &centerRect,
+                                            const std::function<void(bool allowed)> &onDecided);
 
     /**
      * @brief 将翻译错误码转换为本地化提示消息

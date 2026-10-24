@@ -86,6 +86,67 @@ bool TranslateService::checkEnabledAndPrivacy(QWidget *parent, const QRect &cent
 }
 
 /**
+ * @brief 异步版隐私确认（结果经 onDecided 回调返回）
+ *
+ * Windows 上在置顶透明截图覆盖层之上弹应用模态框、关闭后，Qt/系统的鼠标
+ * 派发会异常（诊断日志证实：后续点击命中测试指向工具栏按钮，事件却被派发
+ * 给覆盖层内的全屏选区控件，工具栏完全无法点击；macOS 无此问题）。三种
+ * 模态形态（改宿主窗口标志降级/恢复、免降级、延迟弹出）均复现，故 Windows
+ * 改用"无父窗口 + 置顶 + 非模态"的消息框规避：不阻塞输入、不改宿主窗口、
+ * 不触发模态禁用/恢复链路。macOS 保持模态行为不变。
+ * @author chiangyang
+ */
+void TranslateService::checkEnabledAndPrivacyAsync(QWidget *parent, const QRect &centerRect,
+                                                   const std::function<void(bool allowed)> &onDecided) {
+    QSettings *settings = ConfigManager::instance()->getSettings();
+    if (!settings->value("translate/enabled", true).toBool()) {
+        onDecided(false);
+        return;
+    }
+    if (!settings->value("translate/showPrivacyWarning", true).toBool()) {
+        onDecided(true);
+        return;
+    }
+
+    TranslationManager *tm = TranslationManager::instance();
+
+#ifdef Q_OS_MACOS
+    const bool allowed = checkEnabledAndPrivacy(parent, centerRect);
+    onDecided(allowed);
+#else
+    // 无父窗口：不与置顶透明覆盖层产生属主/模态联动；置顶保证盖在覆盖层上
+    auto *msgBox = new MessageBox(nullptr);
+    msgBox->setContent(tm->get("translate.privacyTitle", "Translation Privacy Notice"),
+                       tm->get("translate.privacyMsg",
+                               "Translation sends recognized text to a third-party service. Continue?"));
+
+    auto *dontAsk = new QCheckBox(tm->get("translate.privacyDontAsk", "Don't ask again"), msgBox);
+    msgBox->setCheckBox(dontAsk);
+
+    QPushButton *yesButton = nullptr;
+    msgBox->addYesNoButtons(&yesButton, nullptr, true);
+
+    QRect targetRect = centerRect.isValid() ? centerRect :
+                       (parent ? parent->frameGeometry() : QRect());
+    if (targetRect.isValid()) {
+        msgBox->centerOn(targetRect);
+    }
+    msgBox->setWindowFlag(Qt::WindowStaysOnTopHint, true);
+
+    QObject::connect(msgBox, &QDialog::finished, msgBox,
+        [msgBox, yesButton, dontAsk, settings, onDecided](int) {
+        const bool allowed = (msgBox->clickedButton() == yesButton);
+        if (allowed && dontAsk->isChecked()) {
+            settings->setValue("translate/showPrivacyWarning", false);
+        }
+        msgBox->deleteLater();
+        onDecided(allowed);
+    });
+    msgBox->show();
+#endif
+}
+
+/**
  * @brief 将翻译错误码转换为本地化提示消息
  * @param code 翻译错误码
  * @return 本地化的错误消息

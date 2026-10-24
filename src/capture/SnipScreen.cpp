@@ -971,29 +971,33 @@ void SnipScreen::performTranslate() {
         return;
     }
 
-    // 2. 检查翻译功能是否启用 + 首次隐私提示（弹窗居中在选区）
-    if (!TranslateService::checkEnabledAndPrivacy(this, m_selector->selected())) {
-        LOG_INFO("[SnipScreen] Translate aborted: disabled or declined privacy warning");
-        return;
-    }
+    const QRect sel = m_selector->selected();
+    const QRect localSel = sel.translated(-m_virtualGeometry.topLeft());
 
-    QRect sel = m_selector->selected();
-    QRect localSel = sel.translated(-m_virtualGeometry.topLeft());
+    // 2. 隐私提示用异步确认（Windows 上模态弹框关闭会破坏覆盖层的鼠标派发，
+    //    导致工具栏无法点击；见 TranslateService::checkEnabledAndPrivacyAsync）
+    TranslateService::checkEnabledAndPrivacyAsync(this, sel,
+        [this, pixmap, sel, localSel](bool allowed) {
+        if (!allowed) {
+            LOG_INFO("[SnipScreen] Translate aborted: disabled or declined privacy warning");
+            return;
+        }
 
-    LOG_INFO("[SnipScreen] Translate requested, starting OCR");
+        LOG_INFO("[SnipScreen] Translate requested, starting OCR");
 
-    // 3. 异步 OCR（识别完成即释放模型）→ 批量翻译显示译文叠加窗口
-    OcrAsync::run(this, pixmap.toImage(), localSel, true,
-                  [this, pixmap, sel, localSel](const OcrEngine::OcrResult &result) {
-        // 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
-        //    翻译成功显示 Overlay 后退出截图框（类似贴图完成后销毁截图框和工具栏）
-        TranslateOverlayWindow::translateAndShow(
-            this, pixmap, result.texts, result.polygons,
-            QPoint(sel.x(), sel.y()), localSel,
-            [this]() { exit(); });
+        // 3. 异步 OCR（识别完成即释放模型）→ 批量翻译显示译文叠加窗口
+        OcrAsync::run(this, pixmap.toImage(), localSel, true,
+                      [this, pixmap, sel, localSel](const OcrEngine::OcrResult &result) {
+            // 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
+            //    翻译成功显示 Overlay 后退出截图框（类似贴图完成后销毁截图框和工具栏）
+            TranslateOverlayWindow::translateAndShow(
+                this, pixmap, result.texts, result.polygons,
+                QPoint(sel.x(), sel.y()), localSel,
+                [this]() { exit(); });
 
-        LOG_INFO(QString("[SnipScreen] OCR done, %1 segments, starting batch translation")
-                     .arg(result.texts.size()));
+            LOG_INFO(QString("[SnipScreen] OCR done, %1 segments, starting batch translation")
+                         .arg(result.texts.size()));
+        });
     });
 }
 
