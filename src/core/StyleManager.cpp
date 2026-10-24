@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QRegularExpression>
 #include <QSpinBox>
 #include <QStyle>
 #include <QAbstractItemView>
@@ -17,6 +18,8 @@
 #include <QSvgRenderer>
 #include <QTabWidget>
 #include <QLineEdit>
+
+#include <algorithm>
 
 #include "Logger.h"
 
@@ -677,10 +680,39 @@ QString StyleManager::loadGlobalStyleSheet() {
             { "@checkBoxDisabledBorder", "#c0c0c0" },
             { "@checkBoxDisabledBg", "#f0f0f0" },
         };
-    for (auto it = tokens.constBegin(); it != tokens.constEnd(); ++it) {
-        sheet.replace(it.key(), it.value());
+    // 按 token 长度降序替换：@inputBorder 是 @inputBorderFocus 的前缀、
+    // @checkBoxBorder 是 @checkBoxBorderHover 的前缀，QHash 迭代顺序不定，
+    // 短 token 先替换会吞掉长 token 的前缀，导致 focus/hover 规则偶发失效
+    QList<QString> tokenKeys = tokens.keys();
+    std::sort(tokenKeys.begin(), tokenKeys.end(),
+              [](const QString &a, const QString &b) { return a.size() > b.size(); });
+    for (const QString &key : tokenKeys) {
+        sheet.replace(key, tokens.value(key));
     }
+
+    // macOS 上剔除复选框指示器规则，保持原生主题绘制（Windows 不受影响）
+    stripCheckBoxIndicatorRulesForMac(sheet);
     return sheet;
+}
+
+/**
+ * @brief macOS 上剔除全局 qss 的复选框指示器规则，保持原生主题绘制
+ *
+ * 该平台的 QSS 指示器绘制有缺陷：em 尺寸解析异常（不随字体，恒为超大
+ * 尺寸），未勾选描边碎裂、勾选色块过大。QScrollArea 子树（如历史记录
+ * 选项卡）不经此规则、渲染原生外观，各选项卡不一致；剔除后全部恢复
+ * 原生绘制（深色模式下原生对勾可见，已实测）。Windows 保持完整绘制。
+ * @author chiangyang
+ */
+void StyleManager::stripCheckBoxIndicatorRulesForMac(QString &sheet) {
+#if defined(Q_OS_MACOS)
+    // 指示器规则块形如 "QCheckBox::indicator[:state] { ... }"，内部无嵌套大括号
+    static const QRegularExpression kIndicatorRule(
+        QStringLiteral("QCheckBox::indicator[^{]*\\{[^}]*\\}"));
+    sheet.remove(kIndicatorRule);
+#else
+    Q_UNUSED(sheet);
+#endif
 }
 
 /**

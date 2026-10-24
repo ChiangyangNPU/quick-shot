@@ -576,6 +576,14 @@ public:
     static QString loadGlobalStyleSheet();
 
     /**
+     * @brief macOS 上剔除 qss 中 QCheckBox::indicator 规则，保持复选框原生绘制
+     * @note 该平台 QSS 指示器渲染有缺陷（em 尺寸异常、描边碎裂）；剔除后与
+     *       QScrollArea 子树（历史记录选项卡）的原生外观一致。仅 macOS 生效。
+     * @author chiangyang
+     */
+    static void stripCheckBoxIndicatorRulesForMac(QString &sheet);
+
+    /**
      * @brief 重新应用全局样式表
      *
      * 全局 qss（app.qss）只在 setStyleSheet() 调用时解析一次，DPI 变化后

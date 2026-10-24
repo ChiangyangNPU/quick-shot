@@ -82,8 +82,14 @@ void SettingsGeneralTab::setupUi() {
     logPrintLayout->addWidget(btnClearLogFile);
     logPrintLayout->addStretch();
 
+    // 开机自动启动与其他行一致用 HBox 包裹：macOS 上直接放进 VBox 的
+    // QCheckBox 会被布局微移 -2px，与 HBox 行并排时指示器错位
+    QHBoxLayout *autoStartLayout = new QHBoxLayout();
+    autoStartLayout->addWidget(autoStartCheck);
+    autoStartLayout->addStretch();
+
     layout->addLayout(langLayout);
-    layout->addWidget(autoStartCheck);
+    layout->addLayout(autoStartLayout);
     layout->addLayout(logPrintLayout);
 
     // OCR Language
