@@ -429,6 +429,18 @@ private:
      */
     void applyTabHeight(bool animated);
 
+    /**
+     * @brief 抑制/恢复历史选项卡滚动区的垂直滚动条
+     *
+     * 高度动画期间专用：动画中间态视口小于内容，AsNeeded 会瞬时误报
+     * （历史选项卡滚动条"先显示再消失"），动画结束后恢复 AsNeeded。
+     * 仅作用于历史选项卡——快捷键/样式的滚动条是真实滚动（窗口本就
+     * 小于内容），不做抑制。
+     * @param suppressed true=隐藏，false=恢复 AsNeeded
+     * @author chiangyang
+     */
+    void setHistoryScrollBarSuppressed(bool suppressed);
+
     // ---- 颜色配置（数据驱动，元数据表归 StyleManager 所有） ----
     // 颜色配置元数据表（settingsKey/translationKey/defaultText/defaultColor）定义在
     // StyleManager::colorSettingTable()（core 层单一数据源），SettingsWindow 只消费它，

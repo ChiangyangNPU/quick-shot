@@ -544,6 +544,8 @@ void SettingsWindow::applyTabHeight(bool animated) {
 
     if (heightAnimation && heightAnimation->state() == QPropertyAnimation::Running) {
         heightAnimation->stop();
+        // stop() 不会触发 finished，先恢复上一次动画抑制的滚动条
+        setHistoryScrollBarSuppressed(false);
     }
 
     // 高度已经正确时直接返回，避免首次显示/初始化校准后启动无意义的动画
@@ -560,12 +562,35 @@ void SettingsWindow::applyTabHeight(bool animated) {
     if (!heightAnimation) {
         heightAnimation = new QPropertyAnimation(this, "animatedHeight", this);
         heightAnimation->setEasingCurve(QEasingCurve::InOutQuad);
+        connect(heightAnimation, &QPropertyAnimation::finished, this, [this]() {
+            setHistoryScrollBarSuppressed(false);
+        });
+    }
+
+    // 仅历史选项卡：动画中间态视口小于内容，AsNeeded 会瞬时误报
+    // （滚动条"先显示再消失"）；动画结束后恢复。快捷键/样式的滚动条是
+    // 真实滚动（窗口本就小于内容），不做抑制。
+    if (currentTab == m_historyTabWidget) {
+        setHistoryScrollBarSuppressed(true);
     }
 
     heightAnimation->setStartValue(currentHeight);
     heightAnimation->setEndValue(targetHeight);
     heightAnimation->setDuration(400);
     heightAnimation->start();
+}
+
+/**
+ * @brief 抑制/恢复历史选项卡滚动区的垂直滚动条
+ *
+ * @author chiangyang
+ */
+void SettingsWindow::setHistoryScrollBarSuppressed(bool suppressed) {
+    if (!m_historyTabWidget) return;
+    if (QScrollArea *area = m_historyTabWidget->scrollArea()) {
+        area->setVerticalScrollBarPolicy(
+            suppressed ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded);
+    }
 }
 
 /**
