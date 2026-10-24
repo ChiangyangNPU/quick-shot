@@ -44,7 +44,7 @@ QuickShot 是一款跨平台的截图与录屏工具，基于 **Qt 6.10.2** 框�
 - **单实例互斥**：QLockFile 锁（应用数据目录，按用户隔离）；第二实例弹本地化提示后立即退出，避免热键静默失效、剪贴板历史重复记录与配置/数据库双写；崩溃残留死锁按 PID 存活自动清理，锁文件不可写时降级为无防护继续运行
 - **跨平台**：Windows、macOS、Linux
 - **主题定制**：自定义工具栏颜色、边框颜色等
-- **工具栏防闪烁**：BaseToolBar 子工具栏切换时使用同步 delete + setUpdatesEnabled 双重保护，PinWindow 顶层窗口额外添加 WA_NoSystemBackground 阻止系统背景清除
+- **工具栏防闪烁**：BaseToolBar 采用「4 种工具栏变体预创建 + 热切换仅翻转可见性（show/raise/hide 原子交换），零创建零销毁」策略，子工具栏窗口设置 WA_TranslucentBackground；WA_NoSystemBackground 仅用于 OverlayTextEdit/FloatingWidget，与贴图子工具栏无关
 
 ---
 
@@ -147,7 +147,6 @@ graph TB
     C2 --> H2
     H2 --> Y
     F --> H
-    G --> N
     K --> M
     L --> M
     I --> V
@@ -231,12 +230,18 @@ graph LR
         Selector
         AnnotationInteractionHandler
         AnnotationManager
+        RecordingSession
+        ScrollCaptureSession
+        ScrollStitcher
+        CaptureSession
         ScreenRecorder
+        GifEncoder
         OcrEngine
         Hunter
         HistoryManager
         ClipboardMonitor
         TranslateService
+        UpdateManager
     end
 
     subgraph 快捷键系统
@@ -327,6 +332,15 @@ graph LR
     SnipScreen --> HistoryManager
     SnipScreen --> TranslateService
     SnipScreen --> TranslateOverlayWindow
+    SnipScreen --> RecordingSession
+    SnipScreen --> ScrollCaptureSession
+    SnipScreen --> CaptureSession
+    RecordingSession --> ScreenRecorder
+    RecordingSession --> CaptureSession
+    ScrollCaptureSession --> ScrollStitcher
+    ScrollCaptureSession --> CaptureSession
+    ScreenRecorder --> GifEncoder
+    SettingsWindow --> UpdateManager
 
     Selector --> Hunter
     Selector --> StyleManager
@@ -358,7 +372,6 @@ graph LR
     HistoryManager --> Logger
 
     ScreenRecorder --> Logger
-    ScreenRecorder --> ConfigManager
 
     OcrEngine --> OcrPreprocess
     OcrEngine --> OcrDetPostprocess
@@ -375,7 +388,6 @@ graph LR
     TranslateOverlayWindow --> TranslateService
     TranslateOverlayWindow --> StyleManager
 
-    Logger --> ConfigManager
     GlobalShortcut --> Logger
 
     style main.cpp fill:#ffcdd2
@@ -596,6 +608,23 @@ classDiagram
         +void onCancel()
     }
 
+    class RecordingSession {
+        -SnipScreen* m_host
+        -RecordingToolBar* m_toolbar
+        -RecordingControlWindow* m_control
+        -ScreenRecorder* m_recorder
+        +void setMode(recording)
+        +bool isRecording()
+        +void showToolBar()
+        +void hideToolBar()
+        +void togglePause()
+        +void stop()
+        +void cancel()
+        +void resetUi()
+        +void pushAnnotationOverlay()
+        +void updateInputMask()
+    }
+
     class RecordingControlWindow {
         -QPushButton* btnStart
         -QPushButton* btnPause
@@ -616,7 +645,8 @@ classDiagram
     SnipScreen *-- Selector
     SnipScreen *-- ScreenshotToolBar
     SnipScreen *-- RecordingToolBar
-    SnipScreen *-- RecordingControlWindow
+    SnipScreen *-- RecordingSession
+    RecordingSession *-- RecordingControlWindow
     SnipScreen *-- ScreenRecorder
     SnipScreen o-- AnnotationInteractionHandler
     SnipScreen o-- AnnotationShortcutController
@@ -1022,11 +1052,11 @@ classDiagram
 
     class TranslationManager {
         <<Singleton>>
-        -TranslationManager* s_instance
+        -TranslationManager* m_instance
         -QString m_currentLanguage
         +TranslationManager* instance()
         +QString get(key, defaultValue)
-        +void setLanguage(language)
+        +bool loadLanguage(langCode)
         +QString currentLanguage()
     }
 
@@ -1156,8 +1186,6 @@ classDiagram
 
     class SettingsWindow {
         -QTabWidget* tabWidget
-        -QScrollArea* styleScrollArea
-        -QScrollArea* historyScrollArea
         -QPropertyAnimation* heightAnimation
         -int m_dpiScaledWidth
         +void retranslateUi()
@@ -1168,7 +1196,6 @@ classDiagram
         +void showEvent(event)
         +int animatedHeight()
         +void setAnimatedHeight(height)
-        +void setGlobalShortcuts(snip, record)
         -void setupUi()
         -void setupGeneralTab()
         -void setupShortcutsTab()
@@ -1178,7 +1205,8 @@ classDiagram
         -void setupHistoryTab()
         -void onTabChanged(index)
         -void onDpiChanged()
-        -void setFixedHeightWithAnimation(height)
+        -void fitWindowHeight()
+        -void applyTabHeight(animated)
         -void installEventFilterOnChildren()
         -QColor showColorDialog(currentColor)
         -QHBoxLayout* createColorRow(parent, labelText, color, outBtn, outLabel)
@@ -1187,11 +1215,8 @@ classDiagram
         -void loadStyleSettings()
         -void updateDpiScaledWidth()
         -int calculateDpiScaledWidth() const
-        -void updateGeneralControlWidths()
-        -void updateHistoryComboWidth()
         -void updateControlWidths()
         -void updateHistoryStats()
-        -void updateTranslateComboWidth()
         -const ColorSetting[]& colorSettingTable()
         -void applyColorChange(id)
         -void emitColorChangedSignal(signal)
@@ -1201,6 +1226,8 @@ classDiagram
         +void toolbarBgColorChanged()$
         +void toolbarButtonStyleChanged(style)$
     }
+
+    note for SettingsWindow "updateControlWidths() 统一分发到各 Tab（General→updateControlWidths，History/Translate→updateComboWidths）；历史记录滚动区 historyScrollArea 位于 SettingsHistoryTab 内"
 
     ConfigManager ..> QSettings
     StyleManager ..> QColor
@@ -1902,10 +1929,11 @@ sequenceDiagram
     participant StyleManager
 
     User->>SettingsWindow: 切换语言
-    SettingsWindow->>TranslationManager: setLanguage(lang)
-    TranslationManager->>TranslationManager: 加载翻译文件
-    TranslationManager->>ConfigManager: setValue("language", lang)
+    Note over SettingsWindow: SettingsGeneralTab.onLanguageChanged 写入 language 配置
+    SettingsWindow->>ConfigManager: setValue("language", langCode)
     ConfigManager->>ConfigManager: sync()
+    SettingsWindow->>TranslationManager: loadLanguage(langCode)
+    TranslationManager->>TranslationManager: 加载翻译文件
     
     TranslationManager-->>SettingsWindow: languageChanged 信号
     SettingsWindow->>SettingsWindow: retranslateUi()
@@ -1991,9 +2019,8 @@ macOS（尤其是 Sidecar/AirPlay 副屏）不支持跨多屏的透明窗口，�
 
 ### 6.3 单例模式
 
-多个管理器采用单例模式：
+全局管理器共 10 个，其中 9 个采用单例模式（`StyleManager` 为纯静态类、无实例，不在单例之列）：
 - `ConfigManager`：全局唯一配置实例，QSettings 持久化封装（Facade），负责配置默认值播种
-- `StyleManager`：集中管理 UI 样式和颜色主题
 - `TranslationManager`：统一多语言管理（注意：本类负责 UI 界面文案翻译，与文本翻译服务区分）
 - `OcrEngine`：唯一 OCR 引擎实例（全接口共用一把可重入互斥锁，`recognize()` 全程持锁串行化；main 启动时在主线程预热构造，避免单例在 QtConcurrent 工作线程首次创建导致线程亲和性错位）
 - `HistoryManager`：唯一历史记录管理器实例，管理 SQLite 数据库和自动清理
@@ -2001,6 +2028,8 @@ macOS（尤其是 Sidecar/AirPlay 副屏）不支持跨多屏的透明窗口，�
 - `DesktopPetManager`：唯一桌面宠物管理器实例，管理宠物开关/位置/外观持久化、投喂与晾衣绳显隐
 - `ClipboardMonitor`：唯一剪贴板监听器实例
 - `Logger`：全局日志记录器
+
+> 口径说明：10 个全局管理器中，`StyleManager` 为纯静态类（全部静态方法，无 instance()），`Logger` 非 QObject（无信号/槽），其余 8 个均为 QObject 单例。
 
 ### 6.4 工具栏动态定位
 
@@ -2127,11 +2156,11 @@ Host回调（窗口差异注入）
 
 ### 6.13 工具栏子工具栏防闪烁
 
-工具栏切换工具时子工具栏保持平滑显示、无闪烁与内容压缩，采用双重防护：
+工具栏切换工具时子工具栏保持平滑显示、无闪烁与内容压缩，采用「变体预创建 + 可见性热切换」策略：
 
-**Qt 层面（所有工具栏共用）**：`BaseToolBar::clearSubToolbarLayout()` 使用同步 `delete` 删除旧控件，确保立即移除并释放布局空间；`showSubTools()` 在删除旧控件后创建新控件前调用 `setUpdatesEnabled(false)`，全部完成后再 `setUpdatesEnabled(true)` 阻塞中间态绘制。
+**Qt 层面（所有工具栏共用）**：`BaseToolBar` 将子工具栏归纳为 4 种内部结构变体（形状下拉+线宽+颜色、线宽+颜色、字号+颜色、仅线宽无颜色），在 `buildSubVariant()` 中懒构建并常驻内存；`showSubTools(toolId)` 热切换时零创建零销毁，仅做可见性原子交换——先 `show()` + `raise()` 目标变体、再 `hide()` 旧变体（BaseToolBar.cpp），新旧同背景色重叠一帧避免闪烁。每个变体都是 fresh widget 的首次布局，QSS min-width / sizeHint 计算正确，不会出现内容压缩；切换后成员指针（滑块/颜色按钮/subToolbarWindow 等）重绑到新变体，外部调用方无感。
 
-**系统层面（PinWindow 独立顶层窗口）**：子工具栏窗口设置 `WA_NoSystemBackground` 属性，阻止窗口尺寸变化时系统自动清除背景。
+**系统层面（PinWindow 独立顶层窗口）**：子工具栏变体窗口设置 `WA_TranslucentBackground` 属性（圆角需要）；`WA_NoSystemBackground` 只用于 OverlayTextEdit/FloatingWidget 浮动控件，与贴图子工具栏无关。
 
 ### 6.14 Alt+P 贴图剪贴板历史分页
 
@@ -2154,9 +2183,9 @@ Alt+P 快捷键触发 `SnipScreen::pinClipboard()`，基于 HistoryManager 实�
 
 #### 6.15.2 SettingsWindow 适配
 
-- **窗口宽度**：`calculateDpiScaledWidth()` 以 96 DPI（100% 缩放）= 500px 为基准，按 `logicalDotsPerInch` 线性放大，范围限制 500~1000。`updateDpiScaledWidth()` 重新计算并更新 `setMinimumWidth/setMaximumWidth` 约束。
-- **控件宽度**：`updateControlWidths()` 依次调用 `updateGeneralControlWidths()`（标签固定宽度、下拉框最小宽度）、`updateHistoryComboWidth()`（保留天数/最大记录数下拉框统一宽度）、`updateTranslateComboWidth()`（翻译引擎/目标语言下拉框统一宽度）。
-- **高度适配**：`onTabChanged()` 对非滚动选项卡（通用/关于）调用 `setFixedHeightWithAnimation()` 强制高度贴合内容；对含 `QScrollArea` 的选项卡（快捷键/样式/历史记录）保持窗口高度不变让内容滚动。`showEvent` 中用 `QTimer::singleShot(0, ...)` 延迟触发初始高度适配，确保布局完成。
+- **窗口宽度**：`calculateDpiScaledWidth()` 以 96 DPI（100% 缩放）= 625px 为基准，按 `logicalDotsPerInch` 线性放大，范围限制 625~1500（125%→781、150%→938、200%→1250、250%→1500 封顶）。`updateDpiScaledWidth()` 重新计算并更新 `setMinimumWidth/setMaximumWidth` 约束。
+- **控件宽度**：`updateControlWidths()` 统一分发到各选项卡（SettingsWindow.cpp）：调用通用选项卡的 `updateControlWidths()`（标签固定宽度、下拉框最小宽度）、历史记录选项卡的 `updateComboWidths()`（保留天数/最大记录数下拉框统一宽度）、翻译选项卡的 `updateComboWidths()`（翻译引擎/目标语言下拉框统一宽度）。
+- **高度适配**：链路为 `contentHeightChanged → fitWindowHeight() → applyTabHeight(bool animated)`——选项卡内容高度变化时发出无参 `contentHeightChanged` 信号，`fitWindowHeight()` 槽保持无参签名兼容该信号并固定走动画，`applyTabHeight(animated)` 为实际实现（先让当前页 `adjustSize()` 回 sizeHint 自然高度再贴合，首显/初始化校准传 `false` 立即设置，选项卡切换等走动画）；`onTabChanged()` 切页时同样调用 `fitWindowHeight()`。`showEvent` 中用 `QTimer::singleShot` 延迟触发初始高度适配，确保布局完成。
 - **样式选项卡颜色行**：颜色按钮统一使用 `#settingColorButton` QSS 选择器，`createColorRow()` 封装创建逻辑，`updateColorButton()` 仅更新 `background-color`，尺寸由全局 qss 管理。
 - **颜色配置数据驱动表（单一数据源）**：颜色配置元数据收敛为 **core 层 `StyleManager::colorSettingTable()`**（21 项，与 `kShortcutConfigs` 同一数据驱动惯用法）。每项含 `StyleColorId`、联动分类（Border/Toolbar/TabButton/TabWidgetBg）、关联信号（仅 `TabWidgetBg` 有订阅者）、QSettings 键、翻译键、默认色（引用 `StyleManager::DEFAULT_*`）以及 StyleManager getter/setter 函数指针。`ConfigManager` 播种默认值、`StyleManager::initFromConfig` 启动恢复、`SettingsWindow` 构建设置 UI 三方均遍历此表。
 - **改色处理**：`applyColorChange(StyleManager::StyleColorId)` 统一处理颜色变更（弹对话框→set→save→联动→emit），`applyColorPostUpdate(StyleColorCategory, QColor)` 按分类刷新控件，仅 `tabWidgetBgColorChanged` 存活（其余 10 个无订阅者颜色信号与 15 个 `onXxxColorChanged` 槽已删除）。颜色按钮/标签用 `m_colorButtons`/`m_colorLabels` 数组管理（按 `StyleColorId` 索引）。
@@ -2257,7 +2286,7 @@ QuickShot 内置自动更新功能，支持多渠道回退、SHA256 校验、解
 
 #### 6.18.2 多渠道回退
 
-UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个渠道独立超时（15 秒）。某渠道失败后自动切换到下一个渠道，全部失败后报错。
+UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`initChannelOrder()`）：中国大陆 Gitee → GitHub → 官方网站，其他地区 GitHub → Gitee → 官方网站。每个渠道独立超时（10 秒，`CHECK_TIMEOUT_MS`）。某渠道失败后自动切换到下一个渠道，全部失败后报错。
 
 支持环境变量 `QUICKSHOT_UPDATE_URL` 覆盖版本检查地址，用于本地模拟更新测试（详见 update-test/README.md）。
 
@@ -2285,13 +2314,13 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 - 版本号由 [CMakeLists.txt](../CMakeLists.txt) 的 `project(QuickShot VERSION x.y.z)` 统一管理
 - 通过 `add_compile_definitions(QUICKSHOT_VERSION="${PROJECT_VERSION}")` 注入为编译宏
 - 源码中使用 `QUICKSHOT_VERSION` 宏或 `qApp->applicationVersion()` 获取版本号
-- 打包脚本 deploy.ps1 自动从 CMakeLists.txt 解析版本号，生成 `QuickShot-{Config}-{Version}-Windows-x64` 格式的包名
+- 打包脚本 deploy.ps1 自动从 CMakeLists.txt 解析版本号，生成 `QuickShot-{Config}-v{Version}-Windows-x64` 格式的包名
 
 #### 6.18.6 打包与版本清单
 
 - **打包**：`deploy/win/deploy.ps1` 自动编译、windeployqt 部署依赖、生成 zip 包
 - **版本清单**：`update-test/server/make-version-json.ps1` 计算 SHA256 和文件大小，生成 version.json
-- **文件命名约定**：`QuickShot-Release-{version}-Windows-x64.zip`（GitHub/Gitee 下载 URL 与此对齐）
+- **文件命名约定**：`QuickShot-Release-v{version}-Windows-x64.zip`（GitHub/Gitee 下载 URL 与此对齐）
 
 ### 6.19 滚动截图（ScrollCaptureSession + ScrollStitcher）
 
@@ -2322,7 +2351,7 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 | 配置键 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `language` | String | `zh_CN` | 界面语言 |
-| `log_print_enabled` | Bool | `false` | 是否启用日志打印 |
+| `logPrintEnabled` | Bool | `true` | 是否启用日志打印 |
 | `shortcut_snip` | String | `Alt+Q` | 截图快捷键 |
 | `shortcut_record` | String | `Alt+S` | 录屏快捷键 |
 | `shortcut_history` | String | `Alt+H` | 历史记录快捷键 |
@@ -2346,11 +2375,12 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 
 | 配置键 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
-| `record/outputPath` | String | 用户目录 | 输出路径 |
-| `record/defaultFps` | Int | `30` | 默认帧率 |
+| `record/saveDir` | String | 系统视频目录（QStandardPaths::MoviesLocation） | 录屏输出目录 |
 | `record/format` | String | `mp4` | 录制输出格式（`mp4` / `gif`，GIF 固定 10fps 无音轨） |
-| `record/audioEnabled` | Bool | `false` | 音频录制 |
-| `record/microphoneEnabled` | Bool | `false` | 麦克风录制 |
+| `record/systemAudio` | Bool | `false` | 系统音频录制 |
+| `record/microphone` | Bool | `false` | 麦克风录制 |
+
+> 注：`fps=30` 仅是 `ScreenRecorder::startWindowRecording`/`startAreaRecording` 的函数参数默认值，不是配置键。
 
 ### 7.4 历史记录配置
 
@@ -2360,7 +2390,7 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 | `history/enableClipboard` | Bool | `true` | 是否记录剪贴板历史 |
 | `history/maxItems` | Int | `1000` | 最大记录数（超出时删除最旧记录） |
 | `history/retentionDays` | Int | `7` | 保留天数（超出自动清理） |
-| `history/shortcut` | String | `Alt+H` | 打开历史记录窗口的快捷键 |
+| `history/shortcut` | String | `Alt+H` | 旧键（已更名 `shortcut_history`，仅作向后兼容读取与保存双写，见 ShortcutTypes.h / ShortcutRegistry.cpp） |
 | `history/thumbnailSize` | Int | `200` | 缩略图尺寸（像素） |
 
 > **自动清理**：软件启动时 `HistoryManager` 构造函数自动调用 `cleanupExpired()`，根据 `retentionDays` 和 `maxItems` 清理过期和超额记录。
@@ -2383,6 +2413,8 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 | `translate/showPrivacyWarning` | Bool | `true` | 首次翻译隐私提示开关 |
 
 > **隐私提示**：首次使用翻译时弹窗说明文本将发送到第三方服务，可勾选「不再提示」。所有 API Key / URL 由用户在设置页填写，**软件不预置任何凭证**，符合开源约束。
+>
+> **加密存储**：翻译 API Key / URL 经 `SecretStore` 加密存储（Windows DPAPI / macOS Keychain），读取时旧明文配置自动迁移为密文。
 
 ### 7.6 样式配置
 
@@ -2464,7 +2496,7 @@ UpdateManager 按 GitHub → Gitee → 官方网站顺序依次尝试，每个�
 - 使用 QPixmap 缓存背景
 - 标注增量更新
 - 工具栏位置计算缓存
-- 使用 `setMask` 减少不必要的绘制
+- `setMask` 仅用于录屏输入遮罩（`RecordingSession::updateInputMask`，非交互区域鼠标穿透），不作为渲染优化手段
 
 ### 8.3 录屏优化
 
@@ -2639,7 +2671,6 @@ mindmap
   root((QuickShot 设计模式))
     单例模式
       ConfigManager
-      StyleManager
       TranslationManager
       Logger
       HistoryManager
@@ -2689,14 +2720,13 @@ mindmap
 
 #### 10.3.1 Singleton 单例模式
 
-**应用场景**：确保全局唯一实例，提供统一访问入口。采用 Qt 风格单例（QObject 派生 + instance() 静态方法 + s_instance 指针），支持信号/槽机制。
+**应用场景**：确保全局唯一实例，提供统一访问入口。全局管理器共 10 个，其中 9 个采用 Qt 风格单例（多数为 QObject 派生 + instance() 静态方法 + s_instance 指针），支持信号/槽机制；`StyleManager` 为纯静态类（无 instance()），不在单例之列。
 
 **涉及类**：
 
 | 类名 | 文件位置 | 说明 |
 |------|----------|------|
 | ConfigManager | src/core/ConfigManager.h | QSettings 封装，配置文件读写 + 默认值播种（Facade） |
-| StyleManager | src/core/StyleManager.h | 集中管理 QSS 样式表和颜色主题 |
 | TranslationManager | src/core/TranslationManager.h | i18n 翻译管理，语言切换 |
 | Logger | src/log/Logger.h | 分级日志（DEBUG/INFO/WARN/ERROR） |
 | HistoryManager | src/history/HistoryManager.h | SQLite 历史记录管理 |
@@ -2707,9 +2737,9 @@ mindmap
 | ClipboardMonitor | src/history/ClipboardMonitor.h | 剪贴板监听器（文本记录 + markTextAsRecorded 去重） |
 
 **实现特点**：
-- 使用 QObject 基类，支持信号/槽
-- instance() 方法返回指针，首次调用时创建实例
-- 提供 destroy() 方法在应用退出时清理
+- 多数管理器为 QObject 单例，instance() 方法返回指针，首次调用时创建实例，支持信号/槽
+- `Logger` 非 QObject（纯指针单例，无信号/槽）
+- 仅 `HistoryManager` 提供 destroy() 方法在应用退出时清理
 
 ---
 
@@ -2745,6 +2775,11 @@ classDiagram
     class TranslateEngine {
         <<interface>>
         +void translate(text, sourceLang, targetLang)
+        +QString name()
+        +bool isAvailable()
+        +bool requiresApiKey()
+        #QNetworkReply* sendRequest(text, sourceLang, targetLang)
+        #bool parseResponse(data, result)
     }
     
     class MyMemoryEngine
@@ -2795,6 +2830,7 @@ classDiagram
    - MyMemoryEngine / BaiduTranslateEngine / DeepLEngine / LibreTranslateEngine
    - 用户可在设置中切换引擎
    - TranslateService 统一调度
+   - `translate()` 为非虚模板方法（统一处理空文本/未配置检查、原文记录、网络/SSL 错误分类与结果回传），子类实现的策略虚接口为 `name()` / `isAvailable()` / `requiresApiKey()` / `sendRequest()` / `parseResponse()`
 
 3. **Annotation 多态体系**
    - 8 种标注类型（矩形/椭圆/三角/箭头/直线/画笔/文本/马赛克）
@@ -2819,7 +2855,7 @@ stateDiagram-v2
     Captured --> Moving : 点击内部
     Captured --> Resizing : 点击边框
     Captured --> Locked : 选择标注工具
-    Captured --> Ready : 右键重新选择
+    Captured --> PreySelecting : 右键重新选择
     Moving --> Captured : 释放鼠标
     Resizing --> Captured : 释放鼠标
     Locked --> Captured : 完成标注
@@ -3276,7 +3312,7 @@ graph TD
     end
 
     subgraph 单例
-        Sig[Singleton 单例模式<br/>10 个全局管理器]
+        Sig[Singleton 单例模式<br/>10 个全局管理器<br/>StyleManager 纯静态 / Logger 非 QObject]
     end
 
     subgraph 运行时
@@ -3437,7 +3473,7 @@ src/
 ├── widgets/              # 通用组件
 │   ├── BaseToolBar.h/cpp  # 基础工具栏核心骨架（布局、子工具栏变体系统、定位、eventFilter）
 │   ├── BaseToolBarActions.cpp # 基础工具栏动作与样式层（动作按钮注册表、ToolDef元数据表、按钮样式、画笔/颜色/形状操作、状态切换）
-│   ├── ElidedLabel.h/cpp  # 省略号文本标签
+│   ├── ElidedLabel.h     # 省略号文本标签（header-only，CMake 仅列 .h）
 │   ├── FloatingWidget.h/cpp   # 可拖拽/角点缩放浮动控件基类（OverlayTextEdit 的父类）
 │   ├── OverlayTextEdit.h/cpp  # 文本编辑框（浮动输入、拖拽缩放、边界限制、焦点冲突管理）
 │   ├── PinWindow.h/cpp    # 贴图窗口（置顶、拖拽、调整大小、标注模式、Alt+P分页、WA_DeleteOnClose）
@@ -3507,7 +3543,7 @@ src/
 | `src/widgets/MessageBox.h` | 自定义消息框（统一样式替代 QMessageBox，自动翻译按钮、居中定位、静态便捷方法） |
 | `src/recording/ScreenRecorder.h` | 录屏器（线程、状态管理、实时标注 overlay 合成、音频设备枚举、OutputFormat MP4/GIF） |
 | `src/recording/GifEncoder.h` | GIF89a 编码器（纯 Qt 实现，LZW 压缩、每帧局部调色板、相同帧延迟合并） |
-| `src/recording/RecordingControlWindow.h` | 录制控制栏（暂停/恢复/停止、MP4/GIF 格式下拉、系统音频+麦克风开关） |
+| `src/widgets/RecordingControlWindow.h` | 录制控制栏（暂停/恢复/停止、MP4/GIF 格式下拉、系统音频+麦克风开关） |
 | `src/history/HistoryItem.h` | 历史记录数据结构（截图/剪贴板文本） |
 | `src/history/HistoryManager.h` | 历史记录管理器（单例、SQLite、启动清理过期、addScreenshotPixmap Alt+P入库） |
 | `src/history/ClipboardMonitor.h` | 剪贴板监听器（捕获复制/剪切文本入库） |
@@ -3544,7 +3580,9 @@ find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Svg Multimedia Concurrent 
 option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR (DirectML/CoreML)" ON)
 
 # OCR 是否编译由 ONNX Runtime 探测结果决定（third_party/onnxruntime 或
-# 环境变量 ONNXRUNTIME_ROOT，均缺失时自动下载），探测成功才定义 ENABLE_OCR 宏
+# 环境变量 ONNXRUNTIME_ROOT），探测成功才定义 ENABLE_OCR 宏。
+# 缺失时的自动下载仅限 Windows 分支；macOS 只探测 Homebrew 等路径
+# （/opt/homebrew、/usr/local），不自动下载
 
 # 源文件为显式逐文件列表（src/ 各模块），平台特定文件用 target_sources 追加：
 #   Windows: ScreenRecorder_win.cpp；macOS: ScreenRecorder_mac.cpp + mac_helper.mm；
@@ -3565,7 +3603,7 @@ option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR (DirectML/Co
 | Captured | 点击内部 | Moving | 移动选区 |
 | Captured | 点击边框 | Resizing | 调整大小 |
 | Captured | 选择标注工具 | Locked | 锁定模式 |
-| Captured | 右键 | Ready | 重新选择 |
+| Captured | 右键 | PreySelecting | 重新选择 |
 | Moving | 释放鼠标 | Captured | 完成移动 |
 | Resizing | 释放鼠标 | Captured | 完成调整 |
 | 任意状态 | 关闭选区 | - | 退出选区 |

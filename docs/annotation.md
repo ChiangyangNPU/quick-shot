@@ -21,6 +21,8 @@ QuickShot 的标注系统是跨场景复用的图形标注功能，支持**截�
 
 除上表 8 个工具按钮外，矩形按钮的形状下拉还会创建 `TriangleAnnotation`（三角形，3 个顶点控制点），与椭圆共用 `m_currentShapeType`（`AnnotationInteractionHandler::createAnnotation` 中 switch 分支创建）。
 
+注意：标注的**拖动与控制点调节仅作用于栈顶标注**——交互处理器只对 `lastAnnotation()` 做 hitTest（AnnotationInteractionHandler.cpp:97-118），`AnnotationManager` 的移动/调节接口也仅针对栈顶（AnnotationManager.h:314）。
+
 ### 1.2 快捷键
 
 标注快捷键由 `AnnotationShortcutController` 统一管理，SnipScreen 与 PinWindow 均实现 `IShortcutHandler` 接口作为策略。画笔粗细范围 1-20（`kMinPenWidth`/`kMaxPenWidth`），与子工具栏滑块联动。
@@ -28,6 +30,8 @@ QuickShot 的标注系统是跨场景复用的图形标注功能，支持**截�
 | 快捷键 | 动作 | 说明 |
 |---|---|---|
 | `` ` `` | 切换截图/录屏模式 | 仅 SnipScreen 生效（PinWindow 空实现），选区前后均可切换 |
+| `Ctrl+C` | 复制 | 裸键：文本编辑时让给 OverlayTextEdit，做 `canAnnotate` 检查 |
+| `Ctrl+S` | 保存 | 保存到文件 |
 | `1`-`8` | 切换标注工具 | 依次对应矩形/椭圆/箭头/画笔/直线/文本/马赛克/橡皮擦 |
 | `Ctrl+Z` | 撤销 | 优先级：清除 → 移动 → 最后一步操作 |
 | `Ctrl+Y` / `Ctrl+Shift+Z` | 重做 | 优先级同上 |
@@ -36,9 +40,9 @@ QuickShot 的标注系统是跨场景复用的图形标注功能，支持**截�
 | `]` | 画笔宽度 +1 | |
 | `Tab` | 循环切换颜色 | 按工具栏颜色面板顺序（红→绿→蓝→黄→青→品红→黑→白→灰→暗红→暗绿→暗蓝），末尾回绕 |
 | `F5` | 刷新截图 | 重新抓取屏幕内容，保留当前选区（仅 SnipScreen，PinWindow 空实现） |
-| `Esc` | 取消当前操作 | 优先级：文本编辑 → 取消录制 → 退出截图/贴图 |
+| `Esc` | 取消当前操作 | 优先级：滚动截图会话取消（仅 SnipScreen） → 文本编辑 → 取消录制 → 退出截图/贴图 |
 
-文本编辑框获得焦点时，以上裸键（数字键、`` ` ``、`[`/`]`、`Tab`、`Delete`/`Backspace`）会被临时禁用，避免与文本输入冲突。
+文本编辑框获得焦点时，以上裸键（数字键、`` ` ``、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C`）会被临时禁用，避免与文本输入冲突。
 
 ---
 
@@ -71,7 +75,8 @@ graph TB
 
     subgraph RecordingLayer [录屏合成层]
         SCR[ScreenRecorder 每帧取overlay合成]
-        RAO[renderAnnotationOverlay 生成输出分辨率QImage]
+        RS[RecordingSession 录屏会话]
+        RAO[RecordingSession.renderAnnotationOverlay 生成输出分辨率QImage]
     end
 
     SS -->|实现接口| ISH
@@ -83,7 +88,8 @@ graph TB
     AM -->|存放标注对象| ANNO
     AM -->|存放擦除笔迹| ERASER
     AM -->|存放马赛克笔迹| MOSAIC
-    AIH -->|Host.syncOverlay| RAO
+    AIH -->|Host.syncOverlay| RS
+    RS -->|renderAnnotationOverlay| RAO
     RAO -->|setAnnotationOverlay| SCR
 ```
 
@@ -231,6 +237,7 @@ classDiagram
     class IShortcutHandler {
         <<interface>>
         +bool canAnnotate()
+        +void onSwitchMode()
         +void onToolSwitch(int)
         +void onCopy()
         +void onSave()
@@ -246,9 +253,13 @@ classDiagram
     class SnipScreen {
         +paintEvent
         +eventFilter 转发给Handler
-        +renderAnnotationOverlay 生成QImage
-        +pushAnnotationOverlay
+        +pushAnnotationOverlay 转发给RecordingSession
         +updateToolBarState
+    }
+
+    class RecordingSession {
+        +renderAnnotationOverlay 生成输出分辨率QImage
+        +pushAnnotationOverlay 推送给录制器
     }
 
     class PinWindow {
@@ -274,20 +285,23 @@ classDiagram
     PinWindow  o-- AnnotationInteractionHandler
     SnipScreen o-- AnnotationShortcutController
     PinWindow  o-- AnnotationShortcutController
+    SnipScreen o-- RecordingSession
 ```
 
 ### 2.3 相关文件清单
 
 | 文件 | 说明 |
 |---|---|
-| `src/capture/Annotation.h` | 标注基类 + 7 个子类 + 控制点/工具枚举 |
+| `src/capture/Annotation.h` | 标注基类 + 8 个子类（Rect/Ellipse/Triangle/Line/Arrow/Pen/Text/Mosaic）+ 控制点/工具枚举。注：`MosaicAnnotation`（Annotation.h:899）已声明但无调用点（死代码），马赛克实际走 `AnnotationManager::mosaicAt` 笔迹方案 |
 | `src/capture/AnnotationManager.h` | 标注管理器（撤销栈、马赛克、橡皮擦、控制点） |
 | `src/capture/AnnotationInteractionHandler.h` | Mixin 交互处理器 + Host 回调接口 |
 | `src/capture/AnnotationInteractionHandler.cpp` | 鼠标事件、绘制调度、标注创建逻辑 |
 | `src/shortcut/AnnotationShortcutController.h` | 标注快捷键控制器（策略模式，基于 QShortcut） |
 | `src/shortcut/IShortcutHandler.h` | 宿主窗口需实现的快捷键动作接口 |
+| `src/capture/RecordingSession.h` / `.cpp` | 录屏会话：标注 overlay 渲染与推送（`renderAnnotationOverlay`/`pushAnnotationOverlay` 自 SnipScreen 迁入，RecordingSession.h:104、RecordingSession.cpp:463） |
+| `src/widgets/RecordingToolBar.h` / `.cpp` | 录屏工具栏 |
 | `src/widgets/OverlayTextEdit.h` | 文本工具使用的独立编辑框 |
-| `src/capture/SnipScreen.cpp` | 截屏/录屏宿主（注入 Host 回调） |
+| `src/capture/SnipScreen.cpp` | 截屏/录屏宿主（注入 Host 回调；`pushAnnotationOverlay` 仅转发给 RecordingSession，SnipScreen.cpp:922-923） |
 | `src/widgets/PinWindow.cpp` | 贴图宿主（注入 Host 回调，支持滚轮缩放标注） |
 
 ---
@@ -340,28 +354,28 @@ graph TD
 
 ```mermaid
 graph LR
-    S([输入矩形列表]) --> N{逐个矩形处理}
-    N -->|取下一个| C1[背景裁剪该区域]
-    C1 --> C2[缩小到块大小分之一]
-    C2 --> C3[放大回原尺寸像素化]
-    C3 --> C4[生成像素化图像]
-    C4 --> C5[画回原位置]
-    C5 --> N
-    N -->|处理完毕| D([局部遮挡完成])
+    S([输入矩形列表]) --> N[全部笔迹矩形合并为一个 QRegion]
+    N --> C1[整张背景一次性降采样 Smooth]
+    C1 --> C2[升采样回原尺寸 Fast 得到预像素化图像]
+    C2 --> C3[按 QRegion 设置裁剪]
+    C3 --> C4[一次性绘入马赛克图层]
+    C4 --> D([局部遮挡完成])
 ```
 
-马赛克按 Stroke 以"一组矩形块"存储（每帧鼠标位置的 bounding rect，大小为画笔宽度乘 2）。
+现实现（`AnnotationManager::drawMosaicRects`，AnnotationManager.h:616-658）：无论笔迹矩形多少，全帧只做一次降/升采样——所有笔迹矩形先取并集为一个 `QRegion`，对整张背景一次性降采样（Smooth，块颜色取邻域平均）再升采样（Fast，保留硬方块感）生成预像素化图像，最后按该 QRegion 裁剪、一次绘入，仅笔迹区域生效。
+
+马赛克按 Stroke 以"一组矩形块"存储（每帧鼠标位置的 bounding rect，**实际矩形边长 = 画笔宽度乘 4**——调用方传入 `size = m_currentPenWidth * 2` 作为**半边长**，`mosaicAt` 内按 `QRect(pos.x()-size, pos.y()-size, size*2, size*2)` 构造，AnnotationInteractionHandler.cpp:65/77/166/176、AnnotationManager.cpp:253-257）。
 常量 `AnnotationManager::kDefaultMosaicBlockSize = 7`，一处修改全局生效。`blockSize` 越大模糊越强（3 为轻度，7 为默认，10 以上为强遮挡）。
 
 #### 橡皮擦实现
 
-橡皮擦不修改标注对象，而是在 `draw()` 时用 `QRegion::subtracted()` 把 eraserRegion 从 `clipRegion` 中扣除，达到**局部擦除笔迹**的视觉效果。擦除范围同样为画笔宽度乘 2 的一系列矩形。
+橡皮擦不修改标注对象，而是在 `draw()` 时用 `QRegion::subtracted()` 把 eraserRegion 从 `clipRegion` 中扣除，达到**局部擦除笔迹**的视觉效果。擦除笔迹尺寸与马赛克一致：**实际矩形边长 = 画笔宽度乘 4（size 参数为半边长）**，由调用方传入 `m_currentPenWidth * 2`（AnnotationInteractionHandler.cpp:65/166），`eraseAt` 内按半边长展开为 `size*2` 见方的矩形（AnnotationManager.cpp:224-228）。
 
 ---
 
 ### 3.3 AnnotationInteractionHandler（Mixin 工具类）
 
-统一 SnipScreen 和 PinWindow 高度重复的标注交互。内部持有 `AnnotationManager` 实例和一组**属性状态**（tool/color/penWidth/fontSize/shapeType/dashed）。
+统一 SnipScreen 和 PinWindow 高度重复的标注交互。内部持有 `AnnotationManager` 实例和一组**属性状态**（tool/color/penWidth/fontSize/shapeType/dashed）。拖动与控制点调节仅针对**栈顶标注**（只对 `lastAnnotation()` 做 hitTest，AnnotationInteractionHandler.cpp:97-118，AnnotationManager.h:314）。
 
 #### Host 回调接口
 
@@ -429,6 +443,12 @@ graph TD
     I -->|否| L[光标反馈 控制点光标优先 命中标注四向箭头否则十字]
 ```
 
+#### 宿主级鼠标行为（不经过标注交互处理器）
+
+- **右键退出截图**：SnipScreen 中 Selector 的右键 `stopped` 信号直接触发退出（SnipScreen.cpp:227-228）
+- **SnipScreen 双击快速复制**：捕获完成后左键双击直接复制选区（SnipScreen.cpp:1285-1290）
+- **PinWindow 双击关闭**：左键双击延迟关闭贴图窗口；**标注模式下双击关闭被禁用**（PinWindow.cpp:362-373）
+
 ---
 
 ### 3.4 AnnotationShortcutController（策略模式）
@@ -491,6 +511,7 @@ sequenceDiagram
         note over AM: 若有擦除笔迹则设置裁剪区域扣除擦除部分
     end
     AIH->>AM: 步骤五 绘制控制点
+    AIH->>AIH: 前置检查 无任何交互进行 isInteractionActive为假 且当前工具支持调节 canDragCurrentTool 橡皮擦马赛克工具下隐藏
     AM->>AM: 判断栈顶标注是否支持控制点
     AM->>QP: 绘制白色填充加灰色边框圆点控制点
     AIH->>QP: 步骤六 恢复之前保存的绘图状态
@@ -504,7 +525,7 @@ sequenceDiagram
 - **基础层缓存**：背景+标注合成一次，仅在标注/橡皮擦内容版本（AnnotationManager::contentVersion）、背景、目标尺寸、偏移、拉伸标记变化时重建；
 - **全局像素化缓存**：基础层整体降/升采样一次，涂抹马赛克过程中基础层不变、仅马赛克版本变化时重建——每帧一次全帧重采样，替代旧实现"每个笔迹组一次全帧重采样"（N 组线性放大，4K 涂抹卡顿根因）；
 - 马赛克区域 clip 后从像素化图层一次性 blit，与录屏 overlay 的既有方案一致；
-- 宿主隐藏/退出时 clearPaintCaches() 释放缓存归还内存（约 2x 全屏位图）。
+- 宿主隐藏/退出时 clearPaintCaches() 释放缓存归还内存（约 2x 全屏位图）。目前仅 SnipScreen 调用（SnipScreen.cpp:550），PinWindow 未接入。
 
 ```mermaid
 graph LR
@@ -655,14 +676,16 @@ graph LR
 
 ## 7. 修复历史
 
+> 注：仓库历史曾改写，下表前五行的提交哈希已失效，无法在当前仓库中找到（仅保留哈希字样作时间线参考）；`0a62431`、`383b9a7` 仍有效。
+
 | 提交 | 说明 |
 |---|---|
-| ca951f5 | 创建 AnnotationInteractionHandler 提取公共标注交互逻辑 阶段一 |
-| e8eb7d0 | SnipScreen 接入 Handler 净减少约三百二十二行 阶段二 |
-| ba69e55 | PinWindow 接入 Handler 净减少约二百四十八行 阶段三 |
-| a8843a8 | 修复录屏视频中标注重复显示 排除SnipScreen窗口捕获加overlay坐标与边框对齐 |
-| 08e0c2e | 修复录屏过程中绘制与拖动过程不显示 补充handleMouseMove分支中两处syncOverlay调用 |
+| ca951f5（哈希已失效，历史改写） | 创建 AnnotationInteractionHandler 提取公共标注交互逻辑 阶段一 |
+| e8eb7d0（哈希已失效，历史改写） | SnipScreen 接入 Handler 净减少约三百二十二行 阶段二 |
+| ba69e55（哈希已失效，历史改写） | PinWindow 接入 Handler 净减少约二百四十八行 阶段三 |
+| a8843a8（哈希已失效，历史改写） | 修复录屏视频中标注重复显示 排除SnipScreen窗口捕获加overlay坐标与边框对齐 |
+| 08e0c2e（哈希已失效，历史改写） | 修复录屏过程中绘制与拖动过程不显示 补充handleMouseMove分支中两处syncOverlay调用 |
 | 0a62431 | 修复录屏输入遮罩选区边框挖孔带宽硬编码3与实际边框2不一致 留下1px隐形事件捕获带 改用StyleManager::SNIP_BORDER_WIDTH |
 | 383b9a7 | 修复保存路径上第二次全桌面composeCanvas合成 savePixmapToFile的provider内顺带记录尺寸供历史记录 |
 
-撤销/重做状态机的行为契约由单元测试固化：`tests/AnnotationManagerTest.cpp`（17 个用例，覆盖上表全部操作序列的撤销/重做往返、清除快照、移动记录、新标注失效语义与 scaleAll 同步），运行方式见 `docs/architecture.md` 第 11 章。
+撤销/重做状态机的行为契约由单元测试固化：`tests/AnnotationManagerTest.cpp`（15 个用例，覆盖上表全部操作序列的撤销/重做往返、清除快照、移动记录、新标注失效语义与 scaleAll 同步），运行方式见 `docs/architecture.md` 第 11 章。

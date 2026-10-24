@@ -24,9 +24,9 @@ QuickShot 的快捷键系统分为四大类，与「设置 → 快捷键」选�
 | 截图 | `Alt+Q` | `shortcut_snip` | `Snip` | 进入区域截图模式 |
 | 录屏 | `Alt+S` | `shortcut_record` | `Record` | 进入区域录屏模式 |
 | 历史记录 | `Alt+H` | `shortcut_history` | `History` | 打开历史记录窗口 |
-| 贴图（剪贴板） | `Alt+P` | `shortcut_pin` | `Pin` | 按时间倒序循环贴出历史截图：首次按下在鼠标所在屏幕中央贴出最新截图，后续按下依次贴出更早记录（位置偏移 (24,24)，夹到屏幕边界内），到达最旧后循环回最新 |
+| 贴图（剪贴板） | `Alt+P` | `shortcut_pin` | `Pin` | 按时间倒序循环贴出历史截图：首次按下以鼠标当前位置为中心贴出最新截图（并夹在鼠标所在屏幕内），后续按下依次贴出更早记录（位置偏移 (24,24)，夹到屏幕边界内），到达最旧后循环回最新 |
 | 全屏截图 | `Alt+Shift+F` | `shortcut_fullscreen` | `Fullscreen` | 截取整个虚拟桌面（多屏拼接），直接复制到剪贴板 |
-| 活动窗口截图 | `Alt+Shift+W` | `shortcut_activewindow` | `ActiveWindow` | 截取当前前台窗口（含标题栏与边框），直接复制到剪贴板 |
+| 活动窗口截图 | `Alt+Shift+W` | `shortcut_activewindow` | `ActiveWindow` | 截取当前前台窗口（含标题栏与边框），直接复制到剪贴板（仅 Windows 有效，其他平台返回空图） |
 | 录屏暂停/恢复 | `Alt+Shift+S` | `shortcut_recordpause` | `RecordPause` | 录制中暂停 / 恢复（非录制状态无效） |
 | 录屏停止 | `Alt+Shift+Q` | `shortcut_recordstop` | `RecordStop` | 停止录屏并保留视频文件（非录制状态无效） |
 | 隐藏/显示所有贴图 | `Alt+Shift+P` | `shortcut_togglepins` | `TogglePins` | 一键隐藏所有 PinWindow，再次按下恢复显示 |
@@ -45,7 +45,7 @@ QuickShot 的快捷键系统分为四大类，与「设置 → 快捷键」选�
 2. 在对应功能行的输入框中按下新的快捷键组合。
 3. 点击「确定」保存并即时生效；点击「取消」放弃修改；点击「恢复」重置为默认值。
 
-> ⚠️ `Fn + 字母` 组合不推荐使用，日常打字时易误触发截图或录屏，设置时会弹出警告。macOS 平台已在 `GlobalShortcut::eventTapCallback` 中拦截 Fn+字母 组合。
+> ⚠️ `Fn + 字母` 组合不推荐使用，日常打字时易误触发截图或录屏。Windows 平台不适用 Fn 修饰问题（无需特殊处理）；macOS 采用 Carbon `RegisterEventHotKey` 方案后，Fn 不支持作为修饰键注册全局热键（`setFnKeyCallback` 仅保留兼容、调用时写警告日志，见 [7.9 跨平台支持](#79-跨平台支持)）。
 
 ### 1.4 数据驱动配置表
 
@@ -71,11 +71,11 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 
 ## 二、标注工具（固定）
 
-截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 进入标注模式后生效。数字键与标注工具一一对应（工具 ID 与 `AnnotationType` 枚举值 0-7 对应）：
+截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 进入标注模式后生效。数字键与标注工具一一对应（工具 ID 与 `ToolId` 枚举值 0-7 对应）：
 
 | 快捷键 | 功能 | 说明 |
 |---|---|---|
-| `` ` `` | 切换截图/录屏模式 | 反引号（数字 1 左侧）；仅 SnipScreen 生效（PinWindow 空实现），选区前后均可切换 |
+| `` ` `` | 切换截图/录屏模式 | 反引号（数字 1 左侧）；仅 SnipScreen 生效（PinWindow 空实现），选区前后均可切换；录屏进行中禁止切换，选区中央提示 2 秒 |
 | `1` | 矩形 | `Rectangle` (0) |
 | `2` | 椭圆 | `Ellipse` (1) |
 | `3` | 箭头 | `Arrow` (2) |
@@ -91,7 +91,7 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 
 ## 三、标注操作（固定）
 
-截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 标注模式下生效。所有标注快捷键由 `AnnotationShortcutController` 统一注册管理，通过 `IShortcutHandler` 策略接口回调到 SnipScreen 或 PinWindow 的具体实现。
+截图或录屏选区完成（`Captured` / `Locked` 状态）后生效，以及 PinWindow 标注模式下生效。除 `Enter`/`Return` 外，所有标注快捷键由 `AnnotationShortcutController` 统一注册管理（Enter/Return 由 SnipScreen 在 `initAnnotationShortcuts` 中直接注册，截图模式专属），通过 `IShortcutHandler` 策略接口回调到 SnipScreen 或 PinWindow 的具体实现。
 
 ### 3.1 通用操作
 
@@ -99,12 +99,12 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 |---|---|---|
 | `Enter` / `Return` | 复制并退出 | 选区完成后复制截图到剪贴板并退出（仅截图模式） |
 | `Ctrl+C` | 复制到剪贴板 | 复制当前内容（截图模式复制后退出，PinWindow 仅复制不关闭） |
-| `Esc` | 取消 | 取消文本编辑 → 取消录制 → 退出截图（按优先级逐级处理） |
+| `Esc` | 取消 | 滚动截图进行中先取消长截图 → 取消文本编辑 → 取消录制 → 退出截图（按优先级逐级处理） |
 | `Ctrl+S` | 保存到文件 | 将当前选区截图保存为文件 |
 | `Ctrl+Z` | 撤销标注 | 撤销最近一次标注操作 |
 | `Ctrl+Y` | 重做标注 | 重做最近一次撤销的标注 |
 | `Ctrl+Shift+Z` | 重做标注 | 与 `Ctrl+Y` 等效，兼容不同习惯 |
-| `F5` | 刷新截图 | 重新抓取屏幕内容，保留当前选区位置（仅截图模式） |
+| `F5` | 刷新截图 | 重新抓取屏幕内容，保留当前选区位置；仅 SnipScreen 有效（PinWindow 空实现），且录屏进行中同样触发重新抓屏 |
 
 ### 3.2 画笔属性调整
 
@@ -138,7 +138,7 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 
 ### 3.5 文本编辑冲突处理
 
-数字键、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C` 等裸键快捷键在文本编辑框（`OverlayTextEdit`）获得焦点时会与文本输入冲突。`AnnotationShortcutController` 通过 `m_bareKeyShortcuts` 列表统一管理：
+反引号 `` ` ``、数字键、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C` 等裸键快捷键在文本编辑框（`OverlayTextEdit`）获得焦点时会与文本输入冲突。`AnnotationShortcutController` 通过 `m_bareKeyShortcuts` 列表统一管理：
 
 - 文本编辑框获得焦点时调用 `setBareKeysEnabled(false)` 禁用裸键
 - 文本编辑框关闭时调用 `setBareKeysEnabled(true)` 恢复
@@ -149,14 +149,16 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
 
 ## 四、贴图快捷键（固定）
 
-PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，不进设置界面。
+PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，不进设置界面。注意：复制/保存快捷键（4.1）仅在**标注模式**下注册生效；非标注模式仅方向键移动窗口可用（见 4.2）。
 
 ### 4.1 复制与保存
 
 | 快捷键 | 功能 | 说明 |
 |---|---|---|
-| `Ctrl+C` | 复制图片 | 复制含标注的贴图到剪贴板 |
-| `Ctrl+S` | 保存图片 | 弹出保存对话框，将含标注的贴图保存为文件 |
+| `Ctrl+C` | 复制图片 | 复制含标注的贴图到剪贴板（仅标注模式下生效） |
+| `Ctrl+S` | 保存图片 | 弹出保存对话框，将含标注的贴图保存为文件（仅标注模式下生效） |
+
+> 这两个快捷键由 `AnnotationShortcutController` 注册，仅在进入标注模式（右键菜单「标注」）后存在。非标注模式复制请用右键菜单「复制」，不依赖键盘。
 
 ### 4.2 窗口移动（仅非标注模式）
 
@@ -189,7 +191,9 @@ PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，�
 
 | 快捷键 | 功能 | 说明 |
 |---|---|---|
-| `Esc` | 退出标注模式 / 关闭窗口 | 标注模式按 Esc 仅退出标注（窗口保留）；非标注模式按 Esc 关闭窗口 |
+| `Esc` | 退出标注模式 | 仅标注模式下生效（退出标注，窗口保留）；非标注模式按 Esc 无任何效果 |
+
+> `Esc` 快捷键由标注模式下的 `AnnotationShortcutController` 注册，非标注模式下不存在，因此不会关闭窗口。关闭贴图请用左键双击（见 4.6）。
 
 ### 4.6 鼠标操作（补充）
 
@@ -233,13 +237,13 @@ PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，�
 |---|---|
 | 悬停卡片 | 弹出放大预览（图片加载原图，文本自动换行） |
 | 滚轮 | 缩放预览（0.2–10 倍，文本同步调整字号） |
-| 右键 | 弹出菜单：复制 / 标注（创建贴图并进入标注模式）/ 文字识别 / 翻译 |
+| 右键 | 弹出菜单：复制 / 标注（创建贴图并进入标注模式）/ 文字识别 / 翻译（标注、文字识别仅图片卡片有；文本卡片菜单只有 复制 / 翻译） |
 
 ---
 
-## 附：选区阶段操作（截图/录屏选区未完成时）
+## 附：选区阶段操作（截图/录屏选区完成后）
 
-选区绘制完成前，可用以下快捷键微调选区（实现在 `Selector::registerShortcuts`）：
+选区绘制完成后（`Captured` 状态），可用以下快捷键微调选区（实现在 `Selector::registerShortcuts`）：
 
 | 快捷键 | 功能 | 说明 |
 |---|---|---|
@@ -249,6 +253,8 @@ PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，�
 | `Shift+方向键` | 缩小选区 | 像素级内缩对应边缘（±1px） |
 | `Ctrl+A` | 全屏选区 | 依次升级：当前窗口/矩形 → 所在显示器 → 整个桌面 |
 | 鼠标拖动 | 重绘选区 | 重新绘制选区范围 |
+
+> **时机例外**：`Ctrl+A`（升级窗口链）在选区绘制完成前同样可用；其余 WASD/方向键/`Ctrl+方向键`/`Shift+方向键` 均要求选区绘制完成后（`Captured` 状态）才生效。
 
 ### 滚动截图（选区完成后，固定）
 
@@ -261,13 +267,13 @@ PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，�
 | `Enter` | 完成拼接 | 提示条获得焦点时有效；结果以贴图窗口展示 |
 | `Esc` | 取消 | 提示条获得焦点时有效；放弃本次长截图 |
 
-滚动截图期间，鼠标滚轮落在选区上会透传给下层应用，用于滚动真实页面；提示条位于选区外侧，不会被拍入长图。
+滚动截图期间，鼠标滚轮落在选区上会透传给下层应用，用于滚动真实页面；提示条位于选区外侧，不会被拍入长图。长截图进行中，在提示条上按 `V`/`H` 可随时切换滚动方向（垂直/水平）。
 
 ---
 
 ## 5. 修饰键约束算法
 
-修饰键约束在 `AnnotationManager::applyModifierConstraints` 中统一实现（静态方法），截图（SnipScreen）与贴图（PinWindow）共用同一份代码。
+修饰键约束的核心算法在 `AnnotationManager::applyModifierConstraints` 中统一实现（静态方法）；调用入口统一收敛在 `AnnotationInteractionHandler::handleMouseMove`（以 `m_annotationAnchor` 为基准点调用约束），截图（SnipScreen）与贴图（PinWindow）共用同一份交互处理代码。
 
 ### 5.1 Shift 等比约束
 
@@ -323,9 +329,12 @@ classDiagram
         -TrayMenuBuilder* m_trayBuilder
         -SnipScreen* m_snipScreen
         -HistoryWindow* m_historyWindow
+        +void initialize(SnipScreen*, HistoryWindow*)
         +int registerAll()
         +void unregisterAll()
         +bool update(ShortcutType, QKeySequence)
+        +bool updateFromUiString(typeStr, keySequence)
+        +QList getAllConfigs()
         +QKeySequence reset(ShortcutType)
         +QKeySequence getSequence(ShortcutType)
         +void buildTrayMenu(...)
@@ -351,6 +360,8 @@ classDiagram
         +bool registerShortcut(keySequence, callback)
         +void unregisterShortcut()
         +bool updateShortcut(newKeySequence)
+        +void triggerCallback()
+        +void setFnKeyCallback(callback)
         +bool nativeEventFilter(eventType, message, result)
         -bool nativeRegister(modifiers, key)
         -void nativeUnregister()
@@ -426,22 +437,26 @@ classDiagram
         +static void applyModifierConstraints(start, end, mods, tool, selection)
     }
 
-    class SettingsWindow {
+    class SettingsShortcutsTab {
         -QGroupBox* m_shortcutGroupGlobal
         -QGroupBox* m_shortcutGroupTools
         -QGroupBox* m_shortcutGroupAnnotation
         -QGroupBox* m_shortcutGroupPinWindow
         -QScrollArea* m_shortcutsScrollArea
-        +void setupShortcutsTab()
+        +void setupUi()
         +void addShortcutRow(layout, row, action, configKey, defaultKey, trKey, fallback)
         +void addFixedShortcutRow(layout, row, trKey, fallback, keys)
         +void retranslateUi()
+        +void refreshStyles()
+        +shortcutChanged(action, keySequence) signal
     }
+
+    note for SettingsShortcutsTab "从 SettingsWindow 拆分而来：快捷键选项卡的行生成/<br/>重翻译/样式刷新内聚于此；SettingsWindow 仅转发<br/>shortcutChanged 信号给 ShortcutManager"
 
     ShortcutManager o-- ShortcutRegistry : 组合
     ShortcutManager o-- TrayMenuBuilder : 组合
     ShortcutRegistry o-- GlobalShortcut : 拥有
-    ShortcutManager <|.. SettingsWindow : 配置变更触发
+    ShortcutManager <|.. SettingsShortcutsTab : 配置变更触发
     AnnotationShortcutController --> IShortcutHandler : 策略引用
     SnipScreen ..|> IShortcutHandler : 实现
     PinWindow ..|> IShortcutHandler : 实现
@@ -566,6 +581,10 @@ sequenceDiagram
         AC->>QS: new QShortcut(F5, parent)
         AC->>QS: connect(activated, handler->onRefresh())
         Note over QS: F5 不做 canAnnotate 检查
+        
+        AC->>QS: new QShortcut(`, parent)
+        AC->>QS: connect(activated, handler->onSwitchMode())
+        Note over QS: 反引号（裸键，纳入冲突管理）<br/>选区前后均可切换，不做 canAnnotate 检查
     end
     
     rect rgb(240, 255, 240)
@@ -649,11 +668,11 @@ stateDiagram-v2
     
     标注模式 --> 非标注模式: ESC / 右键菜单「退出标注」<br/>exitAnnotationMode()<br/>销毁 AnnotationShortcutController
     
-    非标注模式 --> [*]: ESC / 双击<br/>close()
+    非标注模式 --> [*]: 双击<br/>close()<br/>（Esc 非标注模式无效果）
     
     state 非标注模式 {
         [*] --> 窗口操作
-        窗口操作: 方向键移动窗口<br/>Ctrl+方向键快速移动<br/>Ctrl+C 复制<br/>Ctrl+S 保存
+        窗口操作: 方向键移动窗口<br/>Ctrl+方向键快速移动
     }
     
     state 标注模式 {
@@ -661,7 +680,7 @@ stateDiagram-v2
         标注绘制: 1-8 切换工具<br/>[/] 画笔宽度<br/>Tab 循环颜色<br/>Delete 清除<br/>Ctrl+Z/Y 撤销重做<br/>Shift/Alt 约束
         标注绘制 --> 文本编辑: 选中文本工具点击
         文本编辑: 输入文字<br/>方向键移动光标<br/>裸键快捷键被禁用
-        文本编辑 --> 标注绘制: ESC/Esc 确认
+        文本编辑 --> 标注绘制: Esc 取消编辑（文本放弃）
     }
 ```
 
@@ -691,7 +710,7 @@ flowchart TD
 
 ### 6.7 文本编辑冲突处理时序图
 
-数字键、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C` 等裸键快捷键在文本编辑框获得焦点时会与文本输入冲突，`AnnotationShortcutController` 通过 `m_bareKeyShortcuts` 列表统一管理。
+数字键、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C` 等裸键快捷键在文本编辑框获得焦点时会与文本输入冲突，`AnnotationShortcutController` 通过 `m_bareKeyShortcuts` 列表统一管理（反引号 `` ` `` 亦为裸键，同样纳入管理）。
 
 ```mermaid
 sequenceDiagram
@@ -708,16 +727,20 @@ sequenceDiagram
     TE->>TE: setFocus()
     SS->>AC: setBareKeysEnabled(false)
     AC->>QS: setEnabled(false) ×N
-    Note over QS: 数字键/[/]/Tab/Delete/Backspace/Ctrl+C 禁用
+    Note over QS: 反引号/数字键/[/]/Tab/Delete/Backspace/Ctrl+C 禁用
 
     User->>TE: 输入文字（按键正常传递）
     Note over TE: 方向键移动光标<br/>数字键输入字符
 
-    User->>TE: 按 ESC 或点击外部
-    SS->>SS: finalizeTextEdit()
+    User->>TE: 按 Esc（取消编辑）
+    SS->>SS: cancelTextEdit()
+    Note over SS: 正在输入的文本被放弃<br/>（提交走点击外部/切换工具路径）
     SS->>AC: setBareKeysEnabled(true)
     AC->>QS: setEnabled(true) ×N
     Note over QS: 标注快捷键恢复
+
+    User->>TE: 点击外部或切换工具（提交文本）
+    SS->>SS: finalizeTextEdit()
 ```
 
 ---
@@ -769,12 +792,12 @@ sequenceDiagram
 
 ### 7.5 修饰键约束共用实现
 
-`AnnotationManager::applyModifierConstraints` 为静态方法，截图（SnipScreen）与贴图（PinWindow）共用同一份约束逻辑：
+`AnnotationManager::applyModifierConstraints` 为静态方法，截图（SnipScreen）与贴图（PinWindow）共用同一份约束逻辑，调用入口统一收敛在 `AnnotationInteractionHandler::handleMouseMove`：
 
-- **SnipScreen**：在 `mouseMoveEvent` 中调用，传入选区 `m_selector->selected()` 作为 `selection` 参数。
-- **PinWindow**：在 `mouseMoveEvent` 中调用，传入窗口矩形 `rect()` 作为 `selection` 参数。
+- **SnipScreen**：经事件过滤器将 MouseMove 事件转发给 `m_annotationHandler->handleMouseMove(...)`（SnipScreen 自身不在 `mouseMoveEvent` 中直接调用约束），处理内部传入选区 `m_selector->selected()` 作为 `selection` 参数。
+- **PinWindow**：在 `mouseMoveEvent` 中调用 `m_annotationHandler->handleMouseMove(...)`，传入窗口矩形 `rect()` 作为 `selection` 参数。
 
-两者均使用 `m_annotationAnchor` 保存鼠标按下点作为约束基准点，避免逐帧读取 `lastAnnotation->start()` 导致的基准点漂移。
+鼠标按下点基准 `m_annotationAnchor` 保存于 `AnnotationInteractionHandler`（成员变量），避免逐帧读取 `lastAnnotation->start()` 导致的基准点漂移。
 
 ### 7.6 PinWindow 显隐切换
 
@@ -786,7 +809,7 @@ sequenceDiagram
 
 ### 7.8 文本编辑冲突处理
 
-数字键、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C` 等裸键快捷键在文本编辑框获得焦点时会与文本输入冲突。解决方案：
+反引号 `` ` ``、数字键、`[`/`]`、`Tab`、`Delete`/`Backspace`、`Ctrl+C` 等裸键快捷键在文本编辑框获得焦点时会与文本输入冲突。解决方案：
 
 - `AnnotationShortcutController` 将裸键快捷键加入 `m_bareKeyShortcuts` 列表。
 - 文本编辑框获得焦点时调用 `setBareKeysEnabled(false)` 禁用。
@@ -808,6 +831,8 @@ macOS 的 `setFnKeyCallback` 接口在 Carbon 方案下仅保留兼容（Carbon 
 
 ---
 
-*文档版本: 3.1*
+*文档版本: 3.2*
 *最后更新: 2026-10-24*
 *作者: QuickShot Team - chiangyang*
+
+> **3.2 变更**：修正贴图首次定位（鼠标当前位置为中心）、活动窗口截图平台限制、Fn 组合说明、工具枚举名（`AnnotationType`→`ToolId`）、F5/贴图复制保存的生效条件、非标注模式 Esc 行为、选区微调时机（选区完成后，Ctrl+A 例外）；补充反引号裸键冲突管理、录屏中禁止切换工具、Esc 优先级含滚动截图、卡片右键菜单差异、长截图 V/H 切换方向、反引号注册时序；更新修饰键约束调用入口（`AnnotationInteractionHandler`）与 §6.1 类图归属（`SettingsShortcutsTab`）。

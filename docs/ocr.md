@@ -12,7 +12,7 @@ QuickShot 的 OCR（光学字符识别）功能基于 **PaddleOCR v4** 模型，
 | OCR 模型 | PP-OCRv4 Mobile | PaddleOCR v4 移动端模型 |
 | 图像处理 | Qt QImage | 纯 Qt 实现，无 OpenCV 依赖 |
 | 并发执行 | QtConcurrent | 异步执行 OCR 识别任务 |
-| 编译条件 | ENABLE_OCR | 编译开关控制 OCR 功能 |
+| 编译条件 | ENABLE_OCR | 编译宏（由 ONNX Runtime 探测结果自动定义，非 option 开关，CMakeLists.txt:128-135） |
 
 ### 1.2 核心特性
 
@@ -101,6 +101,10 @@ graph LR
         CardPreviewPopup[CardPreviewPopup 晾衣绳预览]
     end
 
+    subgraph 异步封装
+        OcrAsyncHelper[OcrAsyncHelper 加载提示+QtConcurrent+回调]
+    end
+
     subgraph 核心模块
         OcrEngine
         OcrPreprocess
@@ -112,21 +116,28 @@ graph LR
         ONNX_Runtime
         ConfigManager
         Logger
+        TranslationManager
+        StyleManager
     end
 
-    SnipScreen --> OcrEngine
-    PinWindow --> OcrEngine
-    CardPreviewPopup --> OcrEngine
+    SnipScreen --> OcrAsyncHelper
+    PinWindow --> OcrAsyncHelper
+    CardPreviewPopup --> OcrAsyncHelper
+    OcrAsyncHelper --> OcrEngine
+    OcrAsyncHelper --> TranslationManager
+    OcrAsyncHelper --> StyleManager
     OcrEngine --> OcrPreprocess
     OcrEngine --> OcrDetPostprocess
     OcrEngine --> OcrRecPostprocess
     OcrEngine --> ONNX_Runtime
     OcrEngine --> ConfigManager
     OcrEngine --> Logger
+    OcrPreprocess --> Logger
     OcrDetPostprocess --> Logger
 
     style SnipScreen fill:#ffcdd2
     style PinWindow fill:#ffcdd2
+    style OcrAsyncHelper fill:#b2dfdb
     style OcrEngine fill:#c8e6c9
     style OcrPreprocess fill:#c8e6c9
     style OcrDetPostprocess fill:#c8e6c9
@@ -134,7 +145,32 @@ graph LR
     style ONNX_Runtime fill:#ffe0b2
     style ConfigManager fill:#ffe0b2
     style Logger fill:#ffe0b2
+    style TranslationManager fill:#ffe0b2
+    style StyleManager fill:#ffe0b2
 ```
+
+> 三个入口（SnipScreen.cpp:943,989、PinWindow.cpp:470,597、CardPreviewPopup.cpp:204,229）统一经 `OcrAsync::run`（OcrAsyncHelper）调用 `OcrEngine`，不直连引擎。
+
+### 2.3 依赖与构建
+
+- **ONNX Runtime 版本**：1.26.0（Windows 自动下载路径固定使用该版本，CMakeLists.txt:71）
+- **查找顺序**（CMakeLists.txt:48-104）：
+  1. 环境变量 `ONNXRUNTIME_ROOT` 指向的目录（校验 `include/onnxruntime/onnxruntime_cxx_api.h` 存在）
+  2. macOS：Homebrew 路径 `/opt/homebrew` → `/usr/local`
+  3. Windows：`third_party/onnxruntime/`（仓库内预置）
+  4. Windows 找不到时自动从 GitHub Releases 下载 1.26.0 并解压到 `third_party/onnxruntime/`
+  5. 以上均失败时回退 `find_package(onnxruntime)`；再失败则不定义 `ENABLE_OCR`，OCR 编译期整体禁用
+- **Windows 预置运行库**：`third_party/onnxruntime/lib/` 内含 `onnxruntime.dll`、`DirectML.dll`、`onnxruntime_providers_shared.dll`，随程序分发
+
+### 2.4 测试
+
+| 测试文件 | 覆盖内容 |
+|---|---|
+| `tests/OcrPreprocessTest.cpp` | Det 32 倍对齐、Rec 固定高 48 与宽度钳制、归一化 + CHW/BGR 通道序断言 |
+| `tests/OcrDetPostprocessTest.cpp` | 3 个用例（全暗图无框、单亮块一框、双亮块两框） |
+| `tests/OcrRecPostprocessTest.cpp` | 6 个用例（blank/重复折叠、字典偏移、置信度均值、空输入等） |
+
+三个测试在 `tests/CMakeLists.txt:47-69` 注册（每个测试直接编译被测源文件），`QUICKSHOT_BUILD_TESTS=ON`（默认）时随 `ctest` 运行。
 
 ---
 
@@ -152,7 +188,7 @@ classDiagram
         -unique_ptr~Ort::Env~ m_env
         -unique_ptr~Ort::Session~ m_detSession
         -unique_ptr~Ort::Session~ m_recSession
-        -Ort::SessionOptions m_sessionOptions
+        -unique_ptr~Ort::SessionOptions~ m_sessionOptions
         -QStringList m_charDict
         -bool m_ready
         -bool m_isRecognizing
@@ -160,9 +196,11 @@ classDiagram
         -OcrLanguage m_language
         -QString m_modelDir
         -QRecursiveMutex m_mutex
+        -bool m_useGpu
         +OcrEngine* instance()$
         +bool initialize(modelDir)
         +bool isReady() const
+        +bool isUsingGpu() const
         +void release()
         +bool isRecognizing() const
         +OcrResult recognize(image)
@@ -173,6 +211,10 @@ classDiagram
         -bool loadDict(dictPath)
         -QString recModelName(lang)$
         -QString dictFileName(lang)$
+        -bool configureGpuProvider()
+        -void releaseGpuProvider()
+        -bool loadDirectML()
+        -void unloadDirectML()
     }
 
     class PreprocessResult {
@@ -205,10 +247,7 @@ classDiagram
         -QVector~QVector~QPointF~~ findContours(binary, h, w)$
         -QPolygonF approxPolyDP(contour, epsilon)$
         -QPolygonF unclip(poly, ratio)$
-        -double polygonArea(poly)$
         -double pointDistance(p1, p2)$
-        -QVector~QVector~QPointF~~ extractContours(binary, imgH, imgW)$
-        -QVector~QPointF~ traceContour(binary, imgH, imgW, startX, startY, visited)$
         +QVector~QPolygonF~ mergeBoxes(boxes)$
     }
 
@@ -227,6 +266,9 @@ classDiagram
         -QPushButton* m_translateButton
         -QComboBox* m_viewModeCombo
         -QString m_fullText
+        -QString m_translatedText
+        -ViewMode m_viewMode
+        -bool m_translating
         -bool m_isDragging
         -QPoint m_dragStartPos
         -QPoint m_widgetStartPos
@@ -234,20 +276,25 @@ classDiagram
         -ResizeEdge m_resizeEdge
         -QRect m_startGeometry
         -QPoint m_resizeStartPos
-        -int kEdgeMargin
+        -int kEdgeMargin$
         +OcrResultDialog(result, parent)
         +void retranslateUi()
         #void mousePressEvent(event)
         #void mouseMoveEvent(event)
         #void mouseReleaseEvent(event)
         #bool eventFilter(obj, event)
+        #void showEvent(event)
         -ResizeEdge edgeAt(pos)
         -Qt::CursorShape cursorForEdge(edge)
+        -QRect resizedGeometry(globalPos)
+        -void applyDrag(globalPos)
         -void setupUi()
         -void copyToClipboard()
         -void onTranslate()
-        -void onTranslateFinished(translated)
-        -void onTranslateFailed(code, message)
+        -void updateView()
+        -void onViewModeChanged(index)
+        -void onTranslateFinished(original, translated)
+        -void onTranslateFailed(TranslateError code, QString detail)
     }
 
     OcrEngine ..> OcrPreprocess : 使用
@@ -404,7 +451,7 @@ flowchart TD
     E1 -->|否| D
     E1 -->|是| F[Douglas-Peucker近似]
     F --> F1[计算周长]
-    F1 --> F2[epsilon=perimeter*0.01]
+    F1 --> F2["epsilon=perimeter*0.01<br/>钳制到 [1.0, 5.0]"]
     F2 --> F3[简化多边形]
     F3 --> G[计算置信度]
     G --> G1[Score Map均值]
@@ -523,14 +570,13 @@ sequenceDiagram
     QFutureWatcher-->>OcrAsync: 发射 finished 信号
     OcrAsync->>OcrAsync: 关闭加载提示
 
-    alt 识别成功
+    alt 识别成功（result.texts 非空）
         OcrAsync-->>SnipScreen: 回调 onResult(result)
-        SnipScreen->>OcrResultDialog: 创建对话框
-        OcrResultDialog->>OcrResultDialog: 显示识别结果
-        SnipScreen->>OcrEngine: release() 释放模型
+        SnipScreen->>OcrEngine: release() 释放模型（回调内先释放，SnipScreen.cpp:944-950）
+        SnipScreen->>OcrResultDialog: new OcrResultDialog 居中显示
     else 无文本
         OcrAsync->>OcrAsync: 显示无文本提示（2s 后自毁）
-        SnipScreen->>OcrEngine: release() 释放模型
+        Note over OcrAsync: 直接 return：不调用 onResult、也不释放模型<br/>（当前实现行为，OcrAsyncHelper.cpp:60-69；<br/>SnipScreen OCR 入口 releaseAfter=false，释放仅发生在回调内）
     end
 ```
 
@@ -573,13 +619,12 @@ sequenceDiagram
     participant ONNX_Runtime
 
     Caller->>OcrEngine: release()
-    
-    alt 正在识别中 (m_isRecognizing == true)
+    Note over Caller,OcrEngine: release() 与 recognize() 共用可重入锁（QRecursiveMutex）串行化：<br/>跨线程调用会阻塞等待 recognize() 结束后才执行释放（OcrEngine.cpp:536-546）
+    alt 正在识别中 (m_isRecognizing == true，仅同线程重入可到达)
         OcrEngine->>OcrEngine: m_pendingRelease = true
         OcrEngine-->>Caller: 返回（延迟释放）
-        Note over OcrEngine: 当前 recognize() 继续执行
-        OcrEngine->>OcrEngine: 识别完成，m_isRecognizing = false
-        OcrEngine->>OcrEngine: 检查 m_pendingRelease
+        Note over OcrEngine: 此分支为同线程重入的防御路径；<br/>正常跨线程流程阻塞解除后识别已完成，走"未在识别"分支
+        OcrEngine->>OcrEngine: 识别完成，finalizeRecognition 检查 m_pendingRelease
         OcrEngine->>ONNX_Runtime: reset Det Session
         OcrEngine->>ONNX_Runtime: reset Rec Session
         OcrEngine->>ONNX_Runtime: reset Env
@@ -670,6 +715,7 @@ sequenceDiagram
 
 ```
 输入: contour (QVector<QPointF>), epsilon
+     (epsilon = 周长 * 0.01, 钳制到 [1.0, 5.0], OcrDetPostprocess.cpp:75-77)
 算法 (Douglas-Peucker):
   1. 计算起点到终点的直线
   2. 找到距离该直线最远的点
@@ -687,7 +733,8 @@ sequenceDiagram
 算法:
   1. 计算质心 (cx, cy)
   2. 计算各点到质心的平均距离 avgDist
-  3. 膨胀距离 expandDist = avgDist * (ratio - 1)
+  3. 膨胀距离 expandDist = avgDist * (ratio - 1), 下限 1 像素
+     (expandDist < 1.0 时取 1.0, OcrDetPostprocess.cpp:490)
   4. 对每个点沿远离质心方向移动 expandDist
      - nx = (x - cx) / dist
      - newX = x + nx * expandDist
@@ -740,7 +787,7 @@ sequenceDiagram
 | 配置键 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `ocr/language` | String | `ch_en` | OCR 识别语言 |
-| `ocr/modelPath` | String | 应用目录/models/ocr | 模型目录路径 |
+| `ocr/modelPath` | String | 空字符串（引擎内回退到 应用目录/models/ocr，OcrEngine.cpp:590-592） | 模型目录路径 |
 | `ocr/useGpu` | Bool | `false` | 是否启用 GPU 加速 |
 
 ### 7.2 语言配置映射
@@ -833,7 +880,9 @@ models/ocr/
 | 模型 | 输入尺寸 | 输出尺寸 | 参数量 |
 |------|----------|----------|--------|
 | det_mobile | 3×H×W (对齐32) | 1×1×H×W | ~4.7M |
-| rec_mobile | 3×48×W | 1×seqLen×numChars | ~8.5M |
+| rec_mobile | 3×48×W | 1×seqLen×numChars | ~10.7M |
+
+> 与随附模型文件吻合：det_mobile.onnx = 4,745,517 字节（≈4.7MB）、ch_PP-OCRv4_mobile_rec.onnx = 10,831,559 字节（≈10.8MB）。
 
 ### 9.2 预处理优化
 
@@ -853,7 +902,7 @@ models/ocr/
 
 - ONNX Runtime 配置 4 线程
 - 启用全部图优化（ORT_ENABLE_ALL）
-- Arena 内存分配器减少分配开销
+- 输入张量使用 OrtArenaAllocator 内存信息（无会话级 arena 配置，OcrEngine.cpp:640,710）
 
 ---
 
@@ -951,7 +1000,7 @@ graph TB
 | `src/capture/SnipScreen.cpp` | 截图窗口 OCR 调用 |
 | `src/widgets/PinWindow.cpp` | 钉图窗口 OCR 调用 |
 | `src/pet/CardPreviewPopup.cpp` | 晾衣绳预览右键「文字识别」调用 |
-| `src/widgets/SettingsWindow.cpp` | OCR 设置界面（语言选择、GPU 加速开关） |
+| `src/widgets/settings/SettingsGeneralTab.cpp` | OCR 设置界面（语言下拉与 GPU 加速开关，:577-591） |
 
 ### B. PaddleOCR 模型信息
 
@@ -968,16 +1017,18 @@ OCR 功能通过编译宏控制（以 CMakeLists.txt 实际配置为准）：
 ```cmake
 # CMakeLists.txt
 # OCR 是否编译由 ONNX Runtime 探测结果决定（探测成功自动定义 ENABLE_OCR 宏），
-# 不是 option 开关；GPU 加速为独立 option，默认 ON：
+# 不是 option 开关；GPU 加速为独立 option，默认 ON（CMakeLists.txt:112-114）：
 option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR (DirectML/CoreML)" ON)
 
-if(ENABLE_OCR_GPU_ACCELERATION)
-    target_compile_definitions(QuickShot PRIVATE ENABLE_OCR_GPU_ACCELERATION)
+if(ONNXRUNTIME_FOUND)
+    if (ENABLE_OCR_GPU_ACCELERATION)
+        add_definitions(-DENABLE_OCR_GPU_ACCELERATION)
+    endif()
 endif()
 ```
 
 ---
 
-*文档版本: 1.1*
+*文档版本: 1.2*
 *最后更新: 2026-10-24*
 *作者: QuickShot Team - chiangyang*
