@@ -171,7 +171,7 @@ update.bat 脚本由 UpdateManager 动态生成，执行以下流程：
 **特点**：
 - 仅在 `run-old-app.cmd` 启动的 cmd 窗口内有效
 - 关闭窗口后自动失效，不影响系统环境
-- 正常使用时未设置此变量，走 GitHub → Gitee → 官方网站多渠道回退
+- 正常使用时未设置此变量，走 GitHub → Gitee → 官方网站多渠道回退（渠道顺序按地区动态排序：中国大陆 Gitee 优先，其他地区 GitHub 优先，官网始终兜底——见 `UpdateManager::initChannelOrder`）
 
 ## 日志排查
 

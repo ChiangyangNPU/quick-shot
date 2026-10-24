@@ -1,6 +1,7 @@
 # QuickShot 发布流程（GitHub / Gitee 双端）
 
 > 更新：2026-10-21（新增 Gitee 附件配额自动清理；首发实测 2026-10-09 v0.1.0）
+> 首发日期口径：v0.1.0 Release 发布于 UTC 2026-10-09 23:21（北京时间 2026-10-10 清晨 07:21），tag 创建于北京时间 2026-10-10 07:17——正文日期未注明时区的一律为 UTC 口径
 > 相关文档：[git-multi-remote.md](git-multi-remote.md)（双远程同步）
 
 ## 1. 总览
@@ -10,7 +11,7 @@
 | 编译与打包 | GitHub Actions（`release.yml` 的 `release` job） | push `v*` tag 触发，双平台并行：Windows MinGW（zip）+ macOS arm64（DMG） |
 | GitHub Release | GitHub Actions | 构建完自动发布（非草稿），产物由 CI 直接挂上 |
 | Gitee Release | GitHub Actions（`release.yml` 的 `gitee` job） | 构建完成后自动把**同一份产物**传到 Gitee；**前置条件：仓库配置 `GITEE_TOKEN` 密钥** |
-| 补发通道 | 本地（`deploy/gitee/publish_gitee_release.sh`） | CI 失败/超时或想立刻发完时使用，分钟级 |
+| 补发通道 | 本地（`deploy/gitee/publish_gitee_release.sh`） | CI 失败/超时或想立刻发完时使用，分钟级；版本默认取最新 tag（`git describe --tags --abbrev=0`），产物默认从 `release-download/` 目录读取 |
 
 CI 与本地**共用同一个脚本**（`deploy/gitee/publish_gitee_release.sh`），两条通路行为一致：
 复用/创建 Gitee Release（说明取 tag 注释）→ 清理旧版本附件（防止配额超限，见 §5）→
@@ -46,7 +47,8 @@ git tag -a vX.Y.Z -F docs/release-notes-vX.Y.Z.md --cleanup=verbatim
 git push gitee master && git push github master:main
 git push github vX.Y.Z && git push gitee vX.Y.Z     # 推 GitHub 才触发 CI
 
-# 4. 等 CI：GitHub 仓库 → Actions → Release（双平台约 10-15 分钟）
+# 4. 等 CI：GitHub 仓库 → Actions → Release（实测约 4-5 分钟：v0.1.0 tag→Release
+#    23:17:48Z→23:21:31Z，v0.1.2 run 00:38:35Z→00:42:06Z；保守预留 10-15 分钟）
 #    两个 job：release（构建 + 发 GitHub Release）→ gitee（同步到 Gitee）
 #    成功后两端各含：
 #      QuickShot-Release-vX.Y.Z-Windows-x64.zip
@@ -54,7 +56,8 @@ git push github vX.Y.Z && git push gitee vX.Y.Z     # 推 GitHub 才触发 CI
 
 # 5.（仅在 gitee job 失败/超时/想立刻发完时）本地补发
 GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
-#    默认取最新 tag；产物自动从 GitHub Release 下载并校验字节数
+#    版本默认取最新 tag（git describe --tags --abbrev=0）；产物自动从 GitHub Release
+#    下载到 release-download/ 目录（可传第 2 个参数覆盖）并校验字节数
 #    可重复执行：已存在且大小一致的附件会跳过
 ```
 
@@ -93,9 +96,9 @@ GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
 ## 5. Gitee 附件配额（1GB）与自动清理
 
 Gitee 免费仓库的 **Release 附件总容量为 1GB**：每个版本上传 zip（约 86MB）+
-DMG（约 82MB）+ blockmap，合计约 170MB，累计到第 6 个版本左右就会触发配额
-拒绝——表现为末尾的 blockmap 上传失败、`gitee` job 红灯（安装包与 Release
-元数据已落库，但应用内自动更新拿不到差量包）。
+DMG（约 82MB），合计约 168MB，累计到第 6 个版本左右就会触发配额
+拒绝——表现为最后一项（DMG）上传失败、`gitee` job 红灯（zip 与 Release
+元数据已落库，但该版本在 Gitee 侧拿不到 DMG，应用内自动更新会失败）。
 
 发布脚本在创建/复用 Release 之后、上传附件之前自动做配额维护：
 

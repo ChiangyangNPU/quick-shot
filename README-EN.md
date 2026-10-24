@@ -2,6 +2,10 @@
 
 QuickShot is a lightweight, powerful screen capture and recording tool developed with **Qt 6**. It runs on **Windows** and **macOS** (Linux support is still incomplete — recording does not yet produce video files), designed to provide an efficient and smooth screenshot experience.
 
+Current version: **v0.1.2** — download the latest release from [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases).
+
+![Version](https://img.shields.io/badge/version-v0.1.2-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
+
 ## ⚠️ macOS First Open: Manually Allow the Un-notarized App
 
 QuickShot is **not notarized by Apple** yet. After installing from a DMG downloaded in a browser, the first launch is blocked by macOS: *"Apple could not verify 'QuickShot' is free of malware that may harm your Mac or compromise your privacy."* Follow these 4 steps once — afterwards it opens normally:
@@ -121,7 +125,7 @@ QuickShot provides two translation forms based on OCR results, translating recog
 | DeepL | User-provided Key | Highest translation quality |
 | LibreTranslate | User-provided URL | Can be self-hosted for fully offline use |
 
-> **Privacy Protection**: A dialog appears on first translation use explaining that text will be sent to third-party services, with a "Don't ask again" option. All Keys / URLs are entered by the user in Settings; the software does not embed any credentials. See [Translation Feature Technical Doc](docs/translation-design.md) for details.
+> **Privacy Protection**: A dialog appears on first translation use explaining that text will be sent to third-party services, with a "Don't ask again" option. All Keys / URLs are entered by the user in Settings; the software does not embed any credentials, and API Keys are stored encrypted via SecretStore (Windows DPAPI / macOS Keychain). See [Translation Feature Technical Doc](docs/translation-design.md) for details.
 
 ### 6. 📌 Pin to Desktop
 *   **Pin**: Click the "Pin" button on the toolbar to pin the current screenshot (including annotations) to the desktop.
@@ -131,10 +135,10 @@ QuickShot provides two translation forms based on OCR results, translating recog
     *   Drag edges to resize the pinned window (perfect High DPI support, adaptive SmoothPixmapTransform: smooth enabled on non-1:1 scale, disabled on 1:1 to preserve sharpness).
     *   **Double-click** the pinned window to close it.
     *   Supports mouse wheel zoom on the pinned window; annotations and mosaic strokes scale synchronously via AnnotationManager::scaleAll.
-    *   Supports right-click menu (Copy → OCR → Translate → Save → Close, order strictly per project convention).
+    *   Supports right-click menu (Copy → Annotate → OCR → Translate → Save; no "Close" item in the menu — close via double-click or Esc).
     *   Right-click to enter **Annotation Mode** with a standalone toolbar for 8 annotation tools (rectangle/ellipse/arrow/pen/line/text/mosaic/eraser, switch with number keys 1-8), supporting Shift/Alt constraints, undo/redo, Tab color cycling, `[`/`]` pen width, Delete to clear.
     *   **Unified Annotation Shortcuts**: Both SnipScreen and PinWindow register annotation shortcuts uniformly through AnnotationShortcutController + IShortcutHandler strategy interface + QShortcut (Qt::WindowShortcut). When OverlayTextEdit gains focus, setBareKeysEnabled(false) is called automatically to disable bare keys and avoid input conflicts.
-    *   **Pin Shortcuts**: `Ctrl+C` copy, `Ctrl+S` save, `Ctrl+Z`/`Ctrl+Y` undo/redo, arrow keys move window (`Ctrl+Arrow` 10px fast move), `ESC` exit annotation mode or close window.
+    *   **Pin Shortcuts**: `Ctrl+C` copy, `Ctrl+S` save, `Ctrl+Z`/`Ctrl+Y` undo/redo (`Ctrl+Shift+Z` as a redo alias), arrow keys move window (`Ctrl+Arrow` 10px fast move), `Delete`/`Backspace` clear all annotations, `F5` re-grab the screen (keeps the selection; only effective on snip windows), `ESC` exit annotation mode or close window.
     *   Screenshots are also written to the system clipboard when pinned, and HistoryManager::addScreenshotPixmap() is called so the entry is recorded for Alt+P history-cycle pagination.
     *   **Alt+P Clipboard History Pagination**: First Alt+P displays the latest screenshot centered on the current mouse screen; subsequent presses cycle older screenshots in reverse chronological order (position offset +(24,24) each time, clamped to screen bounds); multiple pinned windows may stay visible simultaneously; wraps back to the newest after reaching the oldest.
     *   Press `Alt + Shift + P` to toggle visibility of all pinned windows (ShortcutManager::TogglePins, backed by PinWindow::toggleAll static method).
@@ -183,7 +187,7 @@ Right-click the system tray icon to access "Settings". **Seven tabs in order: Ge
 *   **Translate (between Style and History tabs)**: Select translation engine (MyMemory no-registration / Baidu / DeepL / LibreTranslate), configure target language (English by default, dropdown selection), fill in the API Key / URL for the chosen engine, toggle translation feature, toggle first-use privacy prompt. On first use a dialog appears (custom MessageBox centered on the current selection) explaining that text will be sent to third-party services.
 *   **History**: Toggle screenshot history and clipboard history recording, set retention period (7/30/90/180/365 days) and max record count (500/1000/2000/5000 items), clean expired records (HistoryManager calls cleanupExpired() automatically on app startup), clear all history, view storage usage statistics.
 *   **Desktop Pet**: Enable the desktop pet, 6 appearance styles (cat/shiba/panda/bunny/penguin/frog) switched instantly via tiled icon buttons, reset pet position.
-*   **About**: View version information and website link.
+*   **About**: View version information and the GitHub repository link.
 *   **Manual DPI Adaptation**: Because the project disables Qt's automatic High-DPI scaling (`QT_ENABLE_HIGHDPI_SCALING=0`), when DPI changes SettingsWindow and HistoryWindow automatically call StyleManager::reapplyGlobalStyleSheet() to reload the global QSS. SettingsWindow then recalculates width/control sizes and re-adapts height depending on tab type (scrollable vs. non-scrollable); HistoryWindow recalculates its initial size and control sizes.
 *   **Unified MessageBox Styling**: All confirmation/prompt dialogs use the custom `MessageBox` class (extends QMessageBox) which auto-applies the project MessageBox QSS style + loadAppIcon title-bar icon, auto-translates buttons with tm->get("ok"/"yes"/"no"), supports Yes/No questioning with No as default, centerOn(rect) positioning over the selection/parent window, and exposes one-liner static convenience methods (information/warning/critical/question). Translation errors also expose a secondary "show details" MessageBox.
 
@@ -200,13 +204,23 @@ Right-click the system tray icon to access "Settings". **Seven tabs in order: Ge
 ## 📦 Installation & Deployment
 
 ### Developer Build
-1.  Ensure Qt 6.10.2 and CMake are installed.
+1.  Ensure Qt 6.10.2 and CMake 3.20+ are installed.
 2.  Clone the project and build:
     ```bash
     mkdir build && cd build
     cmake ..
     cmake --build .
     ```
+
+**Build options & dependencies**:
+*   **ONNX Runtime**: OCR inference library (1.26.0). On Windows, if not detected at configure time, CMake automatically downloads and extracts it to `third_party/onnxruntime`; you can also point to an existing installation via the `ONNXRUNTIME_ROOT` environment variable (or CMake variable of the same name), or pre-place it under `third_party/onnxruntime`.
+*   `ENABLE_OCR_GPU_ACCELERATION`: Whether to compile OCR GPU acceleration support (CoreML/DirectML), default `ON`.
+*   `QUICKSHOT_BUILD_TESTS`: Whether to build unit tests, default `ON`.
+
+### Running Tests
+The tests/ directory contains 13 Qt Test unit tests. After building with the default `QUICKSHOT_BUILD_TESTS=ON`, run `ctest` in the build directory to execute them all.
+
+> **Windows environment setup & path configuration** (Qt / MinGW / CMake / ONNX Runtime path setup, CLion toolchain, common issues): see the [Windows Build Guide](docs/build-windows.md).
 
 > **Version Management**: The version is managed centrally by [CMakeLists.txt](CMakeLists.txt) via `project(QuickShot VERSION x.y.z)` and injected into source code through the `QUICKSHOT_VERSION` macro. After changing the version, use **Reset Cache and Reload CMake Project** in CLion.
 
@@ -258,14 +272,14 @@ The project provides automated packaging scripts, no need to manually copy DLLs.
 *   **Alt+P Pin Clipboard History Pagination**: SnipScreen::pinClipboard() reads the time-reversed screenshot list from HistoryManager. First press shows the latest entry centered on the current mouse screen (QCursor::pos - QPoint(w/2, h/2)); subsequent presses increment m_pinHistoryIndex modulo count; each next window's position inherits the previous position + (24,24), clamped to screen bounds via qBound. QPointer<PinWindow> provides safe tracking; PinWindow uses WA_DeleteOnClose so the pointer auto-nulls on close.
 *   **Desktop Pet Module (src/pet)**: DesktopPetManager singleton manages enable/position/style persistence (pet/enabled, pet/posX, pet/posY, pet/style) and the two feeding entry points (screenshot feed() / text feedText()); PetWindow draws 6 appearance styles (cat/shiba/panda/bunny/penguin/frog) purely with QPainter plus mouth-open/chew/blink animations; ClotheslineWindow hangs the latest 12 history cards on a catenary rope (refreshed live via HistoryManager signals), with CardPreviewPopup hover zoom preview (original image + wheel zoom) whose context menu wires Copy/Annotate/OCR/Translate; FlyAnimationWidget renders the fly-in animation; PetUiScale scales by primary-screen DPI (clamped to 1.0–3.0); the clothesline closes only via explicit affordances (× / Esc / double-click blank / click the pet again), and its global event filter guarantees clicks on any of the app's own windows never close it.
 *   **Custom Unified MessageBox**: All dialogs (prompts/confirmations/privacy-warning/translation-error-detail) use src/widgets/MessageBox.h extending QMessageBox with automatic applyProjectStyle() (getMessageBoxStyle QSS + loadAppIcon icon), addOkButton()/addYesNoButtons() (tm->get("yes"/"no") translated, No default), centerOn(rect) for selection-relative positioning, one-liner statics (information/warning/critical/question), and a secondary "show details" MessageBox for translation errors.
-*   **Configuration Persistence**: QSettings-based persistence. ConfigManager Singleton exposes saveConfigAsync()/loadConfigAsync() for async read/write with config file switch/reset/open-location support.
+*   **Configuration Persistence**: QSettings-based persistence. ConfigManager Singleton loads QSettings lazily and centralizes all reads/writes, with config file switch/reset/open-location support.
 *   **Code Commenting Standards**: Standard Doxygen-style comments (@brief, @param, @return, @note, @author) are used. All public methods have Chinese method comments (and Doxygen-formatted English tags) ensuring readability and maintainability.
-*   **Logging System**: Logger Singleton with LOG_INFO / LOG_WARN / LOG_ERROR / LOG_DEBUG macros. Per project convention, only LOG_INFO-level logs are emitted throughout codebase (DEBUG level is disabled as a hard constraint); all log messages are in English. Logs are written to the `logs/` folder under the installation directory (initialized after QApplication creation).
-*   **Auto Update**: UpdateManager multi-channel fallback check (GitHub → Gitee → Official), SHA256 verification of download package, PowerShell Expand-Archive extraction, robocopy with backup-and-rollback file replacement, auto-launch new version after install; supports `QUICKSHOT_UPDATE_URL` environment variable to override update URL for local testing (see [Update Testing Guide](update-test/README.md)).
+*   **Logging System**: Logger Singleton with LOG_INFO / LOG_WARNING / LOG_ERROR / LOG_DEBUG macros, all four levels in use; all log messages are in English. Logs are written to the `logs/` folder under the installation directory (initialized after QApplication creation).
+*   **Auto Update**: UpdateManager multi-channel fallback check (order determined dynamically by region: Gitee first in mainland China, GitHub first elsewhere, official site as the final fallback), SHA256 verification of download package, PowerShell Expand-Archive extraction, robocopy with backup-and-rollback file replacement, auto-launch new version after install; supports `QUICKSHOT_UPDATE_URL` environment variable to override update URL for local testing (see [Update Testing Guide](update-test/README.md)).
 *   **Performance Optimization**:
     *   **Lazy Initialization**: Core modules initialize on demand (OCR loads models on first use, translation engines initialize on first translate) for faster shortcut-response time
     *   **Asynchronous Processing**: Screen capture and OCR recognition run in background threads (QtConcurrent) to avoid blocking the UI
-    *   **Smart Detection**: Hunter window detection implements throttling + movement thresholds to minimize unnecessary scans
+    *   **Smart Detection**: Hunter caches the window/prey list (ready()/hunt()/contains()/clear, see src/core/Hunter.h) to speed up window hit detection
     *   **Model Reuse**: OCR models are released after recognition and auto-loaded when needed again
     *   **Recording Frame-Buffer Reuse**: ScreenRecorder worker thread reuses frameBuffer to minimize memory allocations; the annotation overlay is guarded with QMutex for thread-safe concurrent access.
 
@@ -275,6 +289,19 @@ The project provides automated packaging scripts, no need to manually copy DLLs.
 *   **Build System**: CMake
 *   **Compiler**: MinGW 64-bit (Windows) / Clang (macOS)
 *   **OCR**: ONNX Runtime
+
+## 📚 More Documentation
+*   [Annotation System](docs/annotation.md): annotation tools, interaction and shortcuts.
+*   [Architecture](docs/architecture.md): module breakdown and overall design.
+*   [OCR Feature](docs/ocr.md): OCR engine implementation and configuration.
+*   [History Feature](docs/history-feature.md): history and clothesline quick-panel design.
+*   [Translation Feature](docs/translation-design.md): translation engine abstraction and batch-translation flow.
+*   [Shortcuts](docs/shortcuts.md): global hotkeys and annotation/pin shortcuts.
+*   [Windows Recording](docs/recording-windows.md): Windows recording implementation details.
+*   [macOS Recording](docs/recording-macos.md): macOS ScreenCaptureKit recording implementation.
+*   [Windows Build Guide](docs/build-windows.md): Windows environment setup and common issues.
+*   [Release Process](docs/release-publish.md): publishing releases to GitHub / Gitee.
+*   [Multi-Remote Sync](docs/git-multi-remote.md): managing GitHub / Gitee remotes.
 
 ## 📄 License
 
@@ -287,7 +314,7 @@ This project is licensed under the **CC BY-NC-SA 4.0** (Creative Commons Attribu
 
 ### You are NOT allowed to:
 - ❌ Use for commercial purposes
-- ❌ Sell modified versions commercially
+- ❌ Share modified versions without licensing them under the same license (CC BY-NC-SA 4.0)
 - ❌ Remove the original author's attribution
 
 ### You MUST:

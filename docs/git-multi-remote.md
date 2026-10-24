@@ -12,6 +12,17 @@ QuickShot 代码同时托管在 **Gitee** 和 **GitHub** 两个远程仓库，�
 > 本地分支统一为 `master`，不需要改名。推送时通过 refspec 完成映射：
 > Gitee 推 `master`，GitHub 推 `master:main`（本地 `master` → 远程 `main`）。
 
+> **GitHub 侧分支现状（注意）**：GitHub 远端历史上除 `main` 外还存在过一份**落后的 `master` 副本**
+> （本地残留的远程跟踪引用 `remotes/github/master` 停留在 2026-10-11 的提交，远落后于 `main`；
+> 经核实该远端分支现已删除、远端仅剩 `main`，但本地跟踪引用需 `git fetch github --prune`
+> 才会清掉）。
+>
+> ⚠️ **切勿裸推 `git push github master`**：这是显式 refspec（等价 `master:master`），
+> `push.default=simple` 拦不住——会在 GitHub 远端悄悄创建/更新这份过时的 `master`
+> 副本并触发 CI（`ci.yml` 的 push 触发分支包含 `master`）。单推 GitHub 一律带映射
+> `git push github master:main`。清理：远端若存在该副本，确认无需保留后执行
+> `git push github --delete master`；本地过时跟踪引用用 `git fetch github --prune` 清理。
+
 ## 2. 远程配置
 
 ### 2.1 全新克隆后的初始化（重装/换机必看）
@@ -69,6 +80,9 @@ git remote -v
 
 > 注意：Git 默认 `push.default=simple`，要求本地/远程分支同名才允许裸 `git push github`。
 > 因 GitHub 侧分支名为 `main`（与本地 `master` 不同），单推 GitHub 必须带 `master:main` 映射。
+>
+> ⚠️ 不要图省事裸推 `git push github master`（不带映射）：它会在 GitHub 远端创建/更新
+> 一份过时的 `master` 副本并触发 CI，详见 §1「GitHub 侧分支现状」。
 
 ### 分支映射原理（refspec）
 
@@ -149,6 +163,10 @@ git push -u github master:main
 
 > 注意：GitHub 会扫描**全部历史**，仅删除文件再提交无法通过，必须重写包含该文件的历史。
 > PDB 为构建产物，移除后不影响编译、运行与自研代码调试。
+>
+> 补注：`onnxruntime.pdb`（375MB）已移出，但
+> `third_party/onnxruntime/lib/onnxruntime_providers_shared.pdb`（约 0.4MB）仍被 git
+> 跟踪——体积无害，保留即可。
 
 ### 5.3 国内网络无法访问 GitHub
 

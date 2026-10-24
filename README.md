@@ -2,6 +2,10 @@
 
 QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基于 **Qt 6** 开发，支持 **Windows** 与 **macOS** 双平台（Linux 支持尚不完整，录屏暂不产出视频文件），旨在提供高效、流畅的截图体验。
 
+当前版本 **v0.1.2**，可从 [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases) 下载最新版本。
+
+![Version](https://img.shields.io/badge/version-v0.1.2-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
+
 ## ⚠️ macOS 首次打开：未公证应用需手动放行
 
 QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 安装后，首次双击打开会被 macOS 拦下，提示「Apple 无法验证"QuickShot"是否包含可能危害 Mac 安全或泄漏隐私的恶意软件」。按下面 4 步放行一次即可，之后都能正常打开：
@@ -45,7 +49,7 @@ QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 
 ## ✨ 核心功能
 
 ### 1. 智能截图模式
-*   **全局快捷键**: 默认 `Alt + Q` 截图、`Alt + S` 录屏、`Alt + H` 历史记录、`Alt + P` 贴图剪贴板（支持历史截图循环分页）、`Alt + Shift + F` 全屏截图、`Alt + Shift + W` 活动窗口截图、`Alt + Shift + S` 录屏暂停/恢复、`Alt + Shift + Q` 录屏停止、`Alt + Shift + P` 隐藏/显示所有贴图（均通过 ShortcutManager 集中管理，可在设置中修改）。
+*   **全局快捷键**: 默认 `Alt + Q` 截图、`Alt + S` 录屏、`Alt + H` 历史记录、`Alt + P` 贴图剪贴板（支持历史截图循环分页）、`Alt + Shift + F` 全屏截图、`Alt + Shift + W` 活动窗口截图、`Alt + Shift + S` 录屏暂停/恢复、`Alt + Shift + Q` 录屏停止、`Alt + Shift + P` 隐藏/显示所有贴图（均通过 ShortcutManager 集中管理，可在设置中修改）。9 个全局热键均由数据表驱动，新增一个全局热键只需 2 处修改（数据表条目与分发分支）。
 *   **智能窗口吸附**: 鼠标悬停在软件窗口上时，自动智能识别并高亮窗口区域，点击即可快速选取。
 *   **显示器/全屏切换**: 支持矩形区域、窗口、显示器、桌面四种截图范围，鼠标滚轮可快速切换吸附层级。
 *   **自由矩形选区**: 支持鼠标拖拽，创建任意大小的矩形截图区域。
@@ -121,7 +125,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 | DeepL | 用户自填 Key | 翻译质量最高 |
 | LibreTranslate | 用户自填 URL | 可自托管实现完全离线 |
 
-> **隐私保护**：首次使用翻译时弹窗说明文本将发送到第三方服务，可勾选「不再提示」。所有 Key / URL 由用户在设置页填写，软件不预置任何凭证。详见 [翻译功能技术文档](docs/translation-design.md)。
+> **隐私保护**：首次使用翻译时弹窗说明文本将发送到第三方服务，可勾选「不再提示」。所有 Key / URL 由用户在设置页填写，软件不预置任何凭证，API Key 经 SecretStore 加密存储（Windows DPAPI / macOS Keychain）。详见 [翻译功能技术文档](docs/translation-design.md)。
 
 ### 6. 📌 贴图 (Pin) 功能
 *   **悬浮置顶**: 点击工具栏的"Pin"按钮，可将当前截图（包含标注）"贴"在桌面上。
@@ -131,10 +135,10 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
     *   支持拖动边缘调整悬浮窗大小（完美支持高分屏，画质无损，SmoothPixmapTransform 缩放自适应：非等比启用平滑，1:1 禁用保锐利）。
     *   **双击**悬浮窗即可关闭。
     *   支持滚轮缩放贴图窗口，标注与马赛克笔迹同步缩放（AnnotationManager::scaleAll）。
-    *   支持右键菜单（复制 → OCR → 翻译 → 保存 → 关闭，顺序严格按规范）。
+    *   支持右键菜单（复制 → 标注 → OCR → 翻译 → 保存；菜单中无「关闭」项，关闭靠双击或 Esc）。
     *   右键菜单进入**标注模式**，使用独立标注工具栏进行矩形/椭圆/箭头/画笔/直线/文本/马赛克/橡皮擦 8 种标注（数字键 1-8 切换工具），支持 Shift/Alt 约束、撤销/重做、Tab 循环颜色、`[`/`]` 调画笔宽度、Delete 清除。
     *   **标注快捷键统一**: SnipScreen 与 PinWindow 均通过 AnnotationShortcutController + IShortcutHandler 策略接口 + QShortcut（Qt::WindowShortcut）统一注册标注快捷键；文本编辑框获得焦点时自动调用 setBareKeysEnabled(false) 禁用裸键避免输入冲突。
-    *   **贴图快捷键**: `Ctrl+C` 复制、`Ctrl+S` 保存、`Ctrl+Z`/`Ctrl+Y` 撤销/重做、方向键移动窗口（`Ctrl+方向键` 10px 快速移动）、`ESC` 退出标注模式或关闭窗口。
+    *   **贴图快捷键**: `Ctrl+C` 复制、`Ctrl+S` 保存、`Ctrl+Z`/`Ctrl+Y` 撤销/重做（`Ctrl+Shift+Z` 为重做别名）、方向键移动窗口（`Ctrl+方向键` 10px 快速移动）、`Delete`/`Backspace` 清除所有标注、`F5` 重新抓屏（保留选区，仅截图窗口有效）、`ESC` 退出标注模式或关闭窗口。
     *   截图贴图时同时写入系统剪贴板并调用 HistoryManager::addScreenshotPixmap() 入库，可供 `Alt+P` 历史分页贴图。
     *   **Alt+P 贴图剪贴板历史分页**: 首次按下 Alt+P 在鼠标屏幕中心显示最新截图，后续每次按下按时间倒序循环显示更早的截图（位置依次偏移 (24,24)，夹到屏幕边界内），多个贴图窗口可同时显示；到达最旧记录后自动循环回最新一条。
     *   按 `Alt + Shift + P` 可一键隐藏/显示所有贴图窗口（ShortcutManager::TogglePins，PinWindow::toggleAll 静态方法）。
@@ -179,11 +183,11 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 右键点击系统托盘图标进入"设置"，**7 个选项卡顺序：常规 → 快捷键 → 样式 → 翻译 → 历史记录 → 宠物 → 关于**：
 *   **常规**: 支持中/英/日/韩/繁（香港）/繁（台湾）多语言切换、开机自启动、自定义截图和录屏保存目录、日志管理、配置文件管理、**OCR 识别语言配置**、**GPU 加速**。
 *   **快捷键**: 分为 4 个分类展示——**全局热键（可配置）**：截图/录屏/历史记录/贴图剪贴板/全屏截图/活动窗口截图/录屏暂停/录屏停止/隐藏显示贴图 9 个可自定义，ShortcutManager 通过 ShortcutConfigItem 数据表生成设置 UI 行；**标注工具（固定）**：`` ` `` 切换截图/录屏模式、1-8 切换标注工具；**标注操作（固定）**：复制并退出/取消/保存/撤销/重做/刷新/画笔宽度/循环颜色/清除/Shift 约束/Alt 中心；**贴图快捷键（固定）**：复制/保存/撤销/重做/切工具/循环颜色/画笔宽度/清除/移动/快速移动/退出。修改即时生效并通过 shortcutChanged 枚举信号增量刷新托盘菜单。
-*   **样式**: **浅色/深色主题一键切换**（深色为 HUD 风格：深色底板 + 白字 + 半透明按钮，作用于整个应用 UI——截图/录屏工具栏、子工具栏、录屏控制栏、设置/历史窗口、托盘菜单、对话框，切换立即生效并持久化）；支持自定义 20+ 个 UI 颜色属性（边框颜色、工具栏背景/按钮/文字/悬停/禁用颜色、子工具栏颜色、选项卡颜色、角手柄颜色等），21 种颜色通过 `colorSettingTable()` 元数据表统一管理（含 17 个 UI 按钮颜色 + 4 个仅保存的颜色），通过循环遍历数据表统一加载/保存；按钮显示模式（文字/图标）、子工具栏/控制栏/选项卡颜色定制。
+*   **样式**: **浅色/深色主题一键切换**（深色为 HUD 风格：深色底板 + 白字 + 半透明按钮，作用于整个应用 UI——截图/录屏工具栏、子工具栏、录屏控制栏、设置/历史窗口、托盘菜单、对话框，切换立即生效并持久化）；支持自定义 20+ 个 UI 颜色属性（边框颜色、工具栏背景/按钮/文字/悬停/禁用颜色、子工具栏颜色、选项卡颜色、角手柄颜色等），21 种颜色通过 `colorSettingTable()` 元数据表统一管理（含 17 个 UI 按钮颜色 + 4 个仅保存的颜色），通过循环遍历数据表统一加载/保存（数据表循环取代了原先 34 个分散的成员变量）；按钮显示模式（文字/图标）、子工具栏/控制栏/选项卡颜色定制。
 *   **翻译（在样式与历史记录之间）**: 选择翻译引擎（MyMemory 免注册 / 百度 / DeepL / LibreTranslate）、配置目标语言（默认英文，下拉选择）、填写对应引擎的 API Key / URL、启用翻译功能开关、首次翻译隐私提示开关；首次使用时弹窗说明文本将发送到第三方服务（自定义 MessageBox 居中定位到选区）。
 *   **历史记录**: 支持开关截图历史记录和剪贴板历史记录、设置保留时间（7/30/90/180/365 天）和最大记录数（500/1000/2000/5000 条）、清理过期记录（软件启动时 HistoryManager 自动调用 cleanupExpired()）、清空所有历史、查看存储占用统计。
 *   **宠物**: 桌面宠物开关、6 种外观样式（猫/柴犬/熊猫/兔子/企鹅/青蛙）平铺图标点选即时切换、重置宠物位置。
-*   **关于**: 查看版本信息及官网链接。
+*   **关于**: 查看版本信息及 GitHub 仓库链接。
 *   **DPI 手动适配**: SettingsWindow 与 HistoryWindow 因项目禁用 Qt 自动高 DPI 缩放（QT_ENABLE_HIGHDPI_SCALING=0），DPI 变化时自动调用 StyleManager::reapplyGlobalStyleSheet() 重新加载全局 QSS，SettingsWindow 重新计算宽度/控件尺寸并根据选项卡类型（滚动/非滚动）适配高度；HistoryWindow 重新计算初始尺寸与控件大小。
 *   **统一消息框样式**: 所有确认/提示对话框使用自定义 `MessageBox` 类（继承 QMessageBox），自动应用项目消息框 QSS 样式、加载应用图标、按钮文本自动 tm->get 翻译（确定/是/否），支持 Yes/No 询问框默认否按钮、居中定位到选区/父窗口、静态便捷方法（information/warning/critical/question）一行调用。
 
@@ -200,13 +204,21 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 ## 📦 安装与部署
 
 ### 开发者构建
-1.  确保已安装 Qt 6.10.2 和 CMake。
+1.  确保已安装 Qt 6.10.2 和 CMake ≥ 3.20。
 2.  克隆项目并编译：
     ```bash
     mkdir build && cd build
     cmake ..
     cmake --build .
     ```
+
+**构建选项与依赖**：
+*   **ONNX Runtime**: OCR 推理库（1.26.0）。Windows 构建时若未检测到，CMake 会自动下载并解压到 `third_party/onnxruntime`；也可通过 `ONNXRUNTIME_ROOT` 环境变量（或同名 CMake 变量）指定已安装路径，或直接预置到 `third_party/onnxruntime`。
+*   `ENABLE_OCR_GPU_ACCELERATION`: 是否编译 OCR GPU 加速支持（CoreML/DirectML），默认 `ON`。
+*   `QUICKSHOT_BUILD_TESTS`: 是否构建单元测试，默认 `ON`。
+
+### 运行测试
+tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUILD_TESTS=ON` 构建后，在 build 目录运行 `ctest` 即可执行全部测试。
 
 > **Windows 环境搭建与路径配置**（Qt / MinGW / CMake / ONNX Runtime 的路径指定、CLion 工具链、常见问题）详见 [Windows 构建指南](docs/build-windows.md)。
 
@@ -260,14 +272,14 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **Alt+P 贴图剪贴板历史分页**: SnipScreen::pinClipboard() 基于 HistoryManager 时间倒序截图列表，首次按下在鼠标屏幕中心显示（QCursor::pos - QPoint(w/2, h/2)），后续按下 m_pinHistoryIndex++ 取模，窗口位置继承前一窗口 + (24,24)，qBound 夹到屏幕边界；QPointer<PinWindow> 安全跟踪，PinWindow WA_DeleteOnClose 关闭后指针自动置空。
 *   **桌面宠物模块 src/pet**: DesktopPetManager 单例统一管理开关/位置/外观持久化（pet/enabled、pet/posX、pet/posY、pet/style）与两种投喂入口（截图 feed() / 文本 feedText()）；PetWindow 纯 QPainter 绘制 6 种外观（猫/柴犬/熊猫/兔子/企鹅/青蛙）+ 张嘴/咀嚼/眨眼动画；ClotheslineWindow 悬链线晾衣绳挂载最近 12 条历史卡片（HistoryManager 信号驱动实时刷新），CardPreviewPopup 悬停放大预览（原图 + 滚轮缩放）右键接入复制/标注/文字识别/翻译；FlyAnimationWidget 飞入动画；PetUiScale 按主屏 DPI 缩放（夹取 1.0–3.0）；晾衣绳关闭只走显式途径（×/Esc/双击空白/再点宠物），全局事件过滤保证应用自身窗口上的点击一律不关闭。
 *   **自定义统一 MessageBox**: 所有对话框（提示/确认/隐私/翻译错误详情）使用 src/widgets/MessageBox.h，继承 QMessageBox 自动 applyProjectStyle()（getMessageBoxStyle QSS + loadAppIcon 图标），提供 addOkButton()/addYesNoButtons()（tm->get("yes/no") 翻译按钮，默认否按钮）/centerOn(rect) 居中定位到选区、information/warning/critical/question 静态便捷方法一行调用；翻译错误支持「详细信息」次级 MessageBox。
-*   **配置持久化**: 使用 QSettings 持久化配置，ConfigManager 单例支持 saveConfigAsync()/loadConfigAsync() 异步读写，支持配置文件切换/重置/打开位置。
-*   **代码注释规范**: 采用标准的 Doxygen 风格注释（@brief、@param、@return、@note、@author），所有公共方法均有中文方法注释，确保代码的可读性和可维护性。
-*   **日志系统**: Logger 单例，LOG_INFO/LOG_WARN/LOG_ERROR/LOG_DEBUG 宏；日志仅使用 LOG_INFO 级别（DEBUG 级别禁用为硬约束），日志英文输出。日志写入安装目录下 `logs/` 文件夹（需在 QApplication 创建后初始化）。
-*   **自动更新**: UpdateManager 多渠道回退检查（GitHub → Gitee → 官方网站），SHA256 校验下载包，PowerShell Expand-Archive 解压，robocopy 带备份回滚的文件替换，安装后自动启动新版本；支持环境变量 `QUICKSHOT_UPDATE_URL` 覆盖更新地址用于本地测试（详见 [更新功能本地验证指南](update-test/README.md)）。
+*   **配置持久化**: 使用 QSettings 持久化配置，ConfigManager 单例基于 QSettings 惰性加载、统一读写，支持配置文件切换/重置/打开位置。
+*   **代码注释规范**: 采用标准的 Doxygen 风格注释（@brief、@param、@return、@note、@author），所有公共方法均有中文方法注释（及 Doxygen 格式的英文标签），确保代码的可读性和可维护性。
+*   **日志系统**: Logger 单例，LOG_INFO/LOG_WARNING/LOG_ERROR/LOG_DEBUG 四级宏均有使用，日志英文输出。日志写入安装目录下 `logs/` 文件夹（需在 QApplication 创建后初始化）。
+*   **自动更新**: UpdateManager 多渠道回退检查（按地区动态排序：中国大陆 Gitee 优先，其他地区 GitHub 优先，最后官网兜底），SHA256 校验下载包，PowerShell Expand-Archive 解压，robocopy 带备份回滚的文件替换，安装后自动启动新版本；支持环境变量 `QUICKSHOT_UPDATE_URL` 覆盖更新地址用于本地测试（详见 [更新功能本地验证指南](update-test/README.md)）。
 *   **性能优化**:
     *   **延迟初始化**: 核心模块按需初始化（OCR 首次使用加载模型、Translate 引擎首次翻译初始化），加快快捷键响应速度
     *   **异步处理**: 屏幕捕获和 OCR 识别在后台线程（QtConcurrent）执行，避免阻塞 UI
-    *   **智能检测**: 窗口检测 Hunter 实现了节流机制和移动阈值，减少不必要的检测
+    *   **智能检测**: 窗口检测 Hunter 缓存窗口/猎物列表（ready()/hunt()/contains()/clear，见 src/core/Hunter.h），加速窗口命中检测
     *   **模型复用**: OCR 模型识别后释放，需要时自动加载
     *   **录屏帧缓冲复用**: ScreenRecorder 工作线程复用 frameBuffer，减少内存分配，标注 overlay 通过 QMutex 保护并发访问
 
@@ -277,6 +289,20 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **构建系统**: CMake
 *   **编译器**: MinGW 64-bit (Windows) / Clang (macOS)
 *   **OCR**: ONNX Runtime
+
+## 📚 更多文档
+*   [标注系统](docs/annotation.md)：标注工具、交互与快捷键技术文档。
+*   [架构说明](docs/architecture.md)：模块划分与整体设计。
+*   [OCR 功能](docs/ocr.md)：OCR 引擎实现与配置。
+*   [历史记录功能](docs/history-feature.md)：历史记录与晾衣绳快捷面板设计。
+*   [翻译功能](docs/translation-design.md)：翻译引擎抽象与批量翻译流程。
+*   [快捷键说明](docs/shortcuts.md)：全局热键与标注/贴图快捷键一览。
+*   [Windows 录屏](docs/recording-windows.md)：Windows 录屏实现细节。
+*   [macOS 录屏](docs/recording-macos.md)：macOS ScreenCaptureKit 录屏实现。
+*   [Windows 构建指南](docs/build-windows.md)：Windows 环境搭建与常见问题。
+*   [发布流程](docs/release-publish.md)：GitHub / Gitee 双端版本发布步骤。
+*   [多远程仓库同步](docs/git-multi-remote.md)：GitHub / Gitee 双远程管理。
+
 ## 📄 许可证
 
 本项目基于 **CC BY-NC-SA 4.0**（知识共享署名-非商业性使用-相同方式共享 4.0）许可证开源。
@@ -288,7 +314,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 
 ### 您不可以：
 - ❌ 用于商业目的
-- ❌ 闭源修改后商用
+- ❌ 分发未按相同许可证（CC BY-NC-SA 4.0）授权的修改版本
 - ❌ 移除原作者署名
 
 ### 您必须：
