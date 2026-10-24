@@ -573,24 +573,37 @@ void PinWindow::saveToFile() {
 void PinWindow::performTranslate() {
     if (m_pixmap.isNull()) return;
 
-    // 检查翻译功能是否启用 + 首次隐私提示
-    if (!TranslateService::checkEnabledAndPrivacy(this)) {
-        LOG_INFO("PinWindow: Translate aborted: disabled or declined privacy warning");
-        return;
-    }
+    // 隐私提示用异步确认（Windows 上模态弹框关闭会破坏置顶窗口的鼠标派发，
+    // 导致窗口无法点击；见 TranslateService::checkEnabledAndPrivacyAsync）。
+    // 贴图窗口有 WA_DeleteOnClose，弹框开启期间可能被关闭，用 QPointer 兜底；
+    // 像素图按值捕获（m_pixmap 为私有成员，且内容在投喂期间不变）。
+    const QPixmap pixmap = m_pixmap;
+    QPointer<PinWindow> self(this);
+    TranslateService::checkEnabledAndPrivacyAsync(this, QRect(pos(), size()),
+        [self, pixmap](bool allowed) {
+        if (!self) {
+            LOG_INFO("PinWindow: Translate canceled (pin closed during privacy check)");
+            return;
+        }
+        if (!allowed) {
+            LOG_INFO("PinWindow: Translate aborted: disabled or declined privacy warning");
+            return;
+        }
 
-    LOG_INFO("PinWindow: Translate requested, starting OCR");
+        LOG_INFO("PinWindow: Translate requested, starting OCR");
 
-    // 异步 OCR（识别完成即释放模型）→ 批量翻译并显示译文叠加窗口
-    // （封装了标签提示、信号连接、错误处理）
-    OcrAsync::run(this, m_pixmap.toImage(), QRect(), true,
-                  [this](const OcrEngine::OcrResult &result) {
-        TranslateOverlayWindow::translateAndShow(
-            this, m_pixmap, result.texts, result.polygons,
-            pos(), rect());
+        // 异步 OCR（识别完成即释放模型）→ 批量翻译并显示译文叠加窗口
+        // （封装了标签提示、信号连接、错误处理）
+        OcrAsync::run(self, pixmap.toImage(), QRect(), true,
+                      [self, pixmap](const OcrEngine::OcrResult &result) {
+            if (!self) return;
+            TranslateOverlayWindow::translateAndShow(
+                self, pixmap, result.texts, result.polygons,
+                self->pos(), self->rect());
 
-        LOG_INFO(QString("PinWindow: OCR done, %1 segments, starting batch translation")
-                     .arg(result.texts.size()));
+            LOG_INFO(QString("PinWindow: OCR done, %1 segments, starting batch translation")
+                         .arg(result.texts.size()));
+        });
     });
 }
 

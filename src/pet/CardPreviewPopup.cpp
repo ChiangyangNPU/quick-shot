@@ -11,6 +11,7 @@
 #include "../translate/TranslateEngine.h"
 #include "../history/ClipboardMonitor.h"
 #include "../log/Logger.h"
+#include <QPointer>
 
 #include <QPainter>
 #include <QWheelEvent>
@@ -210,37 +211,49 @@ void CardPreviewPopup::contextMenuEvent(QContextMenuEvent *event) {
             dialog->show();
         });
     } else if (chosen == translateAction) {
-        if (!TranslateService::checkEnabledAndPrivacy(host)) {
-            return;
-        }
-        if (isImage) {
-            // 图片：OCR 识别 → 批量翻译 → 译文叠加窗口（与贴图窗口一致）
-            OcrAsync::run(host, image.toImage(), QRect(), true,
-                          [host, image, centerGlobal](const OcrEngine::OcrResult &result) {
-                const QPoint pos = centerGlobal - QPoint(image.width() / 2, image.height() / 2);
-                TranslateOverlayWindow::translateAndShow(
-                    host, image, result.texts, result.polygons, pos, QRect(pos, image.size()));
-            });
-        } else {
-            // 文本：直接调用翻译服务，译文复用识别结果对话框展示
-            TranslateService *ts = TranslateService::instance();
-            connect(ts, &TranslateService::finished, host,
-                    [centerGlobal](const QString &, const QString &translated) {
-                OcrEngine::OcrResult r;
-                r.texts = {translated};
-                auto *dialog = new OcrResultDialog(r);
-                dialog->adjustSize();
-                if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
-                    dialog->move(s->availableGeometry().center() - dialog->rect().center());
-                }
-                dialog->show();
-            }, Qt::SingleShotConnection);
-            connect(ts, &TranslateService::failed, host,
-                    [host](TranslateEngine::TranslateError code, const QString &) {
-                QMessageBox::warning(host, QString(), TranslateService::errorMessage(code));
-            }, Qt::SingleShotConnection);
-            ts->translate(text);
-        }
+        // 隐私提示用异步确认（Windows 上模态弹框关闭会破坏置顶窗口的鼠标派发；
+        // 见 TranslateService::checkEnabledAndPrivacyAsync）。晾衣绳窗口关闭即
+        // 销毁（deleteLater），弹框开启期间可能已关闭，用 QPointer 兜底。
+        QPointer<QWidget> hostGuard(host);
+        TranslateService::checkEnabledAndPrivacyAsync(host, QRect(),
+            [hostGuard, isImage, image, text, centerGlobal](bool allowed) mutable {
+            if (!hostGuard) {
+                LOG_INFO("CardPreviewPopup: Translate canceled (host closed during privacy check)");
+                return;
+            }
+            if (!allowed) {
+                return;
+            }
+            if (isImage) {
+                // 图片：OCR 识别 → 批量翻译 → 译文叠加窗口（与贴图窗口一致）
+                OcrAsync::run(hostGuard, image.toImage(), QRect(), true,
+                              [hostGuard, image, centerGlobal](const OcrEngine::OcrResult &result) {
+                    if (!hostGuard) return;
+                    const QPoint pos = centerGlobal - QPoint(image.width() / 2, image.height() / 2);
+                    TranslateOverlayWindow::translateAndShow(
+                        hostGuard, image, result.texts, result.polygons, pos, QRect(pos, image.size()));
+                });
+            } else {
+                // 文本：直接调用翻译服务，译文复用识别结果对话框展示
+                TranslateService *ts = TranslateService::instance();
+                connect(ts, &TranslateService::finished, hostGuard,
+                        [centerGlobal](const QString &, const QString &translated) {
+                    OcrEngine::OcrResult r;
+                    r.texts = {translated};
+                    auto *dialog = new OcrResultDialog(r);
+                    dialog->adjustSize();
+                    if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
+                        dialog->move(s->availableGeometry().center() - dialog->rect().center());
+                    }
+                    dialog->show();
+                }, Qt::SingleShotConnection);
+                connect(ts, &TranslateService::failed, hostGuard,
+                        [hostGuard](TranslateEngine::TranslateError code, const QString &) {
+                    QMessageBox::warning(hostGuard, QString(), TranslateService::errorMessage(code));
+                }, Qt::SingleShotConnection);
+                ts->translate(text);
+            }
+        });
     }
 }
 
