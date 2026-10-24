@@ -426,6 +426,9 @@ private:
      * 首次显示与初始化校准等不该有动画的场景直接调用本方法并传 false。
      * @param animated 是否使用高度动画（false 时立即设置目标高度）
      * @note 目标高度与当前高度相同时直接返回，避免启动无意义的动画。
+     * @note 目标高度：普通页取 adjustSize 后的 sizeHint 高度；含滚动区的页
+     *       （历史/快捷键/样式/宠物）取滚动内容 heightForWidth(视口宽)——
+     *       FlowLayout 页 sizeHint 链按单行估算会漏算换行行数。
      * @author chiangyang
      */
     void applyTabHeight(bool animated);

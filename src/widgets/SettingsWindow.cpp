@@ -535,6 +535,21 @@ void SettingsWindow::applyTabHeight(bool animated) {
     }
 
     int tabHeight = currentTab->size().height();
+    // 滚动区选项卡（历史/快捷键/样式/宠物）：内容含 FlowLayout 时
+    // sizeHint 链按"单行"估算高度（FlowLayout::sizeHint 无宽度语境，
+    // 宠物页 12 个生肖按钮换行后的行数会被漏算，导致目标窗口偏矮、
+    // 动画结束恢复 AsNeeded 时滚动条弹出闪烁）。改用内容布局的
+    // heightForWidth(当前视口宽) 取真实换行高度，无 heightForWidth
+    // 的布局返回 -1 时回退原 size() 值。
+    QScrollArea *tabScrollArea = currentTab->findChild<QScrollArea *>();
+    int contentHeight = -1;
+    if (tabScrollArea && tabScrollArea->widget()) {
+        contentHeight =
+            tabScrollArea->widget()->heightForWidth(tabScrollArea->viewport()->width());
+        if (contentHeight >= 0) {
+            tabHeight = contentHeight + tabScrollArea->frameWidth() * 2;
+        }
+    }
     // tab 栏高度补偿：固定像素值，用于 tab 栏自身高度之外的多余空间
     // （tab 栏 padding 已由全局 qss 用 em 单位随字体/DPI 缩放）
     int tabBarExtra = 50;
@@ -567,20 +582,20 @@ void SettingsWindow::applyTabHeight(bool animated) {
         });
     }
 
-    // 当前选项卡的滚动区（历史/快捷键/样式/宠物页各有一个）：动画中间态
-    // 视口小于内容时 AsNeeded 会瞬时误报（滚动条"先显示再消失"）。是否抑制
-    // 按"目标高度下内容是否装得下"判定：装得下（纯瞬态）→ 动画期间隐藏；
-    // 装不下（快捷键/样式等内容真实超出窗口、滚动条真实需要）→ 不抑制。
-    // 视口高度随窗口高度线性变化，可用当前视口 + 高度增量推算目标视口。
-    if (QScrollArea *area = currentTab->findChild<QScrollArea *>()) {
-        if (area->widget()) {
-            const int viewportAtTarget =
-                area->viewport()->height() + (targetHeight - currentHeight);
-            const bool neededAtTarget =
-                area->widget()->minimumSizeHint().height() > viewportAtTarget;
-            if (!neededAtTarget) {
-                suppressTabScrollBar(area);
-            }
+    // 动画中间态视口小于内容时，AsNeeded 会瞬时误报（滚动条"先显示再消失"）。
+    // 是否抑制按"目标高度下内容是否装得下"判定：装得下（纯瞬态）→ 动画期间
+    // 隐藏；装不下（快捷键/样式等内容真实超出窗口、滚动条真实需要）→ 不抑制。
+    // 视口高度随窗口高度线性变化，可用当前视口 + 高度增量推算目标视口；
+    // 内容高度优先用 heightForWidth 的真实值（FlowLayout 页 minimumSizeHint
+    // 只按单行估算，会低估），无则回退 minimumSizeHint。
+    if (tabScrollArea && tabScrollArea->widget()) {
+        const int viewportAtTarget =
+            tabScrollArea->viewport()->height() + (targetHeight - currentHeight);
+        const int contentNeeded = (contentHeight >= 0)
+            ? contentHeight
+            : tabScrollArea->widget()->minimumSizeHint().height();
+        if (contentNeeded <= viewportAtTarget) {
+            suppressTabScrollBar(tabScrollArea);
         }
     }
 
