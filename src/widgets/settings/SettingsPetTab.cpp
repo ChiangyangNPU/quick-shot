@@ -141,7 +141,7 @@ void SettingsPetTab::setupUi() {
     });
 
     m_descLabel = new QLabel(tm->get("pet.description",
-        "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, and copied text flies in as well. \nClick the pet to open the clothesline and view recent screenshots and copied text."), m_petGroup);
+        "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet to open the clothesline and view recent screenshots and copied text."), m_petGroup);
     m_descLabel->setWordWrap(false);
 
     petLayout->addWidget(m_enablePetCheck);
@@ -192,7 +192,7 @@ void SettingsPetTab::retranslateUi() {
     }
     if (m_btnResetPos) m_btnResetPos->setText(tm->get("pet.resetPosition", "Reset Pet Position"));
     if (m_descLabel) m_descLabel->setText(tm->get("pet.description",
-        "When enabled, screenshots fly into the pet after copy/pin. Click the pet to view the clothesline of recent screenshots and copied text."));
+        "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet to open the clothesline and view recent screenshots and copied text."));
 }
 
 // ============================================================
