@@ -882,13 +882,13 @@ QString UpdateManager::getDownloadUrl(Channel channel, const QString &version) c
     switch (channel) {
     case Channel::GitHub:
 #ifdef Q_OS_WIN
-        return QStringLiteral("https://github.com/chiangyangNPU/quick-shot/releases/download/%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
+        return QStringLiteral("https://github.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
 #else
         return QStringLiteral("https://github.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1.dmg").arg(version);
 #endif
     case Channel::Gitee:
 #ifdef Q_OS_WIN
-        return QStringLiteral("https://gitee.com/chiangyangNPU/quick-shot/releases/download/%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
+        return QStringLiteral("https://gitee.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
 #else
         return QStringLiteral("https://gitee.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1.dmg").arg(version);
 #endif
