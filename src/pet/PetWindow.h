@@ -3,6 +3,7 @@
 
 #include <QWidget>
 #include <QPoint>
+#include <QPixmap>
 #include <QAbstractAnimation>
 #include <QPointer>
 #include "PetUiScale.h"
@@ -10,12 +11,14 @@
 /**
  * @brief 桌面宠物窗口
  *
- * 无边框透明置顶小窗口，用 QPainter 代码绘制一只圆滚滚的卡通宠物
- * （闭嘴/张嘴/咀嚼三态），支持：
+ * 无边框透明置顶小窗口，用 QPainter 代码绘制一只圆滚滚的卡通宠物，
+ * 支持多种外观样式（小橘猫/柴犬/熊猫/兔子/企鹅/青蛙，PetStyle 枚举），
+ * 共用闭嘴/张嘴/咀嚼三态动画：
  * - 鼠标拖动改变位置（拖动结束发射 dragFinished）
  * - 单击发射 clicked（与拖动按移动距离区分）
  * - openMouth() 张嘴等待食物，chew() 咀嚼弹跳
  * - 待机时随机眨眼
+ * - setStyle() 切换样式（配合 renderStylePreview 可生成设置页预览图）
  * @author chiangyang
  */
 class PetWindow : public QWidget {
@@ -25,6 +28,25 @@ class PetWindow : public QWidget {
     Q_PROPERTY(qreal starProgress READ starProgress WRITE setStarProgress)
 
 public:
+    /**
+     * @brief 宠物外观样式
+     * @author chiangyang
+     */
+    enum class PetStyle {
+        Cat = 0,      ///< 小橘猫（默认）
+        Shiba = 1,    ///< 柴犬
+        Panda = 2,    ///< 熊猫
+        Bunny = 3,    ///< 兔子
+        Penguin = 4,  ///< 企鹅
+        Frog = 5      ///< 青蛙
+    };
+
+    /**
+     * @brief 样式总数（设置页遍历用）
+     * @author chiangyang
+     */
+    static constexpr int petStyleCount() { return 6; }
+
     /**
      * @brief 构造函数
      * @param parent 父对象（顶层窗口传 nullptr）
@@ -38,6 +60,29 @@ public:
      * @author chiangyang
      */
     static int petSize() { return qRound(96 * PetUi::scale()); }
+
+    /**
+     * @brief 渲染某样式的静态预览图（设置页样式选择下拉框图标用）
+     * @param style 宠物样式
+     * @param size 预览图边长（像素）
+     * @return 透明背景的预览图（待机姿态：闭嘴、睁眼、无星星）
+     * @author chiangyang
+     */
+    static QPixmap renderStylePreview(PetStyle style, int size);
+
+    /**
+     * @brief 切换宠物外观样式（立即重绘）
+     * @param style 新样式
+     * @author chiangyang
+     */
+    void setStyle(PetStyle style);
+
+    /**
+     * @brief 当前外观样式
+     * @return 样式枚举值
+     * @author chiangyang
+     */
+    PetStyle style() const { return m_style; }
 
     /**
      * @brief 张嘴等待食物（飞行动画开始时调用）
@@ -107,6 +152,7 @@ private:
     qreal m_chewScale = 1.0;        ///< 咀嚼挤压系数（垂直方向），1 为常态
     qreal m_starProgress = 0.0;     ///< 左眼星星闪烁进度 [0,1]，0 为无星星
     bool m_eyesClosed = false;      ///< 眨眼瞬间为 true
+    PetStyle m_style = PetStyle::Cat; ///< 当前外观样式
     QPointer<QAbstractAnimation> m_mouthAnim; ///< 进行中的嘴部/咀嚼动画（新动画开始前 stop，避免叠加互相覆写）
 
     bool m_pressing = false;        ///< 左键按下中

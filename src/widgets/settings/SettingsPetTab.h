@@ -6,12 +6,14 @@
 #include <QCheckBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QToolButton>
+#include <QButtonGroup>
 
 /**
  * @brief 设置窗口「桌面宠物」选项卡
  *
- * 包含桌面宠物开关、重置位置按钮与功能说明。
- * 开关状态由 DesktopPetManager 持久化（pet/enabled）并即时显隐宠物。
+ * 包含桌面宠物开关、平铺图标式的外观样式选择、重置位置按钮与功能说明。
+ * 开关与样式由 DesktopPetManager 持久化（pet/enabled、pet/style）并即时生效。
  * @author chiangyang
  */
 class SettingsPetTab : public QWidget {
@@ -42,10 +44,13 @@ public:
 private:
     void setupUi();
 
-    QGroupBox *m_petGroup;          ///< 桌面宠物分组
-    QCheckBox *m_enablePetCheck;    ///< 打开桌面宠物复选框
-    QPushButton *m_btnResetPos;     ///< 重置宠物位置按钮
-    QLabel *m_descLabel;            ///< 功能说明标签
+    QGroupBox *m_petGroup;              ///< 桌面宠物分组
+    QCheckBox *m_enablePetCheck;        ///< 打开桌面宠物复选框
+    QLabel *m_styleLabel;               ///< 外观样式标签
+    QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
+    QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标）
+    QPushButton *m_btnResetPos;         ///< 重置宠物位置按钮
+    QLabel *m_descLabel;                ///< 功能说明标签
 };
 
 #endif // SETTINGSPETTAB_H

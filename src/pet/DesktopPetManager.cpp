@@ -97,6 +97,7 @@ void DesktopPetManager::createPetWindow() {
     }
 
     m_petWindow = new PetWindow();
+    m_petWindow->setStyle(petStyle());
 
     // 位置恢复：pet/posX/posY 均有效（>=0）则使用，否则落在默认右下角
     QSettings *settings = ConfigManager::instance()->getSettings();
@@ -239,4 +240,27 @@ void DesktopPetManager::resetPetPosition() {
  */
 PetWindow* DesktopPetManager::petWindow() const {
     return m_petWindow;
+}
+
+/**
+ * @brief 获取当前宠物外观样式（持久化于 pet/style）
+ * @author chiangyang
+ */
+PetWindow::PetStyle DesktopPetManager::petStyle() const {
+    const int v = ConfigManager::instance()->value("pet/style", 0).toInt();
+    return static_cast<PetWindow::PetStyle>(qBound(0, v, PetWindow::petStyleCount() - 1));
+}
+
+/**
+ * @brief 设置宠物外观样式（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setPetStyle(PetWindow::PetStyle style) {
+    ConfigManager::instance()->setValue("pet/style", int(style));
+    ConfigManager::instance()->sync();
+
+    if (m_petWindow) {
+        m_petWindow->setStyle(style);
+    }
+    LOG_INFO(QString("DesktopPetManager: pet style set to %1").arg(int(style)));
 }

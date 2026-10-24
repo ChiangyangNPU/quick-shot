@@ -5,8 +5,8 @@
 #include <QPixmap>
 #include <QRect>
 #include <QPointer>
+#include "PetWindow.h"
 
-class PetWindow;
 class ClotheslineWindow;
 
 /**
@@ -15,6 +15,7 @@ class ClotheslineWindow;
  * 负责桌面宠物的生命周期管理：
  * - 开关状态持久化（pet/enabled）与启动时恢复
  * - 宠物窗口位置持久化（pet/posX、pet/posY）
+ * - 宠物外观样式切换与持久化（pet/style）
  * - 截图复制/贴图后的"投喂"入口：触发飞行动画与宠物进食动作
  * - 文字复制后的"投喂"入口：文字渲染成小卡片从鼠标位置飞入宠物
  * - 宠物点击后晾衣绳历史窗口的显隐切换
@@ -84,6 +85,20 @@ public:
      * @author chiangyang
      */
     PetWindow* petWindow() const;
+
+    /**
+     * @brief 获取当前宠物外观样式（持久化于 pet/style）
+     * @return 样式枚举值
+     * @author chiangyang
+     */
+    PetWindow::PetStyle petStyle() const;
+
+    /**
+     * @brief 设置宠物外观样式（即时生效并持久化）
+     * @param style 样式枚举值
+     * @author chiangyang
+     */
+    void setPetStyle(PetWindow::PetStyle style);
 
 signals:
     /**
