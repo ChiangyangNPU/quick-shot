@@ -191,9 +191,9 @@ PinWindow（贴图窗口）激活时生效。这些快捷键为固定约定，�
 
 | 快捷键 | 功能 | 说明 |
 |---|---|---|
-| `Esc` | 退出标注模式 | 仅标注模式下生效（退出标注，窗口保留）；非标注模式按 Esc 无任何效果 |
+| `Esc` | 退出标注模式 / 关闭窗口 | 标注模式：退出标注（窗口保留）；非标注模式：关闭贴图窗口（窗口激活时） |
 
-> `Esc` 快捷键由标注模式下的 `AnnotationShortcutController` 注册，非标注模式下不存在，因此不会关闭窗口。关闭贴图请用左键双击（见 4.6）。
+> `Esc` 有两个来源：标注模式下由 `AnnotationShortcutController` 注册（取消文本编辑 / 退出标注）；非标注模式由 PinWindow 构造时创建的常驻 Esc 快捷键 `m_escCloseShortcut` 负责（`onCancel` → `close()`），进入标注模式时禁用、退出时恢复，避免与控制器同键歧义触发。
 
 ### 4.6 鼠标操作（补充）
 
@@ -668,7 +668,7 @@ stateDiagram-v2
     
     标注模式 --> 非标注模式: ESC / 右键菜单「退出标注」<br/>exitAnnotationMode()<br/>销毁 AnnotationShortcutController
     
-    非标注模式 --> [*]: 双击<br/>close()<br/>（Esc 非标注模式无效果）
+    非标注模式 --> [*]: 双击 / ESC<br/>close()<br/>（ESC 经常驻 m_escCloseShortcut）
     
     state 非标注模式 {
         [*] --> 窗口操作
@@ -836,3 +836,5 @@ macOS 的 `setFnKeyCallback` 接口在 Carbon 方案下仅保留兼容（Carbon 
 *作者: QuickShot Team - chiangyang*
 
 > **3.2 变更**：修正贴图首次定位（鼠标当前位置为中心）、活动窗口截图平台限制、Fn 组合说明、工具枚举名（`AnnotationType`→`ToolId`）、F5/贴图复制保存的生效条件、非标注模式 Esc 行为、选区微调时机（选区完成后，Ctrl+A 例外）；补充反引号裸键冲突管理、录屏中禁止切换工具、Esc 优先级含滚动截图、卡片右键菜单差异、长截图 V/H 切换方向、反引号注册时序；更新修饰键约束调用入口（`AnnotationInteractionHandler`）与 §6.1 类图归属（`SettingsShortcutsTab`）。
+
+> **3.3 变更**：非标注模式 Esc 现可关闭贴图窗口（PinWindow 常驻 `m_escCloseShortcut` → `onCancel` → `close()`，标注模式期间禁用由控制器接管），§4.5 表格与 §6.5 状态图同步更新。

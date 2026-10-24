@@ -16,6 +16,7 @@
 #include <QResizeEvent>
 #include <QCloseEvent>
 #include <QSet>
+#include <QShortcut>
 #include "../capture/AnnotationInteractionHandler.h"
 #include "../shortcut/IShortcutHandler.h"
 #include <memory>
@@ -372,6 +373,7 @@ private:
 
 private:
     AnnotationShortcutController *m_annotationController = nullptr;  ///< 标注快捷键控制器（标注模式期间创建，退出时销毁）
+    QShortcut *m_escCloseShortcut = nullptr;  ///< 非标注模式的 Esc 关闭快捷键（标注模式期间禁用，由控制器 Esc 接管）
 };
 
 #endif // PINWINDOW_H

@@ -155,6 +155,13 @@ PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     // PinWindow 默认字号 28（区别于 SnipScreen 的 16）
     m_annotationHandler->setFontSize(28);
 
+    // 非标注模式的 Esc 关闭快捷键（兑现提示文案"按 Esc 或双击关闭"）。
+    // WindowShortcut 上下文：仅贴图窗口激活时触发。标注模式期间禁用，
+    // Esc 由 AnnotationShortcutController 接管（取消文本编辑/退出标注）。
+    m_escCloseShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    m_escCloseShortcut->setContext(Qt::WindowShortcut);
+    connect(m_escCloseShortcut, &QShortcut::activated, this, &PinWindow::onCancel);
+
     AnnotationInteractionHandler::Host host;
     // 坐标限制：将坐标限制在窗口矩形内（选区=窗口 rect）
     host.clampPos = [this](const QPoint &p) {
@@ -641,6 +648,8 @@ void PinWindow::enterAnnotationMode() {
     if (!m_annotationController) {
         m_annotationController = new AnnotationShortcutController(this, this);
     }
+    // 非标注 Esc 关闭快捷键让位给控制器的 Esc（同键同上下文并存会歧义触发）
+    m_escCloseShortcut->setEnabled(false);
 
     m_toolBar->positionNearPinWindow(this);
     m_toolBar->show();
@@ -693,6 +702,9 @@ void PinWindow::exitAnnotationMode() {
         delete m_annotationController;
         m_annotationController = nullptr;
     }
+
+    // 恢复非标注模式的 Esc 关闭快捷键
+    m_escCloseShortcut->setEnabled(true);
 
     // 重置标注交互状态
     m_annotationHandler->exitAnnotation();
@@ -1027,7 +1039,9 @@ void PinWindow::onCycleColor() {
 /**
  * @brief 取消当前操作（Esc 触发）
  *
- * 优先级：取消文本编辑 → 退出标注模式 → 关闭窗口
+ * 优先级：取消文本编辑 → 退出标注模式 → 关闭窗口。
+ * 标注模式的 Esc 来自 AnnotationShortcutController，非标注模式的关闭
+ * 来自常驻的 m_escCloseShortcut（构造函数创建，进入标注模式时禁用）。
  * @author chiangyang
  */
 void PinWindow::onCancel() {

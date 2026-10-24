@@ -107,7 +107,8 @@ void AnnotationShortcutController::registerAll() {
     registerShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
                      [this]() { m_handler->onRedo(); });
 
-    // Esc：取消（任意状态可触发：取消文本编辑 / 取消录制 / 退出截图 / 退出标注模式 / 关闭窗口）
+    // Esc：取消（SnipScreen：滚动截图取消/取消文本编辑/取消录制/退出截图；PinWindow：取消文本编辑/退出标注。
+    // PinWindow 非标注模式的"关闭窗口"由其常驻 Esc 快捷键（m_escCloseShortcut → onCancel）负责，不经过本控制器）
     registerShortcut(QKeySequence(Qt::Key_Escape),
                      [this]() { m_handler->onCancel(); },
                      /*isBareKey=*/false,
