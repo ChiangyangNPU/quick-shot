@@ -545,7 +545,7 @@ void SettingsWindow::applyTabHeight(bool animated) {
     if (heightAnimation && heightAnimation->state() == QPropertyAnimation::Running) {
         heightAnimation->stop();
         // stop() 不会触发 finished，先恢复上一次动画抑制的滚动条
-        setHistoryScrollBarSuppressed(false);
+        restoreSuppressedScrollBar();
     }
 
     // 高度已经正确时直接返回，避免首次显示/初始化校准后启动无意义的动画
@@ -563,24 +563,23 @@ void SettingsWindow::applyTabHeight(bool animated) {
         heightAnimation = new QPropertyAnimation(this, "animatedHeight", this);
         heightAnimation->setEasingCurve(QEasingCurve::InOutQuad);
         connect(heightAnimation, &QPropertyAnimation::finished, this, [this]() {
-            setHistoryScrollBarSuppressed(false);
+            restoreSuppressedScrollBar();
         });
     }
 
-    // 仅历史选项卡：动画中间态视口小于内容时，AsNeeded 会瞬时误报
-    // （滚动条"先显示再消失"）。是否抑制按"目标高度下内容是否装得下"判定：
-    // 装得下（纯瞬态）→ 动画期间隐藏；装不下（小屏/高缩放机器上历史内容
-    // 可能超出窗口，滚动条真实需要、常驻显示）→ 不抑制。视口高度随窗口
-    // 高度线性变化，可用当前视口 + 高度增量推算目标视口。
-    if (currentTab == m_historyTabWidget) {
-        QScrollArea *area = m_historyTabWidget->scrollArea();
-        if (area && area->widget()) {
+    // 当前选项卡的滚动区（历史/快捷键/样式/宠物页各有一个）：动画中间态
+    // 视口小于内容时 AsNeeded 会瞬时误报（滚动条"先显示再消失"）。是否抑制
+    // 按"目标高度下内容是否装得下"判定：装得下（纯瞬态）→ 动画期间隐藏；
+    // 装不下（快捷键/样式等内容真实超出窗口、滚动条真实需要）→ 不抑制。
+    // 视口高度随窗口高度线性变化，可用当前视口 + 高度增量推算目标视口。
+    if (QScrollArea *area = currentTab->findChild<QScrollArea *>()) {
+        if (area->widget()) {
             const int viewportAtTarget =
                 area->viewport()->height() + (targetHeight - currentHeight);
             const bool neededAtTarget =
                 area->widget()->minimumSizeHint().height() > viewportAtTarget;
             if (!neededAtTarget) {
-                setHistoryScrollBarSuppressed(true);
+                suppressTabScrollBar(area);
             }
         }
     }
@@ -592,16 +591,25 @@ void SettingsWindow::applyTabHeight(bool animated) {
 }
 
 /**
- * @brief 抑制/恢复历史选项卡滚动区的垂直滚动条
+ * @brief 抑制指定滚动区的垂直滚动条并记录（供动画结束后恢复）
  *
  * @author chiangyang
  */
-void SettingsWindow::setHistoryScrollBarSuppressed(bool suppressed) {
-    if (!m_historyTabWidget) return;
-    if (QScrollArea *area = m_historyTabWidget->scrollArea()) {
-        area->setVerticalScrollBarPolicy(
-            suppressed ? Qt::ScrollBarAlwaysOff : Qt::ScrollBarAsNeeded);
-    }
+void SettingsWindow::suppressTabScrollBar(QScrollArea *area) {
+    if (!area) return;
+    m_suppressedScrollArea = area;
+    area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+}
+
+/**
+ * @brief 恢复上次抑制的滚动区为 AsNeeded
+ *
+ * @author chiangyang
+ */
+void SettingsWindow::restoreSuppressedScrollBar() {
+    if (!m_suppressedScrollArea) return;
+    m_suppressedScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_suppressedScrollArea = nullptr;
 }
 
 /**
@@ -748,7 +756,8 @@ bool SettingsWindow::eventFilter(QObject *obj, QEvent *event) {
             return QWidget::eventFilter(obj, event);
         }
         
-        // 在样式选项卡（index == 2）和历史记录选项卡（index == 4）中处理滚轮滚动
+        // 在样式选项卡（index == 2）、历史记录选项卡（index == 4）与宠物
+        // 选项卡（index == 5）中处理滚轮滚动
         // （快捷键选项卡的滚轮滚动内聚在 SettingsShortcutsTab::eventFilter）
         int currentIndex = tabWidget->currentIndex();
         QScrollArea *scrollArea = nullptr;
@@ -756,6 +765,8 @@ bool SettingsWindow::eventFilter(QObject *obj, QEvent *event) {
             scrollArea = m_styleTabWidget->scrollArea();
         } else if (currentIndex == 4 && m_historyTabWidget) {
             scrollArea = m_historyTabWidget->scrollArea();
+        } else if (currentIndex == 5 && m_petTabWidget) {
+            scrollArea = m_petTabWidget->scrollArea();
         }
 
         if (scrollArea) {

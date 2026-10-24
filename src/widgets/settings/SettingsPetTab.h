@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QToolButton>
 #include <QButtonGroup>
+#include <QScrollArea>
 
 /**
  * @brief 设置窗口「桌面宠物」选项卡
@@ -41,9 +42,18 @@ public:
      */
     void applyTabBackground(const QColor &color);
 
+    /**
+     * @brief 选项卡滚动区（供 SettingsWindow 高度动画期间抑制滚动条闪现）
+     * @return 滚动区指针（懒加载前为 nullptr）
+     * @author chiangyang
+     */
+    QScrollArea *scrollArea() const { return petScrollArea; }
+
 private:
     void setupUi();
 
+    QScrollArea *petScrollArea = nullptr;   ///< 滚动区域（16 种样式按钮较高）
+    QWidget *m_petScrollContent = nullptr;  ///< 滚动内容容器（palette 背景）
     QGroupBox *m_petGroup;              ///< 桌面宠物分组
     QCheckBox *m_enablePetCheck;        ///< 打开桌面宠物复选框
     QLabel *m_styleLabel;               ///< 外观样式标签

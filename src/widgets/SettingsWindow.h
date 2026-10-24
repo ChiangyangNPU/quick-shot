@@ -336,6 +336,7 @@ private:
 
     QPropertyAnimation *heightAnimation; ///< 高度动画
     int m_animatedHeight; ///< 动画高度属性
+    QScrollArea *m_suppressedScrollArea = nullptr; ///< 高度动画期间被抑制滚动条的选项卡滚动区
 
 private slots:
 
@@ -430,16 +431,16 @@ private:
     void applyTabHeight(bool animated);
 
     /**
-     * @brief 抑制/恢复历史选项卡滚动区的垂直滚动条
+     * @brief 抑制当前选项卡滚动区的垂直滚动条并记录；恢复上次抑制
      *
      * 高度动画期间专用：动画中间态视口小于内容时，AsNeeded 会瞬时误报
-     * （历史选项卡滚动条"先显示再消失"），动画结束后恢复 AsNeeded。
-     * 仅作用于历史选项卡，且由调用方先判定"目标高度下内容是否装得下"——
-     * 装不下（滚动条真实需要）时不调用，避免推迟常驻滚动条的出现。
-     * @param suppressed true=隐藏，false=恢复 AsNeeded
+     * （选项卡"滚动条先显示再消失"）。抑制对象为当前选项卡的滚动区
+     * （历史/宠物等内容可装下的页面），且由调用方先判定"目标高度下内容
+     * 是否装得下"——装不下（快捷键/样式等真实滚动页）时不抑制。
      * @author chiangyang
      */
-    void setHistoryScrollBarSuppressed(bool suppressed);
+    void suppressTabScrollBar(QScrollArea *area);
+    void restoreSuppressedScrollBar();
 
     // ---- 颜色配置（数据驱动，元数据表归 StyleManager 所有） ----
     // 颜色配置元数据表（settingsKey/translationKey/defaultText/defaultColor）定义在

@@ -8,6 +8,7 @@
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
+#include <QScrollArea>
 
 namespace {
 // 样式名 i18n 键与英文兜底文案（下标对应 PetWindow::PetStyle 枚举值；
@@ -55,13 +56,29 @@ void SettingsPetTab::setupUi() {
     // 本控件即选项卡根容器（#objectName 选择器只匹配自身，不影响子控件原生渲染）
     setObjectName("petTabBg");
     setStyleSheet(QString("#petTabBg { background-color: %1; }").arg(StyleManager::getTabWidgetBgColor().name()));
+    QVBoxLayout *tabLayout = new QVBoxLayout(this);
+    tabLayout->setContentsMargins(0, 0, 0, 0);
+    tabLayout->setSpacing(0);
 
-    QVBoxLayout *layout = new QVBoxLayout(this);
+    // 16 种样式按钮较高，选项卡套 QScrollArea（与历史/快捷键/样式页同构）：
+    // 高度动画中间态/小屏下内容超出窗口时裁剪滚动，避免布局压缩导致控件重叠
+    // 创建滚动内容容器
+    // 注意：用 QPalette 设置背景色，不要用 setStyleSheet。
+    // QScrollArea 的 viewport 不会自动继承 QTabWidget::pane 的背景色，
+    // 需要显式设置。若用 setStyleSheet 会禁用子控件（如 QCheckBox）的
+    // 原生主题绘制，导致复选框指示器空白、对勾不显示。
+    QWidget *scrollContent = new QWidget();
+    m_petScrollContent = scrollContent;
+    scrollContent->setAutoFillBackground(true);
+    QPalette scrollPal = scrollContent->palette();
+    scrollPal.setColor(QPalette::Window, StyleManager::getTabWidgetBgColor());
+    scrollContent->setPalette(scrollPal);
+    QVBoxLayout *layout = new QVBoxLayout(scrollContent);
     layout->setContentsMargins(10, 10, 10, 10);
     layout->setSpacing(10);
 
     // ===== 桌面宠物组 =====
-    m_petGroup = new QGroupBox(tm->get("pet.group", "Desktop Pet"), this);
+    m_petGroup = new QGroupBox(tm->get("pet.group", "Desktop Pet"), scrollContent);
     m_petGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *petLayout = new QVBoxLayout(m_petGroup);
 
@@ -138,6 +155,24 @@ void SettingsPetTab::setupUi() {
 
     layout->addWidget(m_petGroup);
     layout->addStretch();
+
+    // 创建滚动区域
+    // 注意：不调用 setStyleSheet 设置滚动条样式，滚动条样式由全局 QSS 提供。
+    // 若用 setStyleSheet 会禁用子控件（如 QCheckBox）的原生主题绘制，
+    // 导致复选框指示器空白、对勾不显示。
+    petScrollArea = new QScrollArea();
+    petScrollArea->setWidget(scrollContent);
+    petScrollArea->setWidgetResizable(true);
+    petScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    petScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    petScrollArea->setFrameShape(QFrame::NoFrame);
+    // 用 QPalette 设置 viewport 背景色，避免默认背景色与选项卡背景不一致
+    QPalette viewportPal = petScrollArea->palette();
+    viewportPal.setColor(QPalette::Window, StyleManager::getTabWidgetBgColor());
+    petScrollArea->setPalette(viewportPal);
+    petScrollArea->setAutoFillBackground(true);
+
+    tabLayout->addWidget(petScrollArea);
 }
 
 // ============================================================
@@ -174,5 +209,16 @@ void SettingsPetTab::refreshStyles() {
 }
 
 void SettingsPetTab::applyTabBackground(const QColor &color) {
+    // 根容器背景（#petTabBg 选择器）+ 滚动区两处 QPalette 背景同步刷新
     setStyleSheet(QString("#petTabBg { background-color: %1; }").arg(color.name()));
+    if (m_petScrollContent) {
+        QPalette pal = m_petScrollContent->palette();
+        pal.setColor(QPalette::Window, color);
+        m_petScrollContent->setPalette(pal);
+    }
+    if (petScrollArea) {
+        QPalette vpPal = petScrollArea->palette();
+        vpPal.setColor(QPalette::Window, color);
+        petScrollArea->setPalette(vpPal);
+    }
 }
