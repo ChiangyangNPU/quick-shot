@@ -267,8 +267,6 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/CardPreviewPopup.cpp
         src/pet/CardPreviewPopup.h
         src/pet/PetUiScale.h
-        src/widgets/PrecisionSlider.cpp
-        src/widgets/PrecisionSlider.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp

@@ -352,28 +352,3 @@ bool TextAnnotation::hitTest(const QPoint &pos) const {
         return bounds.contains(pos);
 }
 
-void MosaicAnnotation::drawAnnotation(QPainter &painter) const {
-        QRect r = rect();
-        if (r.isEmpty())
-            return;
-
-        painter.save();
-        painter.setPen(Qt::NoPen);
-
-        // 绘制马赛克块
-        for (int x = r.left(); x < r.right(); x += m_blockSize) {
-            for (int y = r.top(); y < r.bottom(); y += m_blockSize) {
-                int w = qMin(m_blockSize, r.right() - x);
-                int h = qMin(m_blockSize, r.bottom() - y);
-                QRect block(x, y, w, h);
-
-                // 使用半透明白色模拟马赛克效果
-                QColor mosaicColor(255, 255, 255, 200);
-                painter.setBrush(mosaicColor);
-                painter.drawRect(block);
-            }
-        }
-
-        painter.restore();
-}
-

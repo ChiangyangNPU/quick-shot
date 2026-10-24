@@ -292,7 +292,7 @@ classDiagram
 
 | 文件 | 说明 |
 |---|---|
-| `src/capture/Annotation.h` | 标注基类 + 8 个子类（Rect/Ellipse/Triangle/Line/Arrow/Pen/Text/Mosaic）+ 控制点/工具枚举。注：`MosaicAnnotation`（Annotation.h:899）已声明但无调用点（死代码），马赛克实际走 `AnnotationManager::mosaicAt` 笔迹方案 |
+| `src/capture/Annotation.h` | 标注基类 + 7 个子类（Rect/Ellipse/Triangle/Line/Arrow/Pen/Text）+ 控制点/工具枚举。马赛克通过 `AnnotationManager::mosaicAt` 笔迹方案实现 |
 | `src/capture/AnnotationManager.h` | 标注管理器（撤销栈、马赛克、橡皮擦、控制点） |
 | `src/capture/AnnotationInteractionHandler.h` | Mixin 交互处理器 + Host 回调接口 |
 | `src/capture/AnnotationInteractionHandler.cpp` | 鼠标事件、绘制调度、标注创建逻辑 |

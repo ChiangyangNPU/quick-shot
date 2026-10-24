@@ -71,10 +71,6 @@ struct PlatformImpl {
     // 音频捕获线程
     std::thread audioThread;
     std::atomic<bool> audioRunning{false};
-
-    // 录制起始时间（音频时间戳同步）
-    // 注：当前赋值后未使用，音频时间戳实际从 0 开始
-    LONGLONG recordingStartTime100ns = 0;
 };
 ```
 

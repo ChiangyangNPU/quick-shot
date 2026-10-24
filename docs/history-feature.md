@@ -768,8 +768,6 @@ flowchart TD
 | `no` | 否 | No |
 
 > **注意**：`yes` 和 `no` 为全局翻译键，用于所有确认对话框的按钮文字，确保所有弹窗中的 Yes/No 按钮都能正确翻译。
->
-> **孤儿键**：zh_CN.json 另有 5 个历史相关翻译键未被代码引用（排序/空列表提示为早期设计残留）：`history.storage.px`、`history.window.noData`、`history.window.sort`、`history.window.sortByTime`、`history.window.sortByType`（zh_CN.json:240、258-260、262），6 个语言文件同步保留。
 
 支持的语言：简体中文（zh_CN）、英文（en_US）、日语（ja_JP）、韩语（ko_KR）、繁体中文台湾（zh_TW）、繁体中文香港（zh_HK）。
 

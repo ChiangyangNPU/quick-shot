@@ -885,48 +885,4 @@ private:
     qreal m_rotation;    ///< 旋转角度（度）
 };
 
-// ============================================================
-// 马赛克标注
-// ============================================================
-
-/**
- * @brief 马赛克标注
- *
- * 在矩形区域内绘制马赛克效果，用于遮挡敏感信息。
- * 马赛克通过将区域分割成小块并取平均颜色实现。
- * @author chiangyang
- */
-class MosaicAnnotation : public Annotation {
-public:
-    /**
-     * @brief 构造函数
-     * @param start 马赛克区域起始点
-     * @param blockSize 马赛克块大小（像素）
-     * @author chiangyang
-     */
-    explicit MosaicAnnotation(const QPoint &start, int blockSize = 10)
-        : Annotation(AnnotationType::Mosaic, start, Qt::white, 1),
-          m_blockSize(blockSize) {}
-
-    /**
-     * @brief 获取马赛克块大小
-     * @return 块大小（像素）
-     * @author chiangyang
-     */
-    int blockSize() const { return m_blockSize; }
-
-protected:
-    /**
-     * @brief 绘制马赛克效果
-     *
-     * 将矩形区域分割成小块，每块填充该区域的平均颜色。
-     * 马赛克效果通过采样和填充实现。
-     * @author chiangyang
-     */
-    void drawAnnotation(QPainter &painter) const override;
-
-private:
-    int m_blockSize;  ///< 马赛克块大小
-};
-
 #endif // ANNOTATION_H

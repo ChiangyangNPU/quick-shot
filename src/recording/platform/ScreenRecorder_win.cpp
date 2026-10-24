@@ -63,8 +63,6 @@ struct PlatformImpl {
     // Single audio thread that handles both system audio and microphone
     std::thread audioThread;
     std::atomic<bool> audioRunning{false};
-
-    LONGLONG recordingStartTime100ns = 0;
 };
 
 /**
@@ -108,18 +106,6 @@ static QString hresultToString( HRESULT hr) {
         msg = QStringLiteral("0x%1 %2").arg(static_cast<quint32>(hr), 8, 16, QLatin1Char('0')).arg(msg);
     }
     return msg;
-}
-
-/**
- * @brief 获取当前时间（100 纳秒单位）
- * @return 当前时间戳
- * @author chiangyang
- */
-static LONGLONG currentTime100ns() {
-    LARGE_INTEGER freq, cnt;
-    QueryPerformanceFrequency(&freq);
-    QueryPerformanceCounter(&cnt);
-    return static_cast<LONGLONG>(cnt.QuadPart * 10000000LL / freq.QuadPart);
 }
 
 /**
@@ -835,9 +821,6 @@ void screenRecorderImplStart(ScreenRecorder::Impl *impl) {
                 return;
             }
         }
-
-        // Record start time for audio timestamp synchronization
-        pImpl->recordingStartTime100ns = currentTime100ns();
 
         // Start mixed audio capture thread (handles both system and mic)
         if (hasAudio && pImpl->audioStreamIndex > 0) {
