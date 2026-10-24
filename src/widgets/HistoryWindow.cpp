@@ -17,8 +17,50 @@
 #include <QMenu>
 #include <QAction>
 #include <QPixmap>
+#include <QPainter>
+#include <QTextOption>
 #include <QScreen>
 #include <QTimer>
+
+namespace {
+/**
+ * @brief 渲染文本记录的卡片图标：白底圆角卡内写内容摘要
+ *
+ * 与晾衣绳文字卡片同风格（白卡 + 深灰自动换行摘要），替代原先的
+ * 系统文件图标（仅一个白纸页图形，文字只能靠下方标题展示）。
+ * @param text 记录文本内容
+ * @param size 目标图标尺寸（取列表 iconSize）
+ * @author chiangyang
+ */
+QIcon makeTextCardIcon(const QString &text, const QSize &size)
+{
+    QPixmap pix(size);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    // 白底圆角卡片 + 浅灰描边（亮色列表背景上保持轮廓可见）
+    const QRectF cardRect = QRectF(pix.rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+    p.setPen(QPen(QColor(0, 0, 0, 40), 1));
+    p.setBrush(QColor(250, 250, 250));
+    p.drawRoundedRect(cardRect, 8, 8);
+
+    // 内容摘要：深灰字、按词边界自动换行、顶部居中（与晾衣绳文字卡片一致）
+    p.setPen(QColor(60, 60, 66));
+    QFont f = p.font();
+    f.setPointSize(9);
+    p.setFont(f);
+    QString summary = text.left(120);
+    if (text.length() > 120) {
+        summary += "…";
+    }
+    QTextOption opt;
+    opt.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+    opt.setAlignment(Qt::AlignTop | Qt::AlignHCenter);
+    p.drawText(cardRect.adjusted(10, 8, -10, -8), summary, opt);
+    return QIcon(pix);
+}
+} // namespace
 
 /**
  * @brief 构造函数
@@ -594,20 +636,17 @@ QListWidgetItem* HistoryWindow::createTextItem(const HistoryItem &item)
     listItem->setData(Qt::UserRole, item.id);
     listItem->setData(Qt::UserRole + 1, static_cast<int>(item.type));
 
-    // 使用标准文件图标
-    QIcon icon = style()->standardIcon(QStyle::SP_FileIcon);
-    listItem->setIcon(icon);
+    // 文本记录渲染成白底文字卡片（与晾衣绳文字卡片同风格）：内容写在卡片内
+    listItem->setIcon(makeTextCardIcon(item.content,
+                                       m_listWidget ? m_listWidget->iconSize()
+                                                    : QSize(200, 150)));
 
-    // 设置文本：内容预览 + 来源 + 时间
-    QString preview = item.content.left(50);
-    if (item.content.length() > 50) {
-        preview += "...";
-    }
+    // 设置文本：来源 + 时间（内容预览已写入卡片图标，不再重复）
     QString source = item.sourceApp.isEmpty()
                          ? tm->get("history.window.unknown", "Unknown")
                          : item.sourceApp;
     QString timeStr = item.timestamp.toString("yyyy-MM-dd HH:mm");
-    listItem->setText(QString("%1\n[%2] %3").arg(preview).arg(source).arg(timeStr));
+    listItem->setText(QString("[%1] %2").arg(source).arg(timeStr));
     listItem->setToolTip(QString("%1 %2\n%3 %4\n%5 %6")
                              .arg(tm->get("history.window.tooltip.content", "Content:"))
                              .arg(item.content)
