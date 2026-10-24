@@ -107,6 +107,11 @@ SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimati
 void SettingsWindow::showEvent(QShowEvent *event) {
     QWidget::showEvent(event);
 
+    // 重新显示时补刷标题栏深色属性：窗口是懒加载单例，关闭仅隐藏、再次打开
+    // 复用同一原生窗口，而 Windows 在隐藏/重显周期会丢失 DWM 深色标题栏属性，
+    // 导致第二次打开标题栏退回浅色（构造函数里只应用过一次，此处必须补刷）
+    StyleManager::applyDarkTitleBar(winId());
+
     // 首次显示时同步设定当前选项卡对应的高度（无动画）
     // 懒加载下窗口是托盘点击瞬间才构造的，构造函数里的 100ms 初始化校准
     // 来不及在 show() 之前执行，此时 Qt 会先按 QTabWidget 所有页面的最大
