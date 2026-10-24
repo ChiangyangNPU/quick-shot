@@ -107,11 +107,9 @@ function Build-Config {
     }
     Write-Host "Using Generator: $Generator"
 
-    # We pass CMAKE_PREFIX_PATH explicitly to ensure it finds the right Qt
-    $QtPrefixPath = "$QtRoot\$QtVersion\$QtKit"
-    
     # Use splatting for arguments
     # Note: Source directory is the project root
+    # $QtPrefixPath 来自脚本开头（环境变量 QUICKSHOT_QT_PREFIX 优先，否则默认 Qt 路径）
     $CMakeArgs = @(
         "-S", $ProjectRoot,
         "-B", $BuildDir,

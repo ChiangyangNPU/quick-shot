@@ -98,7 +98,7 @@ cd deploy\win
 
 脚本自动完成 windeployqt、依赖复制与 zip 打包，产物名 `QuickShot-Release-v{version}-Windows-x64.zip`（与自动更新的命名约定一致）。若 Qt / MinGW / CMake 安装路径与默认不同，修改 `deploy.ps1` 开头 Configuration 段的 `$QtRoot`、`$QtVersion`、`$QtKit`、`$MingwBinDir`、`$CMakeBinDir`、`$NinjaDir`，或设同名环境变量 `QUICKSHOT_QT_PREFIX` / `QUICKSHOT_QT_BIN` / `QUICKSHOT_MINGW_BIN` / `QUICKSHOT_CMAKE_BIN` / `QUICKSHOT_NINJA_DIR`（CI 即采用此方式）。详见 [Windows 打包指南](../deploy/win/README_DEPLOY.md)。
 
-> **注意（坑）**：环境变量只覆盖脚本自身步骤（windeployqt 的 Qt bin 目录、编译器/CMake/Ninja 路径，并把这些目录加入本会话 PATH）。CMake configure 阶段**并不读取** `QUICKSHOT_QT_PREFIX`——`Build-Config` 函数会无条件用脚本内的 `$QtRoot\$QtVersion\$QtKit` 重新生成 `-DCMAKE_PREFIX_PATH`（deploy.ps1 的 `Build-Config` 内，先于 cmake 调用）。CI 之所以能成功：环境变量派生的 Qt bin 目录被加入 PATH 后，`find_package(Qt6)` 经 PATH 兜底找到 Qt（§2.2 的 `C:\Software\Qt` 兜底路径在 CI 上不存在，自动跳过）。因此在本机用 `QUICKSHOT_QT_PREFIX` 指向另一份 Qt 时，若脚本默认的 `C:\Software\Qt\...` 路径真实存在，configure 实际仍会优先用后者——请同时修改脚本开头的 `$QtRoot`/`$QtVersion`/`$QtKit`，或显式传 `-DCMAKE_PREFIX_PATH`。
+> **注意**：环境变量会覆盖脚本开头 Configuration 段的对应路径（`QUICKSHOT_QT_PREFIX` → CMake 的 `-DCMAKE_PREFIX_PATH` 与 `$QtBinDir` 默认值；其余四个 → windeployqt / 编译器 / CMake / Ninja 路径），并把存在的目录加入本会话 PATH。CI 即采用此方式：release.yml 将 `QUICKSHOT_QT_PREFIX` 指向 aqt 安装的 Qt（`QT_ROOT_DIR`）。
 
 ## 6. CI 自动构建
 
