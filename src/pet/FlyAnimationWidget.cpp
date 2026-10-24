@@ -1,4 +1,5 @@
 #include "FlyAnimationWidget.h"
+#include "PetUiScale.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -28,15 +29,26 @@ FlyAnimationWidget::FlyAnimationWidget(const QPixmap &pixmap,
     // 鼠标穿透：动画窗口不拦截任何桌面交互
     setAttribute(Qt::WA_TransparentForMouseEvents);
 
-    // 起始矩形：保持宽高比缩到 kStartMaxEdge 以内，中心与截图区域中心对齐
+    // 尺寸常量按 DPI 缩放（96 逻辑基准）
+    const int startMaxEdge = PetUi::scaled(kStartMaxEdge);
+    const int endSize = PetUi::scaled(kEndSize);
+
+    // 起始矩形：保持宽高比缩到 startMaxEdge 以内，中心与截图区域中心对齐
     QSize startSize = fromGlobalRect.size();
     if (!startSize.isEmpty()) {
-        startSize.scale(kStartMaxEdge, kStartMaxEdge, Qt::KeepAspectRatio);
+        startSize.scale(startMaxEdge, startMaxEdge, Qt::KeepAspectRatio);
     }
     m_startRect = QRect(fromGlobalRect.center() - QPoint(startSize.width() / 2, startSize.height() / 2),
                         startSize);
-    m_endRect = QRect(toGlobalPoint - QPoint(kEndSize / 2, kEndSize / 2),
-                      QSize(kEndSize, kEndSize));
+    m_endRect = QRect(toGlobalPoint - QPoint(endSize / 2, endSize / 2),
+                      QSize(endSize, endSize));
+
+    // 预缩放一次到起始尺寸：避免动画期间每帧对原图做全尺寸平滑缩放（大截图会卡顿）。
+    // 起始矩形与原图等比，缩放后绘制不失真；小于起始尺寸的图保持原样不放大。
+    if (!m_startRect.isEmpty()
+        && (m_pixmap.width() > m_startRect.width() || m_pixmap.height() > m_startRect.height())) {
+        m_pixmap = m_pixmap.scaled(m_startRect.size(), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    }
 }
 
 /**

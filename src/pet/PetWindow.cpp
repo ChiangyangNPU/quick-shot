@@ -39,7 +39,9 @@ PetWindow::PetWindow(QWidget *parent)
  * @author chiangyang
  */
 QPoint PetWindow::mouthCenterGlobal() const {
-    return mapToGlobal(kBodyCenter.toPoint() + QPoint(0, 8));
+    // 窗口边长按 DPI 缩放，96 为绘制基准坐标系，嘴部坐标随之等比放大
+    const qreal s = width() / 96.0;
+    return mapToGlobal(QPointF((kBodyCenter + QPointF(0.0, 8.0)) * s).toPoint());
 }
 
 /**
@@ -74,11 +76,16 @@ void PetWindow::setStarProgress(qreal v) {
  * @author chiangyang
  */
 void PetWindow::openMouth() {
+    // 停掉进行中的嘴部/咀嚼动画，避免两个动画同时驱动 mouthOpen 互相覆写
+    if (m_mouthAnim) {
+        m_mouthAnim->stop(); // DeleteWhenStopped，stop 即销毁
+    }
     QPropertyAnimation *anim = new QPropertyAnimation(this, "mouthOpen", this);
     anim->setDuration(180);
     anim->setStartValue(m_mouthOpen);
     anim->setEndValue(1.0);
     anim->setEasingCurve(QEasingCurve::OutBack);
+    m_mouthAnim = anim;
     anim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
@@ -88,6 +95,10 @@ void PetWindow::openMouth() {
  * @author chiangyang
  */
 void PetWindow::chew() {
+    // 停掉进行中的嘴部/咀嚼动画，避免两个动画同时驱动 mouthOpen 互相覆写
+    if (m_mouthAnim) {
+        m_mouthAnim->stop(); // DeleteWhenStopped，stop 即销毁
+    }
     // 嘴巴咀嚼：先含住食物，再反复张合 3 次（总时长约 870ms）
     auto *mouthSeq = new QSequentialAnimationGroup;
     QPropertyAnimation *closeMouth = new QPropertyAnimation(this, "mouthOpen");
@@ -121,6 +132,7 @@ void PetWindow::chew() {
     group->addAnimation(mouthSeq);
     group->addAnimation(squish);
     connect(group, &QParallelAnimationGroup::finished, this, &PetWindow::sparkleStar);
+    m_mouthAnim = group;
     group->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
@@ -171,6 +183,10 @@ void PetWindow::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
+
+    // 窗口边长按 DPI 缩放（96 为绘制基准坐标系），整体等比放大
+    const qreal s = width() / 96.0;
+    p.scale(s, s);
 
     // 地面软阴影
     p.setPen(Qt::NoPen);
@@ -315,8 +331,10 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
  */
 void PetWindow::mouseMoveEvent(QMouseEvent *event) {
     if (m_pressing && (event->buttons() & Qt::LeftButton)) {
+        // 拖动阈值随 DPI 缩放（物理像素坐标模型下固定 8px 在高分屏上偏小）
+        const int threshold = PetUi::scaled(kDragThreshold);
         if (!m_dragging
-            && (event->globalPosition().toPoint() - m_pressGlobalPos).manhattanLength() > kDragThreshold) {
+            && (event->globalPosition().toPoint() - m_pressGlobalPos).manhattanLength() > threshold) {
             m_dragging = true;
             setCursor(Qt::ClosedHandCursor);
         }

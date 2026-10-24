@@ -1,16 +1,11 @@
 #include "ClotheslineWindow.h"
 #include "PetWindow.h"
+#include "CardPreviewPopup.h"
 #include "DesktopPetManager.h"
+#include "PetUiScale.h"
 #include "../history/HistoryManager.h"
+#include "../history/ClipboardMonitor.h"
 #include "../core/TranslationManager.h"
-#include "../core/StyleManager.h"
-#include "../widgets/PinWindow.h"
-#include "../widgets/TranslateOverlayWindow.h"
-#include "../ocr/OcrEngine.h"
-#include "../ocr/OcrAsyncHelper.h"
-#include "../ocr/OcrResultDialog.h"
-#include "../translate/TranslateService.h"
-#include "../translate/TranslateEngine.h"
 #include "../log/Logger.h"
 
 #include <QPainter>
@@ -24,20 +19,14 @@
 #include <QTimer>
 #include <QHash>
 #include <QTextOption>
-#include <QFontMetrics>
 #include <QCursor>
-#include <QWheelEvent>
 #include <QWindow>
-#include <QMenu>
-#include <QAction>
-#include <QMessageBox>
-#include <QContextMenuEvent>
 #include <QtMath>
 
 namespace {
 // 最多展示的卡片数量
 constexpr int kMaxCards = 12;
-// 卡片尺寸与排布
+// 卡片尺寸与排布（96 逻辑基准，绘制/命中时按 DPI 系数缩放）
 constexpr int kCardW = 104;
 constexpr int kCardH = 96;
 constexpr int kCardGap = 16;
@@ -45,6 +34,7 @@ constexpr int kCardGap = 16;
 constexpr int kRopeY = 30;
 constexpr int kRopeSag = 16;    // 悬垂深度
 constexpr int kPinLen = 24;     // 挂绳长度（绳子锚点到卡片顶）
+constexpr int kRopeMarginX = 12; // 绳子两端距窗口左右边距
 // 窗口默认高度：绳子最低点 + 挂绳 + 卡片 + 底部边距，保证卡片不超出窗口下边界
 constexpr int kBottomMargin = 16;
 constexpr int kWindowH = kRopeY + kRopeSag + kPinLen + kCardH + kBottomMargin;
@@ -58,320 +48,9 @@ constexpr int kMinH = kRopeY + kRopeSag + kPinLen + kCardH + 8;
 // 动画
 constexpr int kTickMs = 33;
 constexpr qreal kSwayDeg = 3.0; // 摆动幅度（度）
-// 悬停放大预览
-constexpr int kPreviewMaxW = 1920; // 预览内容最大宽度
-constexpr int kPreviewMaxH = 1440; // 预览内容最大高度
-constexpr int kPreviewPad = 10;   // 预览卡片内边距
-constexpr qreal kZoomStep = 1.15; // 滚轮缩放步进
-constexpr qreal kZoomMin = 0.2;   // 最小缩放倍数
-constexpr qreal kZoomMax = 10.0;  // 最大缩放倍数
+// 预览原图缓存上限（超出后整体清空，防止长时间驻留占用过多内存）
+constexpr int kFullImageCacheLimit = 24;
 }
-
-/**
- * @brief 卡片悬停放大预览弹窗
- *
- * 鼠标悬停在晾衣绳卡片上时，以晾衣绳窗口中心为基准居中弹出：
- * - 图片卡片：加载原图等比放大（不超过 kPreviewMaxW × kPreviewMaxH，按 DPR 输出保证清晰）
- * - 文本卡片：自动换行显示完整文本（超出最大高度时截断）
- * - 鼠标移到预览图上时滚轮可放大/缩小（类似贴图窗口），移出预览即消失
- * - 右键预览弹出菜单（参考贴图窗口）：复制/标注/文字识别/翻译（文本卡片仅复制/翻译），
- *   点击菜单项后预览消失并执行对应功能
- * @author chiangyang
- */
-class CardPreviewPopup : public QWidget {
-public:
-    /**
-     * @brief 构造函数：无边框置顶工具窗，不抢焦点
-     * @author chiangyang
-     */
-    explicit CardPreviewPopup(QWidget *parent = nullptr)
-        : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool) {
-        setAttribute(Qt::WA_TranslucentBackground);
-        setAttribute(Qt::WA_ShowWithoutActivating);
-        hide();
-    }
-
-    /**
-     * @brief 显示图片预览（等比放大）
-     * @param pix 原图/缩略图
-     * @param centerGlobal 期望中心的全局坐标（晾衣绳窗口中心）
-     * @author chiangyang
-     */
-    void showImage(const QPixmap &pix, const QPoint &centerGlobal) {
-        if (pix.isNull()) {
-            hide();
-            return;
-        }
-        m_isImage = true;
-        m_text.clear();
-        m_original = pix; // 保留原图，缩放始终从原图出图保证清晰
-        m_zoom = 1.0;
-        m_centerGlobal = centerGlobal;
-        m_baseContent = pix.size().scaled(effectiveMaxSize(centerGlobal), Qt::KeepAspectRatio);
-        renderImage();
-    }
-
-    /**
-     * @brief 显示文本预览（自动换行，限宽限高）
-     * @param text 文本内容
-     * @param centerGlobal 期望中心的全局坐标（晾衣绳窗口中心）
-     * @author chiangyang
-     */
-    void showText(const QString &text, const QPoint &centerGlobal) {
-        if (text.isEmpty()) {
-            hide();
-            return;
-        }
-        m_isImage = false;
-        m_original = QPixmap();
-        m_pix = QPixmap();
-        m_text = text;
-        m_zoom = 1.0;
-        m_centerGlobal = centerGlobal;
-        m_baseFontPt = font().pointSizeF();
-        m_wrapWidth = effectiveMaxSize(centerGlobal).width();
-        renderText();
-    }
-
-protected:
-    /**
-     * @brief 滚轮缩放预览（类似贴图窗口）：以窗口中心为基准放大/缩小，内容保持清晰
-     * @author chiangyang
-     */
-    void wheelEvent(QWheelEvent *event) override {
-        const qreal factor = event->angleDelta().y() > 0 ? kZoomStep : 1.0 / kZoomStep;
-        m_zoom = qBound(kZoomMin, m_zoom * factor, kZoomMax);
-        if (m_isImage) {
-            renderImage();
-        } else {
-            renderText();
-        }
-        event->accept();
-    }
-
-    /**
-     * @brief 鼠标移出预览：预览消失（右键菜单打开期间除外，保持预览可见）
-     * @author chiangyang
-     */
-    void leaveEvent(QEvent *event) override {
-        if (!m_menuOpen) {
-            hide();
-        }
-        QWidget::leaveEvent(event);
-    }
-
-    /**
-     * @brief 右键菜单（参考贴图窗口）：复制/标注/文字识别/翻译
-     *
-     * 菜单弹出期间预览保持可见；仅当真正点击菜单项后才隐藏预览并执行对应功能，
-     * 菜单被 Esc/点击空白取消时预览保留：
-     * - 复制：图片写剪贴板 / 文本写剪贴板
-     * - 标注：用原图创建贴图窗口并直接进入标注模式
-     * - 文字识别：异步 OCR 后弹出识别结果对话框
-     * - 翻译：图片走 OCR→批量翻译叠加窗口；文本直接调用翻译服务并弹出译文
-     * @param event 右键菜单事件
-     * @author chiangyang
-     */
-    void contextMenuEvent(QContextMenuEvent *event) override {
-        QWidget *host = parentWidget();             // 晾衣绳窗口，作为对话框父级
-        const QPixmap image = m_original;           // 拷贝一份，预览隐藏/切换内容后仍可用
-        const QString text = m_text;
-        const bool isImage = m_isImage && !image.isNull();
-        const QPoint centerGlobal = m_centerGlobal;
-        if (!isImage && text.isEmpty()) {
-            return;
-        }
-
-        QMenu menu(host);
-        TranslationManager *tm = TranslationManager::instance();
-        menu.setWindowFlags(Qt::Popup | Qt::FramelessWindowHint);
-        menu.setAttribute(Qt::WA_TranslucentBackground);
-        menu.setStyleSheet(StyleManager::getMenuStyle());
-
-        QAction *copyAction = menu.addAction(tm->get("pinwindow.copy", "Copy"));
-        QAction *annotateAction = nullptr;
-        QAction *ocrAction = nullptr;
-        if (isImage) {
-            annotateAction = menu.addAction(tm->get("pinwindow.annotate", "Annotate"));
-            ocrAction = menu.addAction(tm->get("ocr.button"));
-        }
-        QAction *translateAction = menu.addAction(tm->get("translate.button"));
-
-        // 菜单打开期间预览保持可见；仅选中菜单项后才隐藏预览，取消菜单则保留
-        m_menuOpen = true;
-        QAction *chosen = menu.exec(event->globalPos());
-        m_menuOpen = false;
-        if (!chosen) {
-            return;
-        }
-        hide();
-
-        if (chosen == copyAction) {
-            QClipboard *cb = QGuiApplication::clipboard();
-            if (isImage) {
-                cb->setPixmap(image);
-            } else {
-                cb->setText(text);
-            }
-            LOG_INFO("ClotheslineWindow: preview content copied from context menu");
-        } else if (chosen == annotateAction) {
-            // 标注需要稳定窗口：用原图创建贴图并直接进入标注模式
-            auto *pin = new PinWindow(image);
-            pin->show();
-            if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
-                const QRect g = s->availableGeometry();
-                pin->move(g.center() - pin->rect().center());
-            }
-            pin->enterAnnotationMode();
-            LOG_INFO("ClotheslineWindow: preview annotate -> pin window with annotation mode");
-        } else if (chosen == ocrAction) {
-            OcrAsync::run(host, image.toImage(), QRect(), false,
-                          [host, centerGlobal](const OcrEngine::OcrResult &result) {
-                auto *dialog = new OcrResultDialog(result);
-                dialog->adjustSize();
-                if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
-                    dialog->move(s->availableGeometry().center() - dialog->rect().center());
-                }
-                dialog->show();
-            });
-        } else if (chosen == translateAction) {
-            if (!TranslateService::checkEnabledAndPrivacy(host)) {
-                return;
-            }
-            if (isImage) {
-                // 图片：OCR 识别 → 批量翻译 → 译文叠加窗口（与贴图窗口一致）
-                OcrAsync::run(host, image.toImage(), QRect(), true,
-                              [host, image, centerGlobal](const OcrEngine::OcrResult &result) {
-                    const QPoint pos = centerGlobal - QPoint(image.width() / 2, image.height() / 2);
-                    TranslateOverlayWindow::translateAndShow(
-                        host, image, result.texts, result.polygons, pos, QRect(pos, image.size()));
-                });
-            } else {
-                // 文本：直接调用翻译服务，译文复用识别结果对话框展示
-                TranslateService *ts = TranslateService::instance();
-                connect(ts, &TranslateService::finished, host,
-                        [centerGlobal](const QString &, const QString &translated) {
-                    OcrEngine::OcrResult r;
-                    r.texts = {translated};
-                    auto *dialog = new OcrResultDialog(r);
-                    dialog->adjustSize();
-                    if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
-                        dialog->move(s->availableGeometry().center() - dialog->rect().center());
-                    }
-                    dialog->show();
-                }, Qt::SingleShotConnection);
-                connect(ts, &TranslateService::failed, host,
-                        [host](TranslateEngine::TranslateError code, const QString &) {
-                    QMessageBox::warning(host, QString(), TranslateService::errorMessage(code));
-                }, Qt::SingleShotConnection);
-                ts->translate(text);
-            }
-        }
-    }
-
-    /**
-     * @brief 绘制预览卡片：白底圆角 + 图片/文本内容
-     * @author chiangyang
-     */
-    void paintEvent(QPaintEvent *) override {
-        QPainter p(this);
-        p.setRenderHint(QPainter::Antialiasing);
-        p.setRenderHint(QPainter::SmoothPixmapTransform);
-        p.setPen(QPen(QColor(0, 0, 0, 40), 1));
-        p.setBrush(Qt::white);
-        p.drawRoundedRect(rect().adjusted(0, 0, -1, -1), 10, 10);
-        const QRect contentRect = rect().adjusted(kPreviewPad, kPreviewPad, -kPreviewPad, -kPreviewPad);
-        if (m_isImage) {
-            if (!m_pix.isNull()) {
-                p.drawPixmap(contentRect.topLeft(), m_pix);
-            }
-        } else {
-            QFont f = font();
-            f.setPointSizeF(m_baseFontPt * m_zoom);
-            p.setFont(f);
-            p.setPen(QColor(60, 60, 60));
-            p.drawText(contentRect,
-                       Qt::AlignHCenter | Qt::AlignVCenter | Qt::TextWordWrap, m_text);
-        }
-    }
-
-private:
-    /**
-     * @brief 预览内容有效最大尺寸：kPreviewMaxW×kPreviewMaxH 夹取到所在屏幕
-     *        可用区域（四边各留 20px 边距），避免预览超出屏幕
-     * @author chiangyang
-     */
-    QSize effectiveMaxSize(const QPoint &centerGlobal) const {
-        QSize maxSize(kPreviewMaxW, kPreviewMaxH);
-        if (QScreen *screen = QGuiApplication::screenAt(centerGlobal)) {
-            maxSize = maxSize.boundedTo(screen->availableGeometry().size() - QSize(40, 40));
-        }
-        return maxSize;
-    }
-
-    /**
-     * @brief 以期望中心定位并显示（夹取到所在屏幕可用区域内）
-     * @author chiangyang
-     */
-    void place(const QPoint &centerGlobal, const QSize &windowSize) {
-        setFixedSize(windowSize);
-        QPoint pos = centerGlobal - QPoint(windowSize.width() / 2, windowSize.height() / 2);
-        if (QScreen *screen = QGuiApplication::screenAt(centerGlobal)) {
-            const QRect sg = screen->availableGeometry();
-            // 窗口大于屏幕时 qBound 上下界会反转，先夹取下界保证安全
-            pos.setX(qBound(sg.left(), pos.x(), qMax(sg.left(), sg.right() - windowSize.width() + 1)));
-            pos.setY(qBound(sg.top(), pos.y(), qMax(sg.top(), sg.bottom() - windowSize.height() + 1)));
-        }
-        move(pos);
-        show();
-        raise();
-    }
-
-    /**
-     * @brief 按当前缩放倍数渲染图片：从原图按目标尺寸出图（DPR 物理像素），保持清晰
-     * @author chiangyang
-     */
-    void renderImage() {
-        const QSizeF logical = QSizeF(m_baseContent) * m_zoom;
-        const qreal dpr = devicePixelRatioF();
-        m_pix = m_original.scaled((logical * dpr).toSize(),
-                                  Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        m_pix.setDevicePixelRatio(dpr);
-        place(m_centerGlobal, logical.toSize() + QSize(kPreviewPad * 2, kPreviewPad * 2));
-        update();
-    }
-
-    /**
-     * @brief 按当前缩放倍数渲染文本：字号随缩放变化重新排版（文字始终清晰），
-     *        窗口尺寸夹取到屏幕可用区域
-     * @author chiangyang
-     */
-    void renderText() {
-        QFont f = font();
-        f.setPointSizeF(m_baseFontPt * m_zoom);
-        const QFontMetrics fm(f);
-        const QRect br = fm.boundingRect(QRect(0, 0, m_wrapWidth, 100000),
-                                         Qt::AlignHCenter | Qt::AlignVCenter | Qt::TextWordWrap,
-                                         m_text);
-        const QSize content(qMin(br.width(), m_wrapWidth), br.height());
-        const QSize winSize = (content + QSize(kPreviewPad * 2, kPreviewPad * 2))
-                                  .boundedTo(effectiveMaxSize(m_centerGlobal)
-                                             + QSize(kPreviewPad * 2, kPreviewPad * 2));
-        place(m_centerGlobal, winSize);
-        update();
-    }
-
-    QPixmap m_original;         ///< 原图（图片模式的缩放源，保证缩放后清晰）
-    QPixmap m_pix;              ///< 当前缩放后待绘制的图
-    QString m_text;             ///< 文本预览内容
-    bool m_isImage = true;      ///< 当前是图片预览还是文本预览
-    QSize m_baseContent;        ///< zoom=1 时图片内容的逻辑尺寸
-    qreal m_zoom = 1.0;         ///< 当前缩放倍数
-    qreal m_baseFontPt = 12.0;  ///< 文本基准字号（zoom=1）
-    int m_wrapWidth = 460;      ///< 文本换行宽度
-    QPoint m_centerGlobal;      ///< 居中基准（晾衣绳窗口中心）
-    bool m_menuOpen = false;    ///< 右键菜单是否打开中（打开期间 leaveEvent 不隐藏预览）
-};
 
 /**
  * @brief 构造函数
@@ -383,7 +62,8 @@ ClotheslineWindow::ClotheslineWindow(QWidget *parent)
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_TranslucentBackground);
     setFocusPolicy(Qt::StrongFocus);
-    setMinimumSize(kMinW, kMinH);
+    m_dpiScale = PetUi::scale();
+    setMinimumSize(sc(kMinW), sc(kMinH));
     // 需要悬停光标反馈（调整区/卡片/空白区域不同光标），开启鼠标追踪
     setMouseTracking(true);
 
@@ -411,7 +91,7 @@ void ClotheslineWindow::showFullWidth() {
     QScreen *screen = QGuiApplication::primaryScreen();
     const QRect screenGeo = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
     setGeometry(screenGeo.left(), screenGeo.top() + screenGeo.height() / 4,
-                screenGeo.width(), kWindowH);
+                screenGeo.width(), sc(kWindowH));
 
     reload();
 
@@ -443,7 +123,7 @@ void ClotheslineWindow::reload() {
     }
 
     m_cards.clear();
-    m_fullImageCache.clear();
+    // 预览原图缓存保留（有界，updateHoverPreview 中控制上限），避免频繁刷新后反复读盘
     hidePreview(); // 卡片重建后悬停态失效
     for (const HistoryItem &item : items) {
         Card c;
@@ -476,14 +156,24 @@ void ClotheslineWindow::layoutCards() {
     if (cardCount <= 0) {
         return;
     }
-    const qreal totalW = cardCount * kCardW + (cardCount - 1) * kCardGap;
+    const int cardW = sc(kCardW);
+    const int gap = sc(kCardGap);
+    // 窗口放不下全部卡片时只布置能放下的部分，避免两端卡片被裁掉且无法点击
+    const int maxFit = qBound(1, (width() + gap) / (cardW + gap), cardCount);
+    const qreal totalW = maxFit * cardW + (maxFit - 1) * gap;
     qreal x = (width() - totalW) / 2.0;
     for (int i = 0; i < cardCount; ++i) {
         Card &c = m_cards[i];
-        const qreal cx = x + kCardW / 2.0;
+        if (i >= maxFit) {
+            // 放不下的卡片不布置（空矩形不参与绘制/命中/悬停）
+            c.rect = QRect();
+            c.anchor = QPointF();
+            continue;
+        }
+        const qreal cx = x + cardW / 2.0;
         c.anchor = QPointF(cx, ropeYAt(cx));
-        c.rect = QRect(int(x), int(c.anchor.y() + kPinLen), kCardW, kCardH);
-        x += kCardW + kCardGap;
+        c.rect = QRect(int(x), int(c.anchor.y() + sc(kPinLen)), cardW, sc(kCardH));
+        x += cardW + gap;
     }
 }
 
@@ -492,12 +182,17 @@ void ClotheslineWindow::layoutCards() {
  * @author chiangyang
  */
 qreal ClotheslineWindow::ropeYAt(qreal x) const {
-    const qreal x0 = 12.0, x1 = width() - 12.0;
+    const qreal x0 = sc(kRopeMarginX), x1 = width() - sc(kRopeMarginX);
+    const qreal ropeY = sc(kRopeY);
+    const qreal sag = sc(kRopeSag);
+    if (x1 <= x0) {
+        return ropeY;
+    }
     const qreal t = qBound(0.0, (x - x0) / (x1 - x0), 1.0);
-    // P0=(x0,kRopeY) C=(mid,kRopeY+kRopeSag*2) P1=(x1,kRopeY)
-    const qreal y = (1 - t) * (1 - t) * kRopeY
-                  + 2 * (1 - t) * t * (kRopeY + kRopeSag * 2)
-                  + t * t * kRopeY;
+    // P0=(x0,ropeY) C=(mid,ropeY+sag*2) P1=(x1,ropeY)
+    const qreal y = (1 - t) * (1 - t) * ropeY
+                  + 2 * (1 - t) * t * (ropeY + sag * 2)
+                  + t * t * ropeY;
     return y;
 }
 
@@ -535,11 +230,14 @@ void ClotheslineWindow::activateCard(int index) {
             clipboard->setPixmap(pix);
         }
     } else {
+        // 文本已在历史中，标记为已记录，避免复制动作本身再生成一条重复记录
+        ClipboardMonitor::instance()->markTextAsRecorded(c.text);
         clipboard->setText(c.text);
     }
     LOG_INFO(QString("ClotheslineWindow: copied history item id=%1 to clipboard").arg(c.id));
 
-    m_bounceIndex = index;
+    // 按记录 ID 标记弹跳卡片：若复制触发历史刷新导致卡片重排，反馈仍落在原卡片上
+    m_bounceId = c.id;
     m_bounceTimer.start();
 }
 
@@ -569,82 +267,88 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
         p.drawText(rect(), Qt::AlignCenter,
                    TranslationManager::instance()->get("pet.empty", "No history yet"));
     } else {
+        // 晾衣绳（悬垂曲线 + 两端木桩感端点）
+        const int ropeY = sc(kRopeY);
+        const int sag = sc(kRopeSag);
+        const int marginX = sc(kRopeMarginX);
+        QPainterPath rope;
+        rope.moveTo(marginX, ropeY);
+        rope.quadTo(width() / 2.0, ropeY + sag * 2.0, width() - marginX, ropeY);
+        p.setPen(QPen(QColor(214, 178, 128), 2.5 * m_dpiScale, Qt::SolidLine, Qt::RoundCap));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(rope);
 
-    // 晾衣绳（悬垂曲线 + 两端木桩感端点）
-    QPainterPath rope;
-    rope.moveTo(12, kRopeY);
-    rope.quadTo(width() / 2.0, kRopeY + kRopeSag * 2, width() - 12, kRopeY);
-    p.setPen(QPen(QColor(214, 178, 128), 2.5, Qt::SolidLine, Qt::RoundCap));
-    p.setBrush(Qt::NoBrush);
-    p.drawPath(rope);
+        // 卡片
+        for (int i = 0; i < m_cards.size(); ++i) {
+            const Card &c = m_cards[i];
+            if (c.rect.isEmpty()) {
+                continue; // 放不下的卡片未布置，不绘制
+            }
+            // smoothstep 入场缓动
+            const qreal t = c.entrance;
+            const qreal eased = t * t * (3 - 2 * t);
 
-    // 卡片
-    for (int i = 0; i < m_cards.size(); ++i) {
-        const Card &c = m_cards[i];
-        // smoothstep 入场缓动
-        const qreal t = c.entrance;
-        const qreal eased = t * t * (3 - 2 * t);
+            p.save();
+            p.setOpacity(eased);
 
-        p.save();
-        p.setOpacity(eased);
+            // 摆动：绕锚点旋转
+            const qreal angle = kSwayDeg * qSin(m_phase + i * 0.7);
+            p.translate(c.anchor);
+            p.rotate(angle);
+            p.translate(-c.anchor);
+            // 入场下落偏移
+            p.translate(0, (1 - eased) * -sc(24));
 
-        // 摆动：绕锚点旋转
-        const qreal angle = kSwayDeg * qSin(m_phase + i * 0.7);
-        p.translate(c.anchor);
-        p.rotate(angle);
-        p.translate(-c.anchor);
-        // 入场下落偏移
-        p.translate(0, (1 - eased) * -24);
+            // 点击弹跳：绕卡片中心缩放（按记录 ID 标记，卡片重建后仍对准原卡片）
+            if (c.id == m_bounceId) {
+                const qreal b = m_bounceTimer.elapsed() / 260.0;
+                if (b >= 1.0) {
+                    m_bounceId = -1;
+                } else {
+                    const qreal s = 1.0 + 0.18 * qSin(b * M_PI);
+                    p.translate(c.rect.center());
+                    p.scale(s, s);
+                    p.translate(-c.rect.center());
+                }
+            }
 
-        // 点击弹跳：绕卡片中心缩放
-        if (i == m_bounceIndex) {
-            const qreal b = m_bounceTimer.elapsed() / 260.0;
-            if (b >= 1.0) {
-                m_bounceIndex = -1;
+            // 衣夹
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(120, 84, 52));
+            p.drawRoundedRect(QRectF(c.anchor.x() - sc(3), c.anchor.y() - sc(2),
+                                     sc(6), sc(kPinLen + 4)), 2, 2);
+
+            // 卡纸
+            QPainterPath cardPath;
+            cardPath.addRoundedRect(c.rect, 8, 8);
+            p.setPen(QPen(QColor(255, 255, 255, 60), 1));
+            p.setBrush(QColor(250, 250, 250, 235));
+            p.drawPath(cardPath);
+
+            const QRectF content = QRectF(c.rect).adjusted(sc(6), sc(6), -sc(6), -sc(6));
+            if (c.isImage) {
+                if (!c.thumb.isNull()) {
+                    p.setClipPath(cardPath);
+                    const QSize scaled = c.thumb.size().scaled(content.size().toSize(), Qt::KeepAspectRatio);
+                    const QRectF target(QPointF(c.rect.center().x() - scaled.width() / 2.0,
+                                                c.rect.center().y() - scaled.height() / 2.0),
+                                        scaled);
+                    p.drawPixmap(target.toRect(), c.thumb);
+                    p.setClipping(false);
+                }
             } else {
-                const qreal s = 1.0 + 0.18 * qSin(b * M_PI);
-                p.translate(c.rect.center());
-                p.scale(s, s);
-                p.translate(-c.rect.center());
+                // 文本卡片：前 3 行摘要
+                p.setPen(QColor(60, 60, 66));
+                QFont f = p.font();
+                f.setPointSize(8);
+                p.setFont(f);
+                QTextOption opt;
+                opt.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
+                opt.setAlignment(Qt::AlignTop | Qt::AlignHCenter);
+                p.drawText(content, c.text.left(120), opt);
             }
-        }
 
-        // 衣夹
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(120, 84, 52));
-        p.drawRoundedRect(QRectF(c.anchor.x() - 3, c.anchor.y() - 2, 6, kPinLen + 4), 2, 2);
-
-        // 卡纸
-        QPainterPath cardPath;
-        cardPath.addRoundedRect(c.rect, 8, 8);
-        p.setPen(QPen(QColor(255, 255, 255, 60), 1));
-        p.setBrush(QColor(250, 250, 250, 235));
-        p.drawPath(cardPath);
-
-        const QRectF content = QRectF(c.rect).adjusted(6, 6, -6, -6);
-        if (c.isImage) {
-            if (!c.thumb.isNull()) {
-                p.setClipPath(cardPath);
-                const QSize scaled = c.thumb.size().scaled(content.size().toSize(), Qt::KeepAspectRatio);
-                const QRectF target(QPointF(c.rect.center().x() - scaled.width() / 2.0,
-                                            c.rect.center().y() - scaled.height() / 2.0),
-                                    scaled);
-                p.drawPixmap(target.toRect(), c.thumb);
-                p.setClipping(false);
-            }
-        } else {
-            // 文本卡片：前 3 行摘要
-            p.setPen(QColor(60, 60, 66));
-            QFont f = p.font();
-            f.setPointSize(8);
-            p.setFont(f);
-            QTextOption opt;
-            opt.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-            opt.setAlignment(Qt::AlignTop | Qt::AlignHCenter);
-            p.drawText(content, c.text.left(120), opt);
-        }
-
-        p.restore();
+            p.restore();
         }
     }
 
@@ -653,9 +357,9 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
     p.setPen(Qt::NoPen);
     p.setBrush(m_closeHovered ? QColor(232, 17, 35, 200) : QColor(255, 255, 255, 50));
     p.drawEllipse(btn);
-    p.setPen(QPen(Qt::white, 2, Qt::SolidLine, Qt::RoundCap));
+    p.setPen(QPen(Qt::white, 2 * m_dpiScale, Qt::SolidLine, Qt::RoundCap));
     const QPointF bc = btn.center();
-    constexpr qreal r = 5.0;
+    const qreal r = sc(5);
     p.drawLine(QPointF(bc.x() - r, bc.y() - r), QPointF(bc.x() + r, bc.y() + r));
     p.drawLine(QPointF(bc.x() - r, bc.y() + r), QPointF(bc.x() + r, bc.y() - r));
 }
@@ -666,18 +370,20 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
  */
 ClotheslineWindow::ResizeMode ClotheslineWindow::hitTestResize(const QPoint &pos) const {
     const int w = width(), h = height();
-    const bool left = pos.x() <= kCornerSize;
-    const bool right = pos.x() >= w - kCornerSize;
-    const bool topCorner = pos.y() <= kCornerSize;
-    const bool bottomCorner = pos.y() >= h - kCornerSize;
+    const int corner = sc(kCornerSize);
+    const int margin = sc(kResizeMargin);
+    const bool left = pos.x() <= corner;
+    const bool right = pos.x() >= w - corner;
+    const bool topCorner = pos.y() <= corner;
+    const bool bottomCorner = pos.y() >= h - corner;
     // 角落优先
     if (topCorner && left) return ResizeTopLeft;
     if (topCorner && right) return ResizeTopRight;
     if (bottomCorner && left) return ResizeBottomLeft;
     if (bottomCorner && right) return ResizeBottomRight;
     // 上/下边界
-    if (pos.y() <= kResizeMargin) return ResizeTop;
-    if (pos.y() >= h - kResizeMargin) return ResizeBottom;
+    if (pos.y() <= margin) return ResizeTop;
+    if (pos.y() >= h - margin) return ResizeBottom;
     return ResizeNone;
 }
 
@@ -686,7 +392,8 @@ ClotheslineWindow::ResizeMode ClotheslineWindow::hitTestResize(const QPoint &pos
  * @author chiangyang
  */
 QRect ClotheslineWindow::closeButtonRect() const {
-    return QRect(width() - kCloseBtnSize - 8, 6, kCloseBtnSize, kCloseBtnSize);
+    const int size = sc(kCloseBtnSize);
+    return QRect(width() - size - sc(8), sc(6), size, size);
 }
 
 /**
@@ -757,11 +464,15 @@ void ClotheslineWindow::updateHoverPreview(const QPoint &pos) {
     const Card &c = m_cards[idx];
     const QPoint center = mapToGlobal(QPoint(width() / 2, height() / 2));
     if (c.isImage) {
-        // 预览加载原图（缩略图放大会模糊），按记录 ID 缓存避免重复读盘
+        // 预览加载原图（缩略图放大会模糊），按记录 ID 缓存避免重复读盘；
+        // 缓存有界（有界清空策略），历史频繁刷新时也尽量命中
         QPixmap full = m_fullImageCache.value(c.id);
         if (full.isNull()) {
             full = QPixmap(c.text); // 图片卡片的 text 存原图路径
             if (!full.isNull()) {
+                if (m_fullImageCache.size() >= kFullImageCacheLimit) {
+                    m_fullImageCache.clear();
+                }
                 m_fullImageCache.insert(c.id, full);
             }
         }
@@ -841,13 +552,13 @@ void ClotheslineWindow::mouseMoveEvent(QMouseEvent *event) {
         const bool fromLeft = (m_resizeMode == ResizeTopLeft || m_resizeMode == ResizeBottomLeft);
         const bool fromTop = (m_resizeMode == ResizeTopLeft || m_resizeMode == ResizeTopRight
                               || m_resizeMode == ResizeTop);
-        if (geo.width() < kMinW) {
-            if (fromLeft) geo.setLeft(geo.right() - kMinW);
-            else geo.setRight(geo.left() + kMinW);
+        if (geo.width() < sc(kMinW)) {
+            if (fromLeft) geo.setLeft(geo.right() - sc(kMinW));
+            else geo.setRight(geo.left() + sc(kMinW));
         }
-        if (geo.height() < kMinH) {
-            if (fromTop) geo.setTop(geo.bottom() - kMinH);
-            else geo.setBottom(geo.top() + kMinH);
+        if (geo.height() < sc(kMinH)) {
+            if (fromTop) geo.setTop(geo.bottom() - sc(kMinH));
+            else geo.setBottom(geo.top() + sc(kMinH));
         }
         setGeometry(geo);
         return;

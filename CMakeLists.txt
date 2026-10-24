@@ -264,6 +264,9 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/FlyAnimationWidget.h
         src/pet/ClotheslineWindow.cpp
         src/pet/ClotheslineWindow.h
+        src/pet/CardPreviewPopup.cpp
+        src/pet/CardPreviewPopup.h
+        src/pet/PetUiScale.h
         src/widgets/PrecisionSlider.cpp
         src/widgets/PrecisionSlider.h
         src/widgets/MessageBox.cpp

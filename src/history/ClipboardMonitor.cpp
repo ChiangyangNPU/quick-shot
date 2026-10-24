@@ -16,6 +16,29 @@
 #include <objc/objc.h>
 #endif
 
+ClipboardMonitor* ClipboardMonitor::s_instance = nullptr;
+
+/**
+ * @brief 获取单例实例
+ * @author chiangyang
+ */
+ClipboardMonitor* ClipboardMonitor::instance()
+{
+    if (!s_instance) {
+        s_instance = new ClipboardMonitor();
+    }
+    return s_instance;
+}
+
+/**
+ * @brief 标记文本为已记录
+ * @author chiangyang
+ */
+void ClipboardMonitor::markTextAsRecorded(const QString &text)
+{
+    m_lastText = text;
+}
+
 /**
  * @brief 构造函数
  * @param parent 父对象

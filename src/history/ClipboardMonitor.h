@@ -20,11 +20,23 @@ class ClipboardMonitor : public QObject {
 
 public:
     /**
-     * @brief 构造函数
-     * @param parent 父对象
+     * @brief 获取单例实例
+     * @return ClipboardMonitor 实例指针
      * @author chiangyang
      */
-    explicit ClipboardMonitor(QObject *parent = nullptr);
+    static ClipboardMonitor* instance();
+
+    /**
+     * @brief 标记文本为已记录
+     *
+     * 将 text 写入内部去重快照：随后剪贴板再次出现相同文本时，
+     * onClipboardChanged 会按"与上次记录相同"跳过，不再写入历史。
+     * 供应用内部主动复制历史中已有文本的入口（如晾衣绳卡片点击）调用，
+     * 避免复制动作本身生成一条重复的历史记录。
+     * @param text 即将复制到剪贴板的文本
+     * @author chiangyang
+     */
+    void markTextAsRecorded(const QString &text);
 
     /**
      * @brief 启动剪贴板监听
@@ -68,6 +80,15 @@ private slots:
 #endif
 
 private:
+    /**
+     * @brief 构造函数（私有，单例模式）
+     * @param parent 父对象
+     * @author chiangyang
+     */
+    explicit ClipboardMonitor(QObject *parent = nullptr);
+
+    static ClipboardMonitor* s_instance;    ///< 单例实例
+
     /**
      * @brief 获取剪贴板文本内容
      * @return 文本内容

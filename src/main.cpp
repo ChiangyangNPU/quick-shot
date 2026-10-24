@@ -171,8 +171,7 @@ int main(int argc, char *argv[]) {
     DesktopPetManager::instance()->initFromConfig();
 
     // 启动剪贴板监控
-    ClipboardMonitor *clipboardMonitor = new ClipboardMonitor();
-    clipboardMonitor->start();
+    ClipboardMonitor::instance()->start();
     LOG_INFO("Clipboard monitor started");
 
     // 创建历史记录查看窗口

@@ -142,8 +142,10 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         // History
         { "history/thumbnailSize", 200 },
 
-        // Desktop Pet
+        // Desktop Pet（posX/posY 为宠物窗口位置，-1 表示未拖动过、使用默认位置）
         { "pet/enabled", false },
+        { "pet/posX", -1 },
+        { "pet/posY", -1 },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },

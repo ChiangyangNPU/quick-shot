@@ -151,8 +151,18 @@ private:
     QTimer *m_animTimer = nullptr;  ///< 摆动/入场动画定时器
     qreal m_phase = 0.0;            ///< 摆动相位
     QElapsedTimer m_showElapsed;    ///< 显示至今的时间（入场动画用）
-    int m_bounceIndex = -1;         ///< 正在弹跳反馈的卡片下标
+    qint64 m_bounceId = -1;         ///< 正在弹跳反馈的卡片记录 ID（按 ID 标记，卡片重建/重排后仍对准）
     QElapsedTimer m_bounceTimer;    ///< 弹跳开始时间
+    qreal m_dpiScale = 1.0;         ///< 窗口 DPI 缩放系数（96 逻辑基准，构造时取定）
+
+    /**
+     * @brief 按窗口 DPI 系数换算 96 逻辑基准的像素值
+     * @param v 96 基准像素值
+     * @return 缩放后的物理像素值（四舍五入）
+     * @author chiangyang
+     */
+    int sc(int v) const { return qRound(v * m_dpiScale); }
+
     bool m_dragging = false;        ///< 窗口拖动中
     QPoint m_dragOffset;            ///< 按下点相对窗口左上角的偏移
     ResizeMode m_resizeMode = ResizeNone; ///< 当前进行中的边缘调整模式

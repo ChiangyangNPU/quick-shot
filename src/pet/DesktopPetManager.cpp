@@ -98,9 +98,12 @@ void DesktopPetManager::createPetWindow() {
 
     m_petWindow = new PetWindow();
 
-    // 位置恢复：配置中有持久化位置则使用，否则落在默认右下角
+    // 位置恢复：pet/posX/posY 均有效（>=0）则使用，否则落在默认右下角
     QSettings *settings = ConfigManager::instance()->getSettings();
-    const QPoint pos = settings->value("pet/pos", defaultPetPosition()).toPoint();
+    const int savedX = settings->value("pet/posX", -1).toInt();
+    const int savedY = settings->value("pet/posY", -1).toInt();
+    const QPoint pos = (savedX >= 0 && savedY >= 0) ? QPoint(savedX, savedY)
+                                                    : defaultPetPosition();
     // 位置兜底：避免配置文件里的旧坐标在多屏变化后落到可见区域外
     const QRect virtualGeo = QGuiApplication::primaryScreen()->virtualGeometry();
     const QPoint safePos = virtualGeo.contains(pos) ? pos : defaultPetPosition();
@@ -108,7 +111,8 @@ void DesktopPetManager::createPetWindow() {
 
     // 拖动结束持久化位置
     connect(m_petWindow, &PetWindow::dragFinished, this, [](const QPoint &newPos) {
-        ConfigManager::instance()->setValue("pet/pos", newPos);
+        ConfigManager::instance()->setValue("pet/posX", newPos.x());
+        ConfigManager::instance()->setValue("pet/posY", newPos.y());
         ConfigManager::instance()->sync();
     });
 
@@ -219,7 +223,8 @@ void DesktopPetManager::toggleClothesline() {
  */
 void DesktopPetManager::resetPetPosition() {
     QSettings *settings = ConfigManager::instance()->getSettings();
-    settings->remove("pet/pos");
+    settings->remove("pet/posX");
+    settings->remove("pet/posY");
     settings->sync();
 
     if (m_petWindow) {

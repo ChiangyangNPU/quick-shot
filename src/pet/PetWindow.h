@@ -3,6 +3,9 @@
 
 #include <QWidget>
 #include <QPoint>
+#include <QAbstractAnimation>
+#include <QPointer>
+#include "PetUiScale.h"
 
 /**
  * @brief 桌面宠物窗口
@@ -30,11 +33,11 @@ public:
     explicit PetWindow(QWidget *parent = nullptr);
 
     /**
-     * @brief 宠物窗口边长（正方形）
+     * @brief 宠物窗口边长（正方形，96 逻辑基准按屏幕 DPI 缩放）
      * @return 边长像素值
      * @author chiangyang
      */
-    static int petSize() { return 96; }
+    static int petSize() { return qRound(96 * PetUi::scale()); }
 
     /**
      * @brief 张嘴等待食物（飞行动画开始时调用）
@@ -104,6 +107,7 @@ private:
     qreal m_chewScale = 1.0;        ///< 咀嚼挤压系数（垂直方向），1 为常态
     qreal m_starProgress = 0.0;     ///< 左眼星星闪烁进度 [0,1]，0 为无星星
     bool m_eyesClosed = false;      ///< 眨眼瞬间为 true
+    QPointer<QAbstractAnimation> m_mouthAnim; ///< 进行中的嘴部/咀嚼动画（新动画开始前 stop，避免叠加互相覆写）
 
     bool m_pressing = false;        ///< 左键按下中
     bool m_dragging = false;        ///< 已判定为拖动（移动距离超阈值）
