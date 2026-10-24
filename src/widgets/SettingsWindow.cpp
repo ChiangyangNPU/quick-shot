@@ -567,11 +567,22 @@ void SettingsWindow::applyTabHeight(bool animated) {
         });
     }
 
-    // 仅历史选项卡：动画中间态视口小于内容，AsNeeded 会瞬时误报
-    // （滚动条"先显示再消失"）；动画结束后恢复。快捷键/样式的滚动条是
-    // 真实滚动（窗口本就小于内容），不做抑制。
+    // 仅历史选项卡：动画中间态视口小于内容时，AsNeeded 会瞬时误报
+    // （滚动条"先显示再消失"）。是否抑制按"目标高度下内容是否装得下"判定：
+    // 装得下（纯瞬态）→ 动画期间隐藏；装不下（小屏/高缩放机器上历史内容
+    // 可能超出窗口，滚动条真实需要、常驻显示）→ 不抑制。视口高度随窗口
+    // 高度线性变化，可用当前视口 + 高度增量推算目标视口。
     if (currentTab == m_historyTabWidget) {
-        setHistoryScrollBarSuppressed(true);
+        QScrollArea *area = m_historyTabWidget->scrollArea();
+        if (area && area->widget()) {
+            const int viewportAtTarget =
+                area->viewport()->height() + (targetHeight - currentHeight);
+            const bool neededAtTarget =
+                area->widget()->minimumSizeHint().height() > viewportAtTarget;
+            if (!neededAtTarget) {
+                setHistoryScrollBarSuppressed(true);
+            }
+        }
     }
 
     heightAnimation->setStartValue(currentHeight);
