@@ -22,7 +22,7 @@ constexpr int kDragThreshold = 8;
  * @brief 宠物外观规格：描述一个样式在 96 基准坐标系里的配色与特征部件
  *
  * 形体骨架（身体/肚皮/脚/眼睛/嘴的位置与动画）全样式共用，
- * 样式差异只体现在配色、耳朵形状与少量特征部件（眼圈/小翅膀）上。
+ * 样式差异体现在配色、耳朵/尾巴形状与特征部件（眼圈/虎斑/面罩/豆眉/小翅膀）上。
  * @author chiangyang
  */
 struct PetSpec {
@@ -38,6 +38,10 @@ struct PetSpec {
     QColor earInner = QColor(0, 0, 0, 0); ///< 耳内填充（alpha 0 表示不画）
     enum class Ear { Triangle, Round, Long, None } ear = Ear::Triangle;
     QColor eyePatch = QColor(0, 0, 0, 0); ///< 眼圈颜色（alpha 0 表示不画）
+    QColor foreheadStripes = QColor(0, 0, 0, 0); ///< 额头虎斑条纹颜色（alpha 0 表示不画，猫）
+    QColor muzzleMask = QColor(0, 0, 0, 0); ///< 口鼻奶油面罩颜色（alpha 0 表示不画，柴犬）
+    QColor browSpots = QColor(0, 0, 0, 0); ///< 眼上豆眉圆点颜色（alpha 0 表示不画，柴犬）
+    enum class Tail { None, Cat, Curl } tail = Tail::None; ///< 尾巴：无 / 猫直尾 / 柴犬卷尾
     bool highlight = true;  ///< 是否画白色眼睛高光
     bool flippers = false;  ///< 是否画两侧小翅膀（企鹅）
 };
@@ -53,6 +57,8 @@ PetSpec catSpec() {
     s.mouthInner = QColor(122, 46, 34);
     s.foot = s.body;
     s.smilePen = s.eye;
+    s.foreheadStripes = QColor(217, 138, 43, 170);
+    s.tail = PetSpec::Tail::Cat;
     return s;
 }
 
@@ -68,6 +74,9 @@ PetSpec shibaSpec() {
     s.foot = s.body;
     s.smilePen = s.eye;
     s.earInner = QColor(249, 224, 188);
+    s.muzzleMask = QColor(251, 235, 210);
+    s.browSpots = QColor(251, 235, 210);
+    s.tail = PetSpec::Tail::Curl;
     return s;
 }
 
@@ -176,6 +185,33 @@ void paintPetBody(QPainter &p, PetWindow::PetStyle style,
 
     const QPen outlinePen(spec.outline, 2);
 
+    // 尾巴（最底层，身体盖住尾根；两遍描线模拟描边：外层描边色粗、内层体色细）
+    switch (spec.tail) {
+    case PetSpec::Tail::Cat: {
+        // 猫直尾：左后方伸出向上翘的弯条
+        QPainterPath catTail;
+        catTail.moveTo(26, 74);
+        catTail.quadTo(3, 84, 7, 59);
+        p.setPen(QPen(spec.outline, 9, Qt::SolidLine, Qt::RoundCap));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(catTail);
+        p.setPen(QPen(spec.body, 5.5, Qt::SolidLine, Qt::RoundCap));
+        p.drawPath(catTail);
+        break;
+    }
+    case PetSpec::Tail::Curl: {
+        // 柴犬卷尾：右上后方的圆环
+        p.setPen(QPen(spec.outline, 11, Qt::SolidLine, Qt::RoundCap));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QPointF(83, 30), 8, 8);
+        p.setPen(QPen(spec.body, 7.5, Qt::SolidLine, Qt::RoundCap));
+        p.drawEllipse(QPointF(83, 30), 8, 8);
+        break;
+    }
+    case PetSpec::Tail::None:
+        break;
+    }
+
     // 小翅膀（企鹅：先画，身体盖住翅根）
     if (spec.flippers) {
         p.setPen(outlinePen);
@@ -269,6 +305,29 @@ void paintPetBody(QPainter &p, PetWindow::PetStyle style,
     p.setBrush(spec.body);
     p.drawEllipse(QRectF(10, 16, 76, 72));
 
+    // 额头虎斑条纹（猫：三道短竖弧，中间长两侧短，位于额头中线避开两耳）
+    if (spec.foreheadStripes.alpha() > 0) {
+        p.setPen(QPen(spec.foreheadStripes, 2.2, Qt::SolidLine, Qt::RoundCap));
+        auto stripe = [&p](const QPointF &top, const QPointF &bottom) {
+            QPainterPath path;
+            path.moveTo(top);
+            path.quadTo(QPointF((top.x() + bottom.x()) / 2 + 1.5,
+                                (top.y() + bottom.y()) / 2),
+                        bottom);
+            p.drawPath(path);
+        };
+        stripe(QPointF(48, 24), QPointF(48, 36));
+        stripe(QPointF(40, 28), QPointF(40, 37));
+        stripe(QPointF(56, 28), QPointF(56, 37));
+    }
+
+    // 口鼻奶油面罩（柴犬：覆盖嘴部与下颊，眼睛以上透出体色）
+    if (spec.muzzleMask.alpha() > 0) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(spec.muzzleMask);
+        p.drawEllipse(QPointF(48, 60), 17, 13);
+    }
+
     // 肚皮
     p.setPen(Qt::NoPen);
     p.setBrush(spec.belly);
@@ -330,6 +389,14 @@ void paintPetBody(QPainter &p, PetWindow::PetStyle style,
             }
             p.drawEllipse(QPointF(63.5, 44.5), 1.6, 1.6);
         }
+    }
+
+    // 豆眉（柴犬：眼睛上方的奶油色圆点）
+    if (spec.browSpots.alpha() > 0) {
+        p.setPen(Qt::NoPen);
+        p.setBrush(spec.browSpots);
+        p.drawEllipse(QPointF(34, 38.5), 2.2, 2.2);
+        p.drawEllipse(QPointF(62, 38.5), 2.2, 2.2);
     }
 
     // 腮红

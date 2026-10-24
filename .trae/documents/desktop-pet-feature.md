@@ -89,7 +89,7 @@
 
 以下能力为计划外新增（实现已落地，超出原设计）：
 
-- **6 种宠物外观样式**：猫/柴犬/熊猫/兔子/企鹅/青蛙（`PetWindow::PetStyle` 枚举，[PetWindow.h](file:///e:/develop/Code/github_new/quick-shot/src/pet/PetWindow.h) L35-48）；配置键 `pet/style`（[ConfigManager.cpp](file:///e:/develop/Code/github_new/quick-shot/src/core/ConfigManager.cpp) L150）；设置页样式选择为平铺预览图按钮，点击即切换（[SettingsPetTab.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/settings/SettingsPetTab.cpp) L69-90）
+- **6 种宠物外观样式**：猫/柴犬/熊猫/兔子/企鹅/青蛙（`PetWindow::PetStyle` 枚举，[PetWindow.h](file:///e:/develop/Code/github_new/quick-shot/src/pet/PetWindow.h) L35-48）；配置键 `pet/style`（[ConfigManager.cpp](file:///e:/develop/Code/github_new/quick-shot/src/core/ConfigManager.cpp) L150）；设置页样式选择为平铺预览图按钮，点击即切换（[SettingsPetTab.cpp](file:///e:/develop/Code/github_new/quick-shot/src/widgets/settings/SettingsPetTab.cpp) L69-90）。样式为 `PetSpec` 数据驱动：形体骨架共用，差异在配色、耳形（三角/圆/长耳/无耳）与特征部件——猫 = 额头三道虎斑 + 左后方上翘直尾；柴犬 = 奶油口鼻面罩 + 豆眉 + 耳内奶油 + 右上卷尾圆环；熊猫 = 深色圆耳 + 眼圈 + 深色脚掌；兔 = 长耳；企鹅 = 小翅膀 + 橙喙脚；青蛙 = 无耳绿身
 - **文字投喂 `feedText()`**：监听 `HistoryManager::itemAdded`，文本记录触发文字卡片飞入宠物并被吃掉（[DesktopPetManager.h](file:///e:/develop/Code/github_new/quick-shot/src/pet/DesktopPetManager.h) L67-74、DesktopPetManager.cpp L49-52 接线）
 - **两个计划外类**：`CardPreviewPopup`（晾衣绳卡片悬停放大预览：右键菜单复制/标注/OCR/翻译，滚轮 0.2-10 倍缩放）与 `PetUiScale`（宠物模块 DPI 缩放工具）；模块实际为 **6 个组件（5 个类 + PetUiScale 工具头，11 个源文件）**而非计划的 4 类
 - **晾衣绳额外能力**：拖动空白区域移动窗口、四角与上下边拖拽调整大小、点击卡片弹跳反馈 + 呼吸高亮描边（ClotheslineWindow.h:18-23,104-112,155-156、ClotheslineWindow.cpp:239）、预览原图缓存上限 24（`kFullImageCacheLimit`，ClotheslineWindow.cpp:52）
