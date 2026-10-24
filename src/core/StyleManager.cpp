@@ -1025,6 +1025,7 @@ QString StyleManager::getMessageBoxStyle() {
         return QString(
             "QMessageBox { background-color: %1; }"
             "QMessageBox QLabel { color: %6; }"
+            "QMessageBox QCheckBox { color: %6; }"
             "QMessageBox QPushButton { color: %2; background-color: %3; border: none; }"
             "QMessageBox QPushButton:hover { background-color: %4; }"
             "QMessageBox QPushButton:pressed { background-color: %4; }"
