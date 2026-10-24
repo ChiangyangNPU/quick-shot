@@ -31,7 +31,6 @@ void centerIn(QWidget *w, QWidget *parent, const QRect &rect) {
 void OcrAsync::run(QWidget *parent,
                    const QImage &image,
                    const QRect &centerRect,
-                   bool releaseAfter,
                    const std::function<void(const OcrEngine::OcrResult &)> &onResult) {
     TranslationManager *tm = TranslationManager::instance();
 
@@ -45,17 +44,15 @@ void OcrAsync::run(QWidget *parent,
     // 异步执行 OCR
     auto *watcher = new QFutureWatcher<OcrEngine::OcrResult>(parent);
     QObject::connect(watcher, &QFutureWatcher<OcrEngine::OcrResult>::finished, parent,
-                     [parent, watcher, loadingLabel, centerRect, releaseAfter, onResult]() {
+                     [parent, watcher, loadingLabel, centerRect, onResult]() {
         loadingLabel->hide();
         loadingLabel->deleteLater();
 
         OcrEngine::OcrResult result = watcher->result();
         watcher->deleteLater();
 
-        if (releaseAfter) {
-            // 释放 OCR 模型资源，下次识别时重新初始化
-            OcrEngine::instance()->release();
-        }
+        // 识别结束（无论是否有文本）统一释放模型资源，下次识别时重新初始化
+        OcrEngine::instance()->release();
 
         if (result.texts.isEmpty()) {
             // 无识别文本：提示 2 秒后自动消失

@@ -467,7 +467,7 @@ void PinWindow::contextMenuEvent(QContextMenuEvent *event) {
     QAction *ocrAction = menu.addAction(tm->get("ocr.button"));
     connect(ocrAction, &QAction::triggered, this, [this]() {
         // 异步 OCR：加载提示/无文本提示由公共助手处理，弹框居中在贴图窗口
-        OcrAsync::run(this, m_pixmap.toImage(), QRect(), false,
+        OcrAsync::run(this, m_pixmap.toImage(), QRect(),
                       [this](const OcrEngine::OcrResult &result) {
             auto *dialog = new OcrResultDialog(result);
             dialog->adjustSize();
@@ -594,7 +594,7 @@ void PinWindow::performTranslate() {
 
         // 异步 OCR（识别完成即释放模型）→ 批量翻译并显示译文叠加窗口
         // （封装了标签提示、信号连接、错误处理）
-        OcrAsync::run(self, pixmap.toImage(), QRect(), true,
+        OcrAsync::run(self, pixmap.toImage(), QRect(),
                       [self, pixmap](const OcrEngine::OcrResult &result) {
             if (!self) return;
             TranslateOverlayWindow::translateAndShow(

@@ -449,7 +449,7 @@ stateDiagram-v2
 | 截图工具栏 | ScreenshotToolBar 点击翻译按钮 | 截取当前选区图像 → OCR |
 | 录屏工具栏 | RecordingToolBar 点击翻译按钮 | 截取当前选区图像 → OCR |
 | 钉图窗口右键 | PinWindow 右键菜单「翻译」（复制→OCR→翻译→保存） | 对钉图 m_pixmap → OCR |
-| 晾衣绳预览右键 | 晾衣绳卡片悬停预览（CardPreviewPopup）右键菜单「翻译」 | 图片：对预览原图 → OCR（模型常驻不释放）；文本：跳过 OCR，直接调用 TranslateService 弹译文结果框 |
+| 晾衣绳预览右键 | 晾衣绳卡片悬停预览（CardPreviewPopup）右键菜单「翻译」 | 图片：对预览原图 → OCR（识别后统一释放模型）；文本：跳过 OCR，直接调用 TranslateService 弹译文结果框 |
 
 > 钉图窗口右键菜单完整顺序为：复制→标注→OCR→翻译→保存。
 

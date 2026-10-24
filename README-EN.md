@@ -97,7 +97,7 @@ Once a screenshot area is selected, the bottom toolbar provides rich editing fun
 *   **Result Display**: Recognition results are displayed in a dialog, with one-click copy to clipboard, and support for dragging to move and resizing from edges/corners.
 *   **Recording Integration**: OCR functionality is also available during screen recording.
 *   **Pin Window Recognition**: OCR can be performed directly on pinned windows via the right-click menu.
-*   **Automatic Resource Management**: Recognition runs asynchronously in background threads; models are auto-released after recognition on the capture/recording/translate paths, and kept resident for the pin-window and clothesline-preview entries.
+*   **Automatic Resource Management**: Recognition runs asynchronously in background threads; models are auto-released after recognition on every entry, and re-initialized on the next recognition.
 
 ### 5. 🌐 Text Translation Feature
 QuickShot provides two translation forms based on OCR results, translating recognized text into the target language with support for 4 translation engines:

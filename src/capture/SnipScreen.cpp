@@ -940,11 +940,8 @@ void SnipScreen::performOcr(const QPixmap &pixmap) {
     // 提示标签是 SnipScreen 的子控件，move() 使用父相对坐标，需从全局坐标转换
     QRect localSel = sel.translated(-m_virtualGeometry.topLeft());
 
-    OcrAsync::run(this, pixmap.toImage(), localSel, false,
+    OcrAsync::run(this, pixmap.toImage(), localSel,
                   [this, sel](const OcrEngine::OcrResult &result) {
-        // OCR 识别结束后释放模型资源，下次识别时重新初始化
-        OcrEngine::instance()->release();
-
         auto *dialog = new OcrResultDialog(result);
         // 将弹框居中在选区（弹框是独立窗口，使用全局坐标）
         dialog->adjustSize();
@@ -986,7 +983,7 @@ void SnipScreen::performTranslate() {
         LOG_INFO("[SnipScreen] Translate requested, starting OCR");
 
         // 3. 异步 OCR（识别完成即释放模型）→ 批量翻译显示译文叠加窗口
-        OcrAsync::run(this, pixmap.toImage(), localSel, true,
+        OcrAsync::run(this, pixmap.toImage(), localSel,
                       [this, pixmap, sel, localSel](const OcrEngine::OcrResult &result) {
             // 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
             //    翻译成功显示 Overlay 后退出截图框（类似贴图完成后销毁截图框和工具栏）

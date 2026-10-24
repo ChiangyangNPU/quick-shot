@@ -201,7 +201,7 @@ void CardPreviewPopup::contextMenuEvent(QContextMenuEvent *event) {
         LOG_INFO(QString("CardPreviewPopup: preview annotate -> pin window %1x%2 with annotation mode")
                  .arg(windowSize.width()).arg(windowSize.height()));
     } else if (chosen == ocrAction) {
-        OcrAsync::run(host, image.toImage(), QRect(), false,
+        OcrAsync::run(host, image.toImage(), QRect(),
                       [host, centerGlobal](const OcrEngine::OcrResult &result) {
             auto *dialog = new OcrResultDialog(result);
             dialog->adjustSize();
@@ -226,7 +226,7 @@ void CardPreviewPopup::contextMenuEvent(QContextMenuEvent *event) {
             }
             if (isImage) {
                 // 图片：OCR 识别 → 批量翻译 → 译文叠加窗口（与贴图窗口一致）
-                OcrAsync::run(hostGuard, image.toImage(), QRect(), true,
+                OcrAsync::run(hostGuard, image.toImage(), QRect(),
                               [hostGuard, image, centerGlobal](const OcrEngine::OcrResult &result) {
                     if (!hostGuard) return;
                     const QPoint pos = centerGlobal - QPoint(image.width() / 2, image.height() / 2);

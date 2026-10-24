@@ -19,7 +19,7 @@ QuickShot 的 OCR（光学字符识别）功能基于 **PaddleOCR v4** 模型，
 - **多语言支持**：中英文、英文、日文、韩文、多语言
 - **双模型架构**：检测模型（Det）+ 识别模型（Rec）
 - **异步识别**：统一经 `OcrAsync::run`（OcrAsyncHelper）封装——加载提示 + QtConcurrent 异步执行 + 结果回调，不阻塞 UI
-- **自动资源管理**：截图/录屏/翻译链路识别完成后自动释放模型；贴图窗口与晾衣绳预览入口识别后保持模型常驻（加速连续识别），可通过 `releaseAfter` 参数控制
+- **自动资源管理**：所有入口识别结束后统一释放模型（下次识别时自动重新初始化），无入口例外
 - **语言切换**：设置页切换识别语言（写配置 + `release()` + 下次识别按新语言重载模型）
 - **GPU 加速**：Windows DirectML / macOS CoreML，失败自动回退 CPU（详见 10.1）
 - **无第三方依赖**：仅依赖 Qt 和 ONNX Runtime
@@ -571,12 +571,13 @@ sequenceDiagram
     OcrAsync->>OcrAsync: 关闭加载提示
 
     alt 识别成功（result.texts 非空）
+        OcrAsync->>OcrEngine: release() 释放模型（回调前统一释放）
         OcrAsync-->>SnipScreen: 回调 onResult(result)
-        SnipScreen->>OcrEngine: release() 释放模型（回调内先释放，SnipScreen.cpp:944-950）
         SnipScreen->>OcrResultDialog: new OcrResultDialog 居中显示
     else 无文本
+        OcrAsync->>OcrEngine: release() 释放模型（同样统一释放）
         OcrAsync->>OcrAsync: 显示无文本提示（2s 后自毁）
-        Note over OcrAsync: 直接 return：不调用 onResult、也不释放模型<br/>（当前实现行为，OcrAsyncHelper.cpp:60-69；<br/>SnipScreen OCR 入口 releaseAfter=false，释放仅发生在回调内）
+        Note over OcrAsync: 直接 return：不调用 onResult（模型已在回调前释放，OcrAsyncHelper.cpp:55-58）
     end
 ```
 
@@ -844,9 +845,9 @@ models/ocr/
 
 ### 8.3 识别后释放
 
-是否识别后释放模型由 `OcrAsync::run` 的 `releaseAfter` 参数按入口决定：
-- **识别后释放**（`releaseAfter=true` 或回调内显式 `release()`）：截图工具栏、录屏工具栏、三个翻译入口——降低内存占用，下次识别时自动重新初始化
-- **保持常驻**（`releaseAfter=false` 且不显式释放）：贴图窗口 OCR、晾衣绳预览 OCR——模型常驻加速连续识别
+所有 OCR 入口识别结束后统一释放模型：`OcrAsync::run` 在 finished 回调中、结果分发前无条件调用 `OcrEngine::release()`——无论是否有识别文本（截图 OCR、贴图 OCR、晾衣绳预览 OCR 及三个翻译入口一致）。下次识别时自动重新初始化。
+
+> 历史版本曾允许贴图窗口/晾衣绳预览入口通过 `releaseAfter=false` 保持模型常驻（加速连续识别），该参数已移除，统一为识别结束即释放以降低内存占用。
 
 ### 8.4 延迟释放机制
 
