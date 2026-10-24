@@ -922,7 +922,7 @@ QString StyleManager::getOcrResultTitleStyle() {
 }
 
 QString StyleManager::getAppNameLabelStyle() {
-        return "font-size: 9pt; font-weight: bold;";
+        return "font-size: 12pt; font-weight: bold;";
 }
 
 QString StyleManager::getMenuStyle() {
