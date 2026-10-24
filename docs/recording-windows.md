@@ -7,11 +7,11 @@
 | 视频捕获 | Win32 GDI (`BitBlt`/`StretchBlt`) | 屏幕像素抓取 |
 | 视频编码 | Media Foundation (H.264) | 硬件加速视频压缩 |
 | 音频捕获 | WASAPI（Loopback + 麦克风） | 系统音频回环 + 麦克风输入 |
-| 音频编码 | Media Foundation (AAC) | 双声道音频压缩 |
+| 音频编码 | Media Foundation (AAC) | 双声道音频压缩（192kbps） |
 | 容器格式 | MP4 / WMV（降级） | 视频封装 |
 | GIF 编码 | GifEncoder（纯 Qt，GIF89a + LZW） | `OutputFormat::Gif` 分支，无第三方依赖 |
 | 线程模型 | std::thread + std::atomic | 视频/音频独立线程 |
-| 互斥同步 | QMutex | 标注叠加与帧缓冲并发保护 |
+| 互斥同步 | QMutex | 仅保护标注叠加（`annotationOverlay`）合成；帧缓冲仅由录制线程访问，不涉及互斥 |
 
 ## 2. 架构设计
 
@@ -73,6 +73,7 @@ struct PlatformImpl {
     std::atomic<bool> audioRunning{false};
 
     // 录制起始时间（音频时间戳同步）
+    // 注：当前赋值后未使用，音频时间戳实际从 0 开始
     LONGLONG recordingStartTime100ns = 0;
 };
 ```
@@ -133,7 +134,7 @@ flowchart LR
 ```
 
 **关键参数：**
-- 编码格式：H.264（`MFVideoFormat_H264`），6Mbps 比特率
+- 编码格式：H.264（`MFVideoFormat_H264`），6Mbps 比特率（降级为 WMV3/.wmv 时比特率为 4Mbps，见 §6.1）
 - 输入格式：RGB32，固定步长 `width * 4`
 - 帧率：可配置（默认 30fps），帧时长 = `10000000 / fps`（100ns 单位）
 
@@ -198,7 +199,7 @@ flowchart TD
 
 ### 4.2 音频编码
 
-- 编码格式：AAC（`MFAudioFormat_AAC`），128kbps
+- 编码格式：AAC（`MFAudioFormat_AAC`），192kbps（`MF_MT_AUDIO_AVG_BYTES_PER_SECOND` = 24000 字节/秒）
 - 采样率：跟随系统音频混合格式（通常 48000Hz）
 - 声道数：跟随源格式（通常 2 声道立体声）
 - 位深度：16-bit PCM 输入 → AAC 输出
@@ -213,7 +214,7 @@ flowchart TD
     B --> C["音频捕获初始化"]
     C --> C1["initAudioCapture 系统音频 isLoopback=true"]
     C --> C2["initAudioCapture 麦克风 isLoopback=false"]
-    C1 --> D["创建输出目录"]
+    C1 --> D["删除已存在的输出文件 DeleteFileW"]
     C2 --> D
     D --> E["Sink Writer 创建 带降级策略"]
     E --> E1["尝试 H.264 + MP4"]
@@ -291,7 +292,7 @@ flowchart TD
     C -- "否" --> E["报告错误<br/>提示系统缺少 Media Feature Pack"]
 ```
 
-降级原因：Windows N/KN 版本（欧洲市场）默认不含 H.264 编码组件。
+降级原因：Windows N/KN 版本（欧洲市场）默认不含 H.264 编码组件。降级为 WMV3 时视频比特率固定为 4Mbps（4000000），而非 H.264 分支的 6Mbps。
 
 ### 6.2 音频降级
 
@@ -359,4 +360,9 @@ sequenceDiagram
 | `src/recording/GifEncoder.h` / `.cpp` | GIF89a 动画编码器（纯 Qt，LZW） |
 | `src/recording/ScreenRecorder.h` | 跨平台录屏器接口定义（含 `OutputFormat` 枚举与 `isGifSupported()`） |
 | `src/recording/ScreenRecorder.cpp` | 跨平台公共逻辑 |
-| `src/recording/RecordingControlWindow.h` | 录制控制栏 UI（MP4/GIF 格式下拉框） |
+| `src/widgets/RecordingControlWindow.h` | 录制控制栏 UI（MP4/GIF 格式下拉框） |
+
+## 10. 平台限制
+
+- **Linux**：非 GIF 录屏目前没有视频编码器实现（`ScreenRecorder_linux.cpp` 仅实现 GIF 分支，非 GIF 路径不写入任何帧），选择 MP4 会产出空文件。
+- **GIF 录制**：Windows 与 Linux 均可用；macOS 不支持（`isGifSupported()` 对 Q_OS_MACOS 返回 false，直接以 GIF 启动会上报 `record.error.gifUnsupported` 错误）。

@@ -84,7 +84,7 @@ flowchart TD
         subgraph WM["Window 模式"]
             W1["SCContentFilter<br/>initWithDesktopIndependentWindow:window"]
             W2["捕获指定窗口<br/>全窗口输出"]
-            W3["config.width/height<br/>= 窗口尺寸 × DPR"]
+            W3["config.width/height<br/>= 窗口尺寸 不乘 DPR（dpr=1.0）"]
             W1 --> W2 --> W3
         end
         subgraph AM["Area 模式"]
@@ -130,20 +130,20 @@ flowchart TD
 
 - **窗口模式**：`initWithDesktopIndependentWindow:window`
   - 指定 `SCWindow` 对象，捕获整个窗口
-- **区域模式**：`initWithDisplay:display excludingApplications:nil exceptingWindows:nil`
-  - 指定 `SCDisplay` 对象，通过 `sourceRect` 裁剪区域
+- **区域模式**：`initWithDisplay:display excludingApplications:@[] exceptingWindows:@[]`
+  - 指定 `SCDisplay` 对象，通过 `sourceRect` 裁剪区域（排除应用/窗口传空数组 `@[]`，非 nil）
 
 **3. 配置流参数（`SCStreamConfiguration`）**
 
 | 参数 | 值 | 说明 |
 |------|------|
-| `config.width/height` | `outputSizePx` | 输出像素尺寸（已乘 DPR） |
+| `config.width/height` | `outputSizePx` | 输出像素尺寸（区域模式已乘 DPR；窗口模式不乘 DPR） |
 | `config.sourceRect` | `CGRectMake(x, y, w, h)` | 区域模式裁剪（逻辑点坐标） |
 | `config.minimumFrameInterval` | `CMTimeMake(1, fps)` | 帧率控制 |
 | `config.queueDepth` | 3 | 帧队列深度 |
 | `config.showsCursor` | YES | 显示鼠标光标 |
 | `config.pixelFormat` | `kCVPixelFormatType_32BGRA` | 像素格式 |
-| `config.capturesAudio` | YES | 启用系统音频捕获 |
+| `config.capturesAudio` | 取决于音频开关 | `g_audioEnabled && g_sysAudioInput != nil`（系统音频输入可用）时为 YES |
 | `config.excludesCurrentProcessAudio` | YES | 排除当前进程（macOS 13+） |
 | `config.sampleRate` | 44100 | 系统音频采样率 |
 | `config.channelCount` | 2 | 系统音频声道数 |
@@ -173,9 +173,11 @@ flowchart LR
     A["用户选择窗口"] --> B["窗口 ID 匹配"]
     B --> C["SCWindow 查找"]
     C --> D["SCContentFilter<br/>initWithDesktopIndependentWindow"]
-    D --> E["config.width/height<br/>= windowBounds × DPR"]
+    D --> E["config.width/height<br/>= windowBounds 不乘 DPR（dpr=1.0）"]
     E --> F["全窗口捕获 不裁剪"]
 ```
+
+> **未接线能力**：`startWindowRecording` / `getAvailableWindows` 目前 UI 层无调用点（全库仅平台实现自身），属预留能力。
 
 #### 区域录制模式
 
@@ -258,34 +260,35 @@ NSDictionary* settings = @{
 ```
 Qt 逻辑坐标 (points) × DPR = 实际像素 (pixels)
 
-示例（Retina 2x 屏）：
+示例（Retina 2x 屏，区域模式输出尺寸）：
   选区 1920×1080 (逻辑点)
   DPR = 2.0
   输出 = 3840×2160 (物理像素)
+
+（窗口模式不乘 DPR：dpr 恒为 1.0）
 ```
 
 **处理流程：**
 
 ```mermaid
 flowchart TD
-    A["ScreenRecorder::start<br/>captureRectPx, outputSizePx"] --> B["captureRectPx<br/>已为物理像素 Qt HiDPI 自动处理"]
-    B --> C["outputSizePx<br/>已为物理像素"]
-    C --> D["ScreenRecorder_mac.cpp"]
-    D --> E["QScreen::devicePixelRatio → dpr"]
-    E --> F["startRecordingOnMainThread<br/>mac_helper.mm"]
-    F --> G["scale = dpr > 0 ? dpr : 1.0"]
-    G --> H["outputWidthPx = outputWidth × scale"]
-    H --> I["outputHeightPx = outputHeight × scale"]
-    I --> J["config.width = outputWidthPx"]
-    J --> K["config.height = outputHeightPx"]
-    K --> L["config.sourceRect = CGRectMake 逻辑坐标<br/>Qt 坐标与 SK 坐标系一致 无需额外转换"]
+    A["ScreenRecorder::start<br/>RecordingSession 传入 Qt 原生坐标选区"] --> B["captureRectPx<br/>逻辑点坐标 与 SK sourceRect 坐标系一致"]
+    B --> C["outputSizePx<br/>逻辑尺寸 未乘 DPR"]
+    C --> D["ScreenRecorder_mac.cpp<br/>区域模式: QScreen::devicePixelRatio → dpr"]
+    D --> E["startRecordingOnMainThread<br/>mac_helper.mm"]
+    E --> F["scale = dpr > 0 ? dpr : 1.0<br/>输出尺寸在此显式乘 DPR"]
+    F --> G["outputWidthPx = outputWidth × scale"]
+    G --> H["outputHeightPx = outputHeight × scale"]
+    H --> I["config.width/height = outputWidthPx/HeightPx"]
+    I --> J["config.sourceRect = CGRectMake 逻辑坐标<br/>无需额外转换"]
 ```
 
 **注意事项：**
-- ScreenCaptureKit 的 `sourceRect` 使用逻辑点坐标（与 Qt 坐标系一致）
-- 输出分辨率使用物理像素（乘以 DPR）
-- 窗口录制：outputWidth × DPR、outputHeight × DPR
-- 区域录制：region.width × DPR、region.height × DPR
+- RecordingSession 传入的是 Qt 原生坐标选区（逻辑点）；应用显式禁用了 Qt HiDPI 缩放（`main.cpp` 设置 `QT_ENABLE_HIGHDPI_SCALING=0`），DPR 换算并非由 Qt 自动处理
+- ScreenCaptureKit 的 `sourceRect` 使用逻辑点坐标（与 Qt 坐标系一致，无需转换）
+- 输出分辨率由 helper 侧显式乘 DPR（`scale = dpr > 0 ? dpr : 1.0`）得到物理像素
+- 区域录制：region.width/height × DPR
+- 窗口录制：不乘 DPR（dpr=1.0，helper.mm 硬编码），输出尺寸 = 窗口尺寸
 
 ## 6. 权限检测
 
@@ -325,7 +328,7 @@ bool screenRecorderImplIsAvailable() {
 
 ```mermaid
 flowchart TD
-    A["ScreenRecorder::start<br/>startWindowRecording / startAreaRecording"] --> B["计算 DPR<br/>QScreen::devicePixelRatio"]
+    A["ScreenRecorder::start<br/>startWindowRecording / startAreaRecording"] --> B["计算 DPR<br/>QScreen::devicePixelRatio（区域模式；窗口模式 dpr=1.0）"]
     B --> C["配置 captureRectPx / outputSizePx / fps"]
     C --> D["创建输出目录"]
     D --> E["启动录制线程 std::thread"]
@@ -334,7 +337,7 @@ flowchart TD
     G --> H["重置状态变量"]
     H --> I["计算 DPR 缩放后的输出尺寸"]
     I --> J["删除旧文件"]
-    J --> K["创建 AVAssetWriter<br/>MP4, H.264, 6Mbps"]
+    J --> K["创建 AVAssetWriter<br/>MP4, H.264<br/>码率 = width×height×3（仅 1080p 时约 6Mbps）"]
     K --> L["创建 AVAssetWriterInput<br/>视频 + 可选系统音频 + 可选麦克风"]
     L --> M["创建 AVAssetWriterInputPixelBufferAdaptor"]
     M --> N["AVAssetWriter.startWriting"]
@@ -373,7 +376,7 @@ flowchart TD
 **与 Windows 的区别：**
 - macOS 无需手动帧捕获循环，由 `SCStreamDelegate` 驱动
 - `AVAssetWriter` 自行管理编码时间戳
-- 暂停/恢复通过 `g_isPaused` 标志控制，回调中检查此标志
+- 暂停/恢复通过 `g_isPaused` 标志控制：视频回调与麦克风回调会检查此标志；例外是系统音频回调（`processSystemAudioSample`）不检查 `g_isPaused`，暂停期间系统音频仍会写入
 
 ### 7.3 停止流程
 
@@ -406,7 +409,7 @@ NSDictionary* videoSettings = @{
     AVVideoWidthKey: @(outputWidthPx),
     AVVideoHeightKey: @(outputHeightPx),
     AVVideoCompressionPropertiesKey: @{
-        AVVideoAverageBitRateKey: @(outputWidthPx * outputHeightPx * 3), // 3Mbps/pixel
+        AVVideoAverageBitRateKey: @(outputWidthPx * outputHeightPx * 3), // 3 bit/像素/帧
         AVVideoExpectedSourceFrameRateKey: @(fps),
         AVVideoMaxKeyFrameIntervalKey: @(fps)
     }
@@ -417,7 +420,7 @@ NSDictionary* videoSettings = @{
 |------|------|------|
 | 编码格式 | H.264 | `AVVideoCodecTypeH264` |
 | 分辨率 | 输出像素尺寸 | 宽 × DPR, 高 × DPR |
-| 平均比特率 | `width × height × 3` | ~3Mbps/像素，高质量 |
+| 平均比特率 | `width × height × 3` | 3 bit/像素/帧（非 3Mbps/像素），随分辨率线性：1080p≈6.2Mbps、4K≈25Mbps |
 | 期望帧率 | 配置值 | 通常 30fps |
 | 关键帧间隔 | 等于帧率 | 每秒一个关键帧 |
 | 像素格式 | 32BGRA | `kCVPixelFormatType_32BGRA` |
@@ -481,8 +484,8 @@ sequenceDiagram
 | 麦克风初始化失败 | 警告，继续（仅系统音频） |
 | 系统音频捕获失败 | 警告，继续（仅麦克风） |
 | AVAssetWriter 写入失败 | 日志错误，继续尝试 |
-| 初始化超时 | dispatch_group_wait 5s 超时保护 |
-| 停止超时 | AVAssetWriter finishWriting 5s 轮询超时 |
+| 初始化超时 | 启动等待 `dispatch_group_wait` 15s 超时保护（窗口枚举 10s、权限检测 3s） |
+| 停止超时 | SCStream 停止等待 5s（`dispatch_group_wait`）；AVAssetWriter finishWriting 5s 轮询超时 |
 | 取消录制 | 正常退出并删除文件 |
 
 ## 11. 文件索引
@@ -494,3 +497,8 @@ sequenceDiagram
 | `src/recording/platform/ScreenRecorder_mac_helper.mm` | Objective-C 核心实现 |
 | `src/recording/ScreenRecorder.h` | 跨平台录屏器接口 |
 | `src/recording/ScreenRecorder.cpp` | 跨平台公共逻辑 |
+
+## 12. 平台限制
+
+- **Linux**：非 GIF 录屏目前没有视频编码器实现（`ScreenRecorder_linux.cpp` 非 GIF 分支不写入任何帧），选择 MP4 会产出空文件。
+- **GIF 录制**：Windows 与 Linux 均可用；macOS 本身不支持 GIF（见 §1 说明）。

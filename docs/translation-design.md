@@ -18,7 +18,7 @@ QuickShot 的翻译功能基于截图 OCR 识别结果，将识别出的文字�
 | 默认引擎 | MyMemory 免费 API（免注册） | 国内可直连，带 email 提升额度至 50000 词/天 |
 | 扩展引擎 | 百度翻译 / DeepL / LibreTranslate | 用户自填 Key / URL，软件不预置任何凭证 |
 | 凭据存储 | SecretStore（Windows DPAPI / macOS Keychain / Linux 明文降级） | API Key 不再明文进 INI，老配置读路径自动迁移 |
-| 网络请求 | Qt6::Network QNetworkAccessManager | HTTP GET + JSON 解析 |
+| 网络请求 | Qt6::Network QNetworkAccessManager | HTTP GET/POST 视引擎而定（MyMemory/百度 GET，DeepL POST 表单编码，LibreTranslate POST JSON），响应均 JSON 解析 |
 | TLS 支持 | Qt TLS 后端插件 post-build 部署 | 确保 HTTPS 请求正常 |
 | 批量翻译 | 逐段顺序 + 失败回退原文 | 避免单段失败中断整体流程 |
 | 国际化 | 项目 TranslationManager JSON 翻译键 | 6 种语言：zh_CN/en_US/ja_JP/ko_KR/zh_TW/zh_HK |
@@ -53,7 +53,7 @@ flowchart LR
 
     subgraph 翻译服务层
         E["TranslateService 单例"]
-        E1["checkEnabledAndPrivacy"]
+        E1["checkEnabledAndPrivacyAsync"]
         E2["errorMessage"]
         E3["translateBatch 状态机"]
     end
@@ -133,10 +133,14 @@ classDiagram
         +name() QString*
         +isAvailable() bool*
         +requiresApiKey() bool*
-        +translate(text, srcLang, tgtLang) void*
+        +translate(text, srcLang, tgtLang) void
         +finished(original, translated) signal
         +failed(code, detail) signal
+        -sendRequest(text, srcLang, tgtLang) QNetworkReply*
+        -parseResponse(data, outTranslated, outError, outDetail) bool*
     }
+
+    note for TranslateEngine "模板方法结构：translate() 为基类非虚模板方法，统一处理空文本/未配置检查、原文记录、网络/SSL 错误分类、空译文兜底与结果回传；子类仅实现 sendRequest()（构造并发送 HTTP 请求，含语言映射与签名）与 parseResponse()（解析响应体）"
 
     class MyMemoryEngine {
         -m_email QString
@@ -144,7 +148,8 @@ classDiagram
         +name() QString
         +isAvailable() bool
         +requiresApiKey() bool
-        +translate(text, srcLang, tgtLang) void
+        -sendRequest(text, srcLang, tgtLang) QNetworkReply*
+        -parseResponse(data, outTranslated, outError, outDetail) bool
     }
 
     class BaiduTranslateEngine {
@@ -155,8 +160,8 @@ classDiagram
         +name() QString
         +isAvailable() bool
         +requiresApiKey() bool
-        +translate(text, srcLang, tgtLang) void
-        -sign(query, salt) QString
+        -sendRequest(text, srcLang, tgtLang) QNetworkReply*
+        -parseResponse(data, outTranslated, outError, outDetail) bool
     }
 
     class DeepLEngine {
@@ -165,7 +170,8 @@ classDiagram
         +name() QString
         +isAvailable() bool
         +requiresApiKey() bool
-        +translate(text, srcLang, tgtLang) void
+        -sendRequest(text, srcLang, tgtLang) QNetworkReply*
+        -parseResponse(data, outTranslated, outError, outDetail) bool
     }
 
     class LibreTranslateEngine {
@@ -174,7 +180,8 @@ classDiagram
         +name() QString
         +isAvailable() bool
         +requiresApiKey() bool
-        +translate(text, srcLang, tgtLang) void
+        -sendRequest(text, srcLang, tgtLang) QNetworkReply*
+        -parseResponse(data, outTranslated, outError, outDetail) bool
     }
 
     class TranslateService {
@@ -186,16 +193,19 @@ classDiagram
         -m_batchIndex int
         -m_batchTotal int
         -m_batchActive bool
+        -m_batchSourceLang QString
+        -m_batchTargetLang QString
         +instance() TranslateService$
         +loadConfig(settings) void
         +setCurrentEngine(name) void
         +translate(text, srcLang, tgtLang) void
         +translateBatch(texts, srcLang, tgtLang) void
-        +checkEnabledAndPrivacy(parent, centerRect) bool$
+        +checkEnabledAndPrivacyAsync(parent, centerRect, onDecided) void$
         +errorMessage(code) QString$
         +finished(original, translated) signal
         +failed(code, detail) signal
         +batchFinished(translatedTexts) signal
+        +currentEngineChanged(name) signal
         +onEngineFinished(original, translated) slot
         +onEngineFailed(code, detail) slot
         +translateNextBatchItem() slot
@@ -224,8 +234,9 @@ classDiagram
         -m_fullText QString
         -m_translatedText QString
         -m_viewMode int
+        -m_viewModeCombo QComboBox*
         +onTranslate() slot
-        +switchViewMode(mode) slot
+        +onViewModeChanged(index) slot
     }
 
     class PinWindow {
@@ -250,9 +261,9 @@ classDiagram
 
     SnipScreen --> TranslateOverlayWindow : translateAndShow
     PinWindow --> TranslateOverlayWindow : translateAndShow
-    SnipScreen --> TranslateService : checkEnabledAndPrivacy
-    PinWindow --> TranslateService : checkEnabledAndPrivacy
-    OcrResultDialog --> TranslateService : checkEnabledAndPrivacy, translate
+    SnipScreen --> TranslateService : checkEnabledAndPrivacyAsync
+    PinWindow --> TranslateService : checkEnabledAndPrivacyAsync
+    OcrResultDialog --> TranslateService : checkEnabledAndPrivacyAsync, translate
 ```
 
 ---
@@ -285,10 +296,10 @@ enum class TranslateError {
 |---|---|---|---|---|---|
 | MyMemoryEngine | 默认，免注册 | 可选 email | ✅ 直连 | 无 email:5000 词/天<br>有 email:50000 词/天 | 签名不加密，最容易使用 |
 | BaiduTranslateEngine | Key-Based | appId + key | ✅ 国内服务 | 每月免费 200 万字符 | 签名：`MD5(appId+query+salt+key)` |
-| DeepLEngine | Key-Based | key | ❌ 需联网 | 按 Key 付费 | 翻译质量最高 |
+| DeepLEngine | Key-Based | key | ❌ 需联网 | 使用免费版端点 api-free.deepl.com（付费版另有 api.deepl.com，本软件用免费版） | 翻译质量最高 |
 | LibreTranslateEngine | URL-Based | 服务地址 | ✅ 自托管可达 | 取决于自托管服务 | 完全离线可实现 |
 
-所有 Key / URL 由用户在设置页填写，存储于本地 QSettings，**软件不预置任何凭证**。
+Key / URL 由用户在设置页填写，**软件不预置任何凭证**。其中百度 AppId/Key、DeepL Key 经 **SecretStore** 加密存储（Windows DPAPI 密文 Base64 回写 INI `secure/` 前缀键、macOS Keychain、Linux 明文降级），旧明文配置在读取时自动迁移（TranslateService.cpp:165-167、SecretStore.h）；LibreTranslate URL、MyMemory email 等非敏感项仍存 QSettings。
 
 ---
 
@@ -301,13 +312,15 @@ enum class TranslateError {
 | `translate/enabled` | bool | true | 未启用时所有翻译入口不响应 |
 | `translate/engine` | QString | "mymemory" | 当前引擎 |
 | `translate/targetLang` | QString | "en" | 目标语言 |
-| `translate/sourceLang` | QString | "auto" | 源语言 |
+| `translate/sourceLang` | QString | "auto" | 源语言（仅内部默认值，无 UI：设置页无源语言下拉，见 ConfigManager.cpp:172） |
 | `translate/mymemoryEmail` | QString | "" | MyMemory 邮箱（提升额度） |
-| `translate/baiduAppId` | QString | "" | 百度 App ID |
-| `translate/baiduKey` | QString | "" | 百度 Key |
-| `translate/deeplKey` | QString | "" | DeepL Key |
+| `translate/baiduAppId` | QString | "" | 百度 App ID（经 SecretStore 加密存储，旧明文自动迁移） |
+| `translate/baiduKey` | QString | "" | 百度 Key（经 SecretStore 加密存储，旧明文自动迁移） |
+| `translate/deeplKey` | QString | "" | DeepL Key（经 SecretStore 加密存储，旧明文自动迁移） |
 | `translate/libreUrl` | QString | "" | LibreTranslate 地址 |
 | `translate/showPrivacyWarning` | bool | true | 首次隐私提示开关 |
+
+> 凭据存储口径：百度 AppId/Key、DeepL Key 经 SecretStore 加密存储（Windows DPAPI 密文 Base64 回写 INI `secure/` 键、macOS Keychain、Linux 明文降级），旧明文读取时自动迁移；其余项存本地 QSettings。与 1.1 技术栈表一致。
 
 ### 5.1 SettingsWindow 翻译选项卡
 
@@ -343,18 +356,18 @@ flowchart TD
 ```mermaid
 flowchart TD
     Start(["用户打开 OcrResultDialog"]) --> Btn(["点击翻译按钮"])
-    Btn --> Check{"TranslateService checkEnabledAndPrivacy"}
-    Check -->|"未启用"| End1(["不处理"])
-    Check -->|"首次使用"| Dlg["隐私提示弹窗"]
-    Dlg -->|"用户拒绝"| End2(["结束"])
-    Dlg -->|"用户同意"| S1["translate 整段翻译"]
-    Check -->|"已启用且已同意"| S1
+    Btn --> Check["TranslateService checkEnabledAndPrivacyAsync<br/>（异步：结果经 onDecided 回调返回）"]
+    Check -->|"未启用 同步回调 onDecided(false)"| End1(["不处理"])
+    Check -->|"首次使用"| Dlg["非模态隐私提示弹窗<br/>无父窗口 + 置顶 居中 不阻塞输入"]
+    Dlg -->|"finished 回调 onDecided(false) 用户拒绝"| End2(["结束"])
+    Dlg -->|"onDecided(true) 用户同意"| S1["translate 整段翻译"]
+    Check -->|"已启用且已同意 onDecided(true)"| S1
 
     S1 --> S2["MyMemoryEngine HTTP GET"]
     S2 -->|"成功"| Ok["译文写入 m_translatedText 默认切换到译文视图"]
     S2 -->|"失败"| Err["弹窗显示 errorMessage 加详细信息按钮查看 detail"]
 
-    Ok --> Switch["用户切换视图"]
+    Ok --> Switch["用户经视图模式下拉框切换"]
     Switch --> V1["原文"]
     Switch --> V2["译文"]
     Switch --> V3["上下对照"]
@@ -371,14 +384,17 @@ sequenceDiagram
     participant N as 网络请求
 
     U->>D: 点击翻译按钮
-    D->>D: checkEnabledAndPrivacy(this)
-    D->>S: checkEnabledAndPrivacy
-    alt 首次使用且 showPrivacyWarning=true
-        S-->>D: 弹隐私提示（带不再提示复选框）
-        U->>D: 同意
-        S->>S: 若勾选不再提示则置 showPrivacyWarning=false
+    D->>S: checkEnabledAndPrivacyAsync(this, rect, onDecided)
+    alt 未启用
+        S-->>D: 同步回调 onDecided(false) 不弹窗
+    else 已启用且无需提示 showPrivacyWarning=false
+        S-->>D: 同步回调 onDecided(true)
+    else 首次使用且 showPrivacyWarning=true
+        S->>S: 非模态弹隐私提示（无父窗口 置顶 不阻塞输入）
+        U->>S: 点击 是 / 否
+        S->>S: finished 回调：同意且勾选不再提示则置 showPrivacyWarning=false
+        S-->>D: onDecided(true) 同意 / onDecided(false) 拒绝
     end
-    S-->>D: 返回 true=可以翻译
 
     D->>S: translate(m_fullText)
     S->>E: translate(text, auto, en)
@@ -405,13 +421,14 @@ sequenceDiagram
 stateDiagram-v2
     [*] --> 原文 : OCR完成后默认
     原文 --> 译文 : 翻译成功后自动切换
-    译文 --> 原文 : 点击原文标签
-    译文 --> 对照 : 点击对照标签
-    原文 --> 对照 : 点击对照标签（有译文时）
-    对照 --> 原文 : 点击原文标签
-    对照 --> 译文 : 点击译文标签
+    译文 --> 原文 : 下拉框选择原文
+    译文 --> 对照 : 下拉框选择对照
+    原文 --> 对照 : 下拉框选择对照（有译文时）
+    对照 --> 原文 : 下拉框选择原文
+    对照 --> 译文 : 下拉框选择译文
 ```
 
+- **切换控件**：标题栏下方的视图模式下拉框 QComboBox（`m_viewModeCombo`，三态：原文/译文/对照，OcrResultDialog.cpp:99-105），切换经 `onViewModeChanged(int)` 槽处理
 - **原文视图**：纯 OCR 识别文本
 - **译文视图**：纯翻译后文本
 - **对照视图**：按段原文 + 译文上下间隔显示（或左右对照）
@@ -434,18 +451,20 @@ stateDiagram-v2
 | 钉图窗口右键 | PinWindow 右键菜单「翻译」（复制→OCR→翻译→保存） | 对钉图 m_pixmap → OCR |
 | 晾衣绳预览右键 | 晾衣绳卡片悬停预览（CardPreviewPopup）右键菜单「翻译」 | 图片：对预览原图 → OCR（模型常驻不释放）；文本：跳过 OCR，直接调用 TranslateService 弹译文结果框 |
 
+> 钉图窗口右键菜单完整顺序为：复制→标注→OCR→翻译→保存。
+
 ### 7.2 完整流程图
 
 ```mermaid
 flowchart TD
     Start(["点击翻译"]) --> GetPix["截取选区图像 / 取钉图图像"]
-    GetPix --> Check{"checkEnabledAndPrivacy parent centerRect"}
-    Check -->|"未启用"| End0(["不处理"])
-    Check -->|"首次使用"| PrivacyDlg["隐私提示弹窗 centerRect 选区坐标居中"]
-    PrivacyDlg -->|"拒绝"| End1(["结束"])
-    PrivacyDlg -->|"同意"| OcrStart["异步OCR开始 显示识别中标签居中选区"]
+    GetPix --> Check{"checkEnabledAndPrivacyAsync<br/>parent centerRect 结果经 onDecided 回调"}
+    Check -->|"未启用 同步回调 onDecided(false)"| End0(["不处理"])
+    Check -->|"首次使用"| PrivacyDlg["非模态隐私提示弹窗 无父窗口置顶<br/>centerOn 居中到选区坐标"]
+    PrivacyDlg -->|"finished 回调 onDecided(false) 拒绝"| End1(["结束"])
+    PrivacyDlg -->|"onDecided(true) 同意"| OcrStart["异步OCR开始 显示识别中标签居中选区"]
 
-    Check -->|"已启用且已同意"| OcrStart
+    Check -->|"已启用且已同意 onDecided(true)"| OcrStart
 
     OcrStart --> OcrWait["..."]
     OcrWait --> OcrEmpty{"结果为空?"}
@@ -501,12 +520,14 @@ sequenceDiagram
     U->>T: 点击翻译按钮
     T-->>S: emit translateRequested()
     S->>S: 截取当前选区图像 QPixmap
-    S->>TS: checkEnabledAndPrivacy(this, selRect)
+    S->>TS: checkEnabledAndPrivacyAsync(this, selRect, onDecided)
     alt 首次使用
-        TS-->>S: 隐私提示弹窗（居中 selRect）
-        U->>S: 同意
+        TS-->>S: 非模态隐私提示弹窗（无父窗口置顶 居中 selRect）
+        U->>S: 点击是
+        TS-->>S: finished 回调 onDecided(true)
+    else 已启用且无需提示
+        TS-->>S: 同步回调 onDecided(true)
     end
-    TS-->>S: true
 
     S->>S: 显示「识别中...」标签居中选区
     S->>O: recognize(image) 异步
@@ -574,7 +595,11 @@ QStringList m_batchTranslated;  // 译文列表
 int m_batchIndex = 0;           // 当前索引
 int m_batchTotal = 0;           // 总段数
 bool m_batchActive = false;     // 是否在批量中
+QString m_batchSourceLang;      // 批量源语言（进入批量时快照，逐段复用）
+QString m_batchTargetLang;      // 批量目标语言（进入批量时快照，逐段复用）
 ```
+
+另有 `currentEngineChanged(name)` 信号：`setCurrentEngine()` 切换并重建当前引擎后发出（TranslateService.cpp:233）。
 
 ### 7.5 TranslateOverlayWindow 渲染与文字选择
 
@@ -623,35 +648,45 @@ flowchart TB
 
 ```mermaid
 flowchart TD
-    Start["checkEnabledAndPrivacy parent centerRect 入口"] --> ShowWarning{"showPrivacyWarning?"}
-    ShowWarning -->|"false"| RetTrue(["返回 true"])
-    ShowWarning -->|"true"| CreateDlg["创建 QMessageBox"]
+    Start["checkEnabledAndPrivacyAsync parent centerRect onDecided 入口"] --> Enabled{"translate enabled?"}
+    Enabled -->|"false"| CbFalse["同步回调 onDecided(false)"]
+    Enabled -->|"true"| ShowWarning{"showPrivacyWarning?"}
+    ShowWarning -->|"false"| CbTrue(["同步回调 onDecided(true)"])
+    ShowWarning -->|"true"| CreateDlg["创建无父窗口 MessageBox<br/>WindowStaysOnTopHint 置顶 非模态 show 不阻塞 不 exec"]
 
     CreateDlg --> PosCalc{"centerRect isValid?"}
-    PosCalc -->|"是 SnipScreen 传入选区"| Calc1["弹窗中心等于 centerRect 中心"]
-    PosCalc -->|"否 PinWindow 或 Dialog"| Calc2["弹窗中心等于 parent frameGeometry 中心"]
-    Calc1 --> MoveTimer["QTimer singleShot 0 msgBox move"]
-    Calc2 --> MoveTimer
+    PosCalc -->|"是 SnipScreen 传入选区"| Calc1["centerOn 弹窗中心等于 centerRect 中心"]
+    PosCalc -->|"否 PinWindow 或 Dialog"| Calc2["centerOn 弹窗中心等于 parent frameGeometry 中心"]
 
-    MoveTimer --> Exec["msgBox exec"]
-    Exec --> UserClick{"点击的按钮"}
-    UserClick -->|"YES 加 勾选不再提示"| SaveCfg["translate showPrivacyWarning 置 false"] --> RetTrue
-    UserClick -->|"YES"| RetTrue
-    UserClick -->|"NO"| RetFalse(["返回 false"])
+    Calc1 --> Wait["等待用户点击 非模态不阻塞"]
+    Calc2 --> Wait
+
+    Wait --> Finished{"QDialog finished 回调"}
+    Finished -->|"YES 加 勾选不再提示"| SaveCfg["translate showPrivacyWarning 置 false"] --> CbOk["回调 onDecided(true)"]
+    Finished -->|"YES"| CbOk
+    Finished -->|"NO"| CbNo["回调 onDecided(false)"]
 ```
+
+> **实现要点**（TranslateService.cpp:37-107）：
+> - 全平台统一"无父窗口 + 置顶 + 非模态"消息框：不阻塞输入、不改宿主窗口标志、不触发模态禁用/恢复链路（Windows 上应用模态框在置顶透明截图覆盖层之上开合会破坏鼠标派发）。
+> - 结果不经返回值，而是经 `QDialog::finished` 回调调用 `onDecided(allowed)`；未启用或无需提示时**同步**回调。
+> - macOS 附加处理：Qt 把带模态性的 QMessageBox 固定在模态面板级别(8)且手动抬级别会被重置，故弹框期间用 `Utils::beginModalOverOverlay`（setLevel 直接改合成层级、不重建窗口）把宿主置顶覆盖层临时降到普通级别，弹框关闭后在回调里恢复，避免被 101 级别的截图覆盖层挡住。
 
 ### 8.2 错误码 → 本地化消息对应表
 
 | TranslateError | 翻译键 | zh_CN 示例 |
 |---|---|---|
-| NetworkFailed | `translate.error.networkFailed` | 网络连接失败，请检查网络 |
-| SslFailed | `translate.error.sslFailed` | SSL/TLS 配置错误，无法建立安全连接 |
-| SameLanguage | `translate.error.sameLanguage` | 源语言与目标语言相同 |
-| RateLimit | `translate.error.rateLimit` | 翻译额度用尽，请稍后重试或更换引擎 |
-| NotConfigured | `translate.error.notConfigured` | 翻译引擎未配置，请在设置中完善配置 |
-| ApiError | `translate.error.apiError` | 翻译服务返回错误，请稍后重试 |
-| EmptyText | `translate.error.emptyText` | 翻译文本为空 |
-| Unknown | `translate.error.unknown` | 未知错误 |
+| NetworkFailed | `translate.errNetwork` | 网络连接失败，请检查网络后重试。 |
+| SslFailed | `translate.errSsl` | SSL/TLS 未正确配置，无法建立加密连接，请检查 TLS 插件部署。 |
+| SameLanguage | `translate.errSameLang` | 源语言与目标语言相同，请更换目标语言。 |
+| RateLimit | `translate.errRateLimit` | 翻译额度已用尽，请稍后重试或更换引擎。 |
+| NotConfigured | `translate.errNotConfigured` | 翻译引擎未配置，请在设置中完成配置。 |
+| ApiError | `translate.errApi` | 翻译服务返回错误。 |
+| EmptyText | `translate.errEmpty` | 没有可翻译的文本。 |
+| Busy | `translate.errBusy` | 正在批量翻译中，请稍后再试。 |
+| Unknown | `translate.errUnknown` | 翻译失败，请稍后重试。 |
+
+> 映射实现：`TranslateService::errorMessage()` switch-case（TranslateService.cpp:118-135），共 9 个错误分类。
 
 失败弹窗结构：
 ```mermaid
@@ -669,7 +704,7 @@ flowchart LR
 
 | 方法签名 | 定义位置 | 消除的重复点 |
 |---|---|---|
-| `TranslateService::checkEnabledAndPrivacy(parent, centerRect) → bool` | TranslateService 静态 | OcrResultDialog、SnipScreen、PinWindow 3 处各自实现的启用检查 + 隐私提示弹窗 |
+| `TranslateService::checkEnabledAndPrivacyAsync(parent, centerRect, onDecided) → void` | TranslateService 静态 | OcrResultDialog、SnipScreen、PinWindow 3 处各自实现的启用检查 + 隐私提示弹窗（异步回调式：非模态弹窗 + finished 回调 onDecided，未启用/无需提示时同步回调） |
 | `TranslateService::errorMessage(code) → QString` | TranslateService 静态 | 3 处入口各自实现的 TranslateError → 本地化 switch-case（各 8 个 case） |
 | `TranslateOverlayWindow::translateAndShow(parent, pixmap, texts, polygons, overlayPos, labelRect, onOverlayShown) → void` | TranslateOverlayWindow 静态 | SnipScreen、PinWindow 两处翻译流程中的：标签创建与居中、batchFinished + failed 一次性信号连接、Overlay 创建与定位、错误临时提示标签、翻译完成后回调（SnipScreen 退出截图框） |
 
@@ -686,7 +721,7 @@ flowchart LR
 | `src/translate/BaiduTranslateEngine.h/.cpp` | 百度翻译（用户自填 Key） |
 | `src/translate/DeepLEngine.h/.cpp` | DeepL（用户自填 Key） |
 | `src/translate/LibreTranslateEngine.h/.cpp` | LibreTranslate（自托管 URL） |
-| `src/translate/TranslateService.h/.cpp` | 单例 + 批量状态机 + checkEnabledAndPrivacy + errorMessage |
+| `src/translate/TranslateService.h/.cpp` | 单例 + 批量状态机 + checkEnabledAndPrivacyAsync + errorMessage |
 | `src/widgets/TranslateOverlayWindow.h/.cpp` | 叠加窗口 + 文字选择 + translateAndShow + onOverlayShown 回调 |
 | `icons/translate.svg` | 翻译按钮图标（「文/A」设计） |
 
@@ -698,17 +733,17 @@ flowchart LR
 | `src/widgets/BaseToolBar.h/.cpp` | 加 translateRequested 信号 + m_translateBtn 公共成员 |
 | `src/widgets/ScreenshotToolBar.cpp` | 创建翻译按钮并连接 translateRequested |
 | `src/widgets/RecordingToolBar.cpp` | 创建翻译按钮并连接 translateRequested |
-| `src/widgets/PinWindow.h/.cpp` | 右键加翻译项（顺序：复制→OCR→翻译→保存） |
+| `src/widgets/PinWindow.h/.cpp` | 右键加翻译项（顺序：复制→标注→OCR→翻译→保存，PinWindow.cpp:455-488） |
 | `src/capture/SnipScreen.h/.cpp` | 连接两个工具栏 translateRequested、performTranslate、隐私提示居中选区 |
 | `src/widgets/SettingsWindow.h/.cpp` | 翻译选项卡（样式与历史记录之间） |
 | `src/core/ConfigManager.cpp` | translate/ 默认配置初始化 |
-| `src/languages/*.json`（6 个） | 加 32+ 翻译键 |
+| `src/languages/*.json`（6 个） | 加 50 个 `translate.*` 翻译键（第 11 节为主要键摘录，非穷举） |
 | `CMakeLists.txt` | Qt6::Network 模块 + 翻译源文件 + post-build TLS 插件部署 |
 | `src/resources.qrc` | translate.svg 图标引用 |
 
 ---
 
-## 11. 翻译键（i18n）完整清单
+## 11. 翻译键（i18n）主要清单（非穷举）
 
 文件路径：`src/languages/{zh_CN,en_US,ja_JP,ko_KR,zh_TW,zh_HK}.json`
 
@@ -727,9 +762,7 @@ flowchart LR
 | `translate.saveAsImage` | 另存为图片 |
 | `translate.selectText` | 选择文字开关 |
 | `translate.targetLang` | 设置页「目标语言」 |
-| `translate.sourceLang` | 设置页「源语言」 |
 | `translate.engine` | 设置页「翻译引擎」 |
-| `translate.langAuto` | 自动检测 |
 | `translate.engineMyMemory` | MyMemory（免注册） |
 | `translate.engineBaidu` | 百度翻译 |
 | `translate.engineDeepL` | DeepL |
@@ -738,14 +771,19 @@ flowchart LR
 | `translate.privacyMsg` | 隐私提示正文 |
 | `translate.privacyDontAsk` | 不再提示复选框 |
 | `translate.showDetails` | 失败弹窗「详细信息」按钮 |
-| `translate.error.networkFailed` | 网络连接失败 |
-| `translate.error.sslFailed` | SSL/TLS 错误 |
-| `translate.error.sameLanguage` | 源目标语言相同 |
-| `translate.error.rateLimit` | 额度用尽 |
-| `translate.error.notConfigured` | 引擎未配置 |
-| `translate.error.apiError` | 服务返回错误 |
-| `translate.error.emptyText` | 文本为空 |
-| `translate.error.unknown` | 未知错误 |
+| `translate.errNetwork` | 网络连接失败 |
+| `translate.errSsl` | SSL/TLS 错误 |
+| `translate.errSameLang` | 源目标语言相同 |
+| `translate.errRateLimit` | 额度用尽 |
+| `translate.errNotConfigured` | 引擎未配置 |
+| `translate.errApi` | 服务返回错误 |
+| `translate.errEmpty` | 文本为空 |
+| `translate.errBusy` | 批量翻译进行中 |
+| `translate.errUnknown` | 未知错误 |
+
+> **非穷举清单**：zh_CN.json 实际共 **50 个 `translate.*` 键**，上表为主要摘录。未列出的还有：`translate.enabled`、`translate.failed`、`translate.loading`、`translate.copy`、`translate.selectAll`、`translate.options`、`translate.privacyWarning`（均为设置页/右键菜单标签），`translate.{mymemory,baidu,deepl,libre}NetworkHint`（4 个引擎网络提示）、`translate.{mymemory,baidu,deepl,libre}WebsiteLink`（4 个引擎官网链接）、`translate.mymemoryEmailHint`，以及 4 个引擎配置键标签 `translate.baiduAppId`/`translate.baiduKey`/`translate.deeplKey`/`translate.libreUrl`。
+>
+> **无「源语言」UI**：设置页翻译选项卡仅提供目标语言下拉（SettingsTranslateTab.cpp:174-188），没有源语言下拉；`translate/sourceLang`（ConfigManager.cpp:172）仅为配置内部默认值（"auto"），无对应 i18n 键（早期清单中的「源语言」「自动检测」两个翻译键已删除，6 个语言文件均不存在）。
 
 ---
 

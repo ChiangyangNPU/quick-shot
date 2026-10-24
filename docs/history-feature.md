@@ -91,6 +91,9 @@ src/history/
 src/widgets/
 ├── HistoryWindow.h       // 历史记录查看窗口
 └── HistoryWindow.cpp
+src/widgets/settings/
+├── SettingsHistoryTab.h  // 设置窗口历史记录选项卡（独立类）
+└── SettingsHistoryTab.cpp
 ```
 
 ### 3.1 模块职责
@@ -100,6 +103,7 @@ src/widgets/
 | `HistoryItem.h` | 定义历史记录数据模型，包括截图记录和剪贴板文本记录 |
 | `HistoryManager.h/cpp` | 核心管理类，负责数据库操作、记录增删改查、配置管理、自动清理、缩略图生成 |
 | `HistoryWindow.h/cpp` | 历史记录查看界面，提供浏览、搜索、筛选、操作功能 |
+| `SettingsHistoryTab.h/cpp` | 设置窗口"历史记录"选项卡（独立类），提供记录开关、存储设置、数据管理、统计信息 |
 | `ClipboardMonitor.h/cpp` | 剪贴板变化监听器，捕获系统剪贴板变化事件 |
 
 ### 3.2 模块架构图
@@ -153,7 +157,7 @@ graph TB
 |------|----------|
 | `src/capture/SnipScreen.cpp` | 截图产物经 `CaptureSession::publish()` 统一分发（写剪贴板 + 调用 `addScreenshotPixmap()` 入库） |
 | `src/pet/`（桌面宠物模块） | 晾衣绳窗口（ClotheslineWindow）读取最近 12 条记录渲染成卡片，连接 `itemAdded`/`itemRemoved`/`cleared` 实时刷新；DesktopPetManager 监听 `itemAdded`，文本记录触发"文字复制投喂"动画；复制文本前调 `ClipboardMonitor::markTextAsRecorded()` 去重 |
-| `src/widgets/SettingsWindow.h/cpp` | 新增"历史记录"选项卡（记录开关、存储设置、数据管理、统计信息） |
+| `src/widgets/SettingsWindow.h/cpp` | 新增"历史记录"选项卡——UI 已拆分为独立类 `src/widgets/settings/SettingsHistoryTab.{h,cpp}`（记录开关、存储设置、数据管理、统计信息），SettingsWindow 仅 `tabWidget->addTab(...)` 挂载（SettingsWindow.cpp:587-588） |
 | `src/widgets/SettingsWindow.cpp` | 快捷键选项卡新增历史记录快捷键设置行 |
 | `src/main.cpp` | 初始化 HistoryManager、启动 ClipboardMonitor、注册快捷键、添加托盘菜单项 |
 | `CMakeLists.txt` | 添加 Sql 模块依赖、新增源文件、部署 SQL 驱动插件 |
@@ -238,7 +242,7 @@ CREATE INDEX IF NOT EXISTS idx_history_content
 | `history/retentionDays` | `7` | 保留天数 |
 | `history/thumbnailSize` | `200` | 缩略图尺寸（像素） |
 
-> 快捷键配置键已更名为 `shortcut_history`，`history/shortcut` 仅作为旧配置的兼容回退键保留（新键为空时回退读取旧键）。
+> 快捷键配置键已更名为 `shortcut_history`，`history/shortcut` 仅作为旧配置的兼容回退键保留：读取时新键为空则回退读取旧键（ShortcutTypes.h `getShortcutSequence`）；保存时仍双写旧键，确保用户降级回旧版本时配置不丢失（ShortcutRegistry.cpp:112-115）。
 
 ### 4.4 数据存储路径
 
@@ -279,6 +283,7 @@ class HistoryManager : public QObject {
 public:
     static HistoryManager* instance();   ///< 获取单例实例
     static void destroy();                ///< 销毁单例实例
+    static void setDatabaseFilePathForTest(const QString &path); ///< 覆盖数据库文件路径（仅供单元测试，须在单例首次实例化前调用；传 ":memory:" 使用进程内 SQLite）
 
     // 记录添加
     qint64 addScreenshot(const QString &filePath, const QString &windowTitle, const QSize &imageSize);
@@ -331,8 +336,13 @@ private:
     QString historyDirPath() const;                                   ///< 历史记录根目录路径
     static int typeToInt(HistoryType type);                           ///< 类型转整数
     static HistoryType intToType(int value);                          ///< 整数转类型
+    static HistoryItem readItem(const QSqlQuery &query);              ///< 从查询当前行读取一条记录（字段映射单一实现）
+    qint64 insertScreenshotRecord(const QString &filePath, const QString &thumbnailPath,
+                                  const QString &windowTitle, const QString &timestampStr,
+                                  const QSize &imageSize);            ///< 插入截图记录并发射 itemAdded（INSERT 绑定/信号构建单一实现）
 
     static HistoryManager* s_instance;      ///< 单例实例
+    static QString s_databasePathOverride;  ///< 测试用数据库路径覆盖（setDatabaseFilePathForTest）
     mutable QRecursiveMutex m_mutex;        ///< 递归互斥锁（支持嵌套加锁）
     QSqlDatabase m_database;                ///< 数据库连接
     bool m_screenshotEnabled;               ///< 是否启用截图历史记录
@@ -445,6 +455,8 @@ private:
     void updateWindowColors();                         ///< 更新窗口及各容器背景色（与 SettingsWindow 一致）
     void updateControlSizes();                         ///< DPI 变化时重新计算控件尺寸（高度/图标大小）
     QSize calculateDpiScaledSize() const;              ///< 根据屏幕 DPI 计算窗口初始尺寸（基准 1000×720 @ 96DPI）
+    void copyItemToClipboard(const HistoryItem &item); ///< 复制历史条目到剪贴板（按钮/右键菜单路径共用；文本复制文本、截图复制图片）
+    void saveScreenshotAs(const HistoryItem &item);    ///< 截图条目另存为文件（按钮/右键菜单路径共用，含源文件存在性检查）
 
     QWidget *m_toolbarContainer;   ///< 顶部工具栏容器（搜索/筛选）
     QWidget *m_listContainer;      ///< 列表区容器（列表 + 加载更多按钮）
@@ -494,7 +506,7 @@ private:
 
 ### 6.1 设置界面 - 历史记录选项卡
 
-在 `SettingsWindow` 中新增 `setupHistoryTab()` 方法，使用 `QScrollArea` 包裹内容实现可滚动：
+历史记录选项卡 UI 已拆分为独立类 `src/widgets/settings/SettingsHistoryTab.{h,cpp}`，`SettingsWindow` 构建选项卡时仅 `addTab` 挂载（不再有 `setupHistoryTab()` 方法，SettingsWindow.cpp:587-588）；选项卡内容使用 `QScrollArea` 包裹实现可滚动：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -571,18 +583,28 @@ private:
 
 ### 6.4 托盘菜单扩展
 
+托盘菜单已远超最初"四选项"需求，现状为 9 个快捷键项 + 设置 + 退出（快捷键项由 `ShortcutTypes.h` 的 `kShortcutConfigs` 数据表驱动，顺序与 main.cpp 注释一致；TrayMenuBuilder.cpp:112-124，设置/退出由 main.cpp 追加）：
+
 ```
-┌─────────────────────────┐
-│  📋 历史记录 (Alt+H)    │  ← 新增选项
-├─────────────────────────┤
-│  📸 截图 (Alt+Q)        │
-│  ⏺ 录屏 (Alt+S)        │
-├─────────────────────────┤
-│  ⚙ 设置                 │
-├─────────────────────────┤
-│  ✕ 退出                 │
-└─────────────────────────┘
+┌──────────────────────────────────┐
+│  📋 历史记录 (Alt+H)             │
+├──────────────────────────────────┤
+│  📸 截屏 (Alt+Q)                 │
+│  ⏺ 录屏 (Alt+S)                 │
+│  📌 贴图剪贴板 (Alt+P)           │
+│  🖥 全屏截图 (Alt+Shift+F)       │
+│  🪟 活动窗口截图 (Alt+Shift+W)   │
+│  ⏸ 录屏暂停/恢复 (Alt+Shift+S)  │
+│  ⏹ 停止录屏 (Alt+Shift+Q)       │
+│  👁 隐藏/显示所有贴图 (Alt+Shift+P) │
+├──────────────────────────────────┤
+│  ⚙ 设置                          │
+├──────────────────────────────────┤
+│  ✕ 退出                          │
+└──────────────────────────────────┘
 ```
+
+> 早期需求图中托盘仅有"历史记录/截图/录屏/设置/退出"五项，为最初需求；后续录屏暂停/停止、贴图、全屏、活动窗口、切换贴图（TogglePins）等快捷键项均已加入托盘。
 
 ---
 
@@ -693,7 +715,7 @@ flowchart TD
 | `history.recordSettings` | 记录设置 | Record Settings |
 | `history.enableScreenshot` | 记录截图历史 | Record Screenshot History |
 | `history.enableClipboard` | 记录剪贴板历史 | Record Clipboard History |
-| `history.shortcut.label` | 历史记录快捷键 | History Shortcut |
+| `shortcut.history.label` | 历史记录快捷键 | History Shortcut |
 | `history.storage.title` | 存储设置 | Storage Settings |
 | `history.storage.retentionDays` | 保留时间 | Retention Period |
 | `history.storage.maxItems` | 最大记录数 | Max Records |
@@ -746,6 +768,8 @@ flowchart TD
 | `no` | 否 | No |
 
 > **注意**：`yes` 和 `no` 为全局翻译键，用于所有确认对话框的按钮文字，确保所有弹窗中的 Yes/No 按钮都能正确翻译。
+>
+> **孤儿键**：zh_CN.json 另有 5 个历史相关翻译键未被代码引用（排序/空列表提示为早期设计残留）：`history.storage.px`、`history.window.noData`、`history.window.sort`、`history.window.sortByTime`、`history.window.sortByType`（zh_CN.json:240、258-260、262），6 个语言文件同步保留。
 
 支持的语言：简体中文（zh_CN）、英文（en_US）、日语（ja_JP）、韩语（ko_KR）、繁体中文台湾（zh_TW）、繁体中文香港（zh_HK）。
 
@@ -772,7 +796,7 @@ flowchart TD
 1. **本地存储**：所有历史记录仅存储在本地，不会上传到任何服务器
 2. **自动清理**：根据用户设置的保留时间自动清理过期记录
 3. **用户可控**：用户可随时手动删除单条记录或清空所有历史
-4. **敏感信息提醒**：在用户首次开启剪贴板记录功能时，弹出隐私提醒对话框
+4. **敏感信息提醒**（设计项，当前未实现——开关直接生效，无弹窗）：原设计为在用户首次开启剪贴板记录功能时弹出隐私提醒对话框；现实现中设置页"记录剪贴板历史"开关切换后直接调用 `HistoryManager::setClipboardEnabled()` 生效（SettingsHistoryTab.cpp:62-67），全代码无此隐私提醒对话框
 
 ### 10.2 注意事项
 
@@ -857,3 +881,4 @@ flowchart TD
 | 1.1.0 | 2026-07-31 | 更新文档以匹配实际实现：新增 `addScreenshotPixmap` 方法、`HistoryType::All` 枚举值、截图缓存目录说明、快捷键移至快捷键选项卡、补全 HistoryWindow 方法列表、修正数据库路径、添加日志规范说明 |
 | 1.2.0 | 2026-07-31 | 补充功能完善内容：软件启动时自动清理过期记录、鼠标拖拽框选多选与批量删除、右键菜单样式统一（StyleManager::getMenuStyle）、保存截图路径与主程序一致（复用 Utils::savePixmapToFile）、历史记录窗口图标、实时翻译与实时刷新、加载更多按钮隐藏策略、确认对话框 Yes/No 按钮翻译、补全翻译条目表（timeRanges/tooltip/confirmDelete 等） |
 | 1.3.0 | 2026-10-24 | 与代码同步：HistoryWindow 位置更正为 src/widgets/、ClipboardMonitor 更新为单例（含 markTextAsRecorded 去重接口）、快捷键配置键更名 shortcut_history（旧键兼容回退）、集成点更新为 CaptureSession::publish 统一分发、searchItems 分页重载、时间筛选下拉框标注为预留 UI、新增 7.5 节历史数据的桌面宠物消费方（晾衣绳 + 文字复制投喂） |
+| 1.4.0 | 2026-10-24 | 与代码同步修正：快捷键标签翻译键更正为 `shortcut.history.label`；历史选项卡 UI 拆分为 SettingsHistoryTab 独立类（SettingsWindow 仅 addTab）；HistoryManager 补 setDatabaseFilePathForTest/s_databasePathOverride/readItem/insertScreenshotRecord，HistoryWindow 补 copyItemToClipboard/saveScreenshotAs；托盘菜单图更新为 9 个快捷键项现状；快捷键兼容键注明保存时双写旧键；"首次开启剪贴板记录弹隐私提醒"标注为未实现设计项；注明 5 个孤儿翻译键 |
