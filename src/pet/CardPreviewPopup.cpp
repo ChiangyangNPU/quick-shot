@@ -169,15 +169,36 @@ void CardPreviewPopup::contextMenuEvent(QContextMenuEvent *event) {
         }
         LOG_INFO("CardPreviewPopup: preview content copied from context menu");
     } else if (chosen == annotateAction) {
-        // 标注需要稳定窗口：用原图创建贴图并直接进入标注模式
-        auto *pin = new PinWindow(image);
-        pin->show();
-        if (QScreen *s = QGuiApplication::screenAt(centerGlobal)) {
-            const QRect g = s->availableGeometry();
-            pin->move(g.center() - pin->rect().center());
+        // 标注需要稳定窗口：用原图创建贴图并直接进入标注模式。
+        // PinWindow 构造函数不设几何（须由调用方 setGeometry），按原图像素设定
+        // 初始尺寸；超高图按屏幕可用高度的 90% 等比缩小初始显示（与
+        // SnipScreen::pinPixmap 一致），PinWindow 内部仍保留原图，复制/保存不受影响
+        QSize windowSize = image.size();
+        QScreen *screen = QGuiApplication::screenAt(centerGlobal);
+        if (!screen) {
+            screen = QGuiApplication::primaryScreen();
         }
+        const QRect avail = screen ? screen->availableGeometry()
+                                   : QRect(0, 0, 1920, 1080);
+        const int maxHeight = qMax(100, int(avail.height() * 0.9));
+        if (windowSize.height() > maxHeight) {
+            const qreal scale = qreal(maxHeight) / windowSize.height();
+            windowSize.setHeight(maxHeight);
+            windowSize.setWidth(qMax(1, qRound(windowSize.width() * scale)));
+        }
+        // 以屏幕可用区域为中心弹出，整体夹到屏幕内
+        QPoint pos = avail.center() - QPoint(windowSize.width() / 2, windowSize.height() / 2);
+        pos.setX(qBound(avail.left(), pos.x(),
+                        qMax(avail.left(), avail.right() - windowSize.width() + 1)));
+        pos.setY(qBound(avail.top(), pos.y(),
+                        qMax(avail.top(), avail.bottom() - windowSize.height() + 1)));
+        auto *pin = new PinWindow(image);
+        pin->setGeometry(QRect(pos, windowSize));
+        pin->show();
+        pin->raise();
         pin->enterAnnotationMode();
-        LOG_INFO("CardPreviewPopup: preview annotate -> pin window with annotation mode");
+        LOG_INFO(QString("CardPreviewPopup: preview annotate -> pin window %1x%2 with annotation mode")
+                 .arg(windowSize.width()).arg(windowSize.height()));
     } else if (chosen == ocrAction) {
         OcrAsync::run(host, image.toImage(), QRect(), false,
                       [host, centerGlobal](const OcrEngine::OcrResult &result) {
