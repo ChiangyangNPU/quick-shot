@@ -13,7 +13,7 @@ class CardPreviewPopup;
  * @brief 晾衣绳历史窗口
  *
  * 点击桌面宠物后弹出：一条铺满主屏幕宽度的悬链线晾衣绳（默认位于屏幕顶部
- * 往下 1/4 高度处），绳上挂着最近的截图与剪贴板文本（数据来源 HistoryManager），
+ * 往下 1/5 高度处），绳上挂着最近的截图与剪贴板文本（数据来源 HistoryManager），
  * 卡片带入场下落与轻微摆动动画。
  * - 拖动空白区域可移动窗口位置；单击卡片：把对应截图/文本重新复制到系统剪贴板
  * - 悬停卡片：以晾衣绳窗口中心为基准弹出放大预览，移出卡片即消失
@@ -34,7 +34,7 @@ public:
     explicit ClotheslineWindow(QWidget *parent = nullptr);
 
     /**
-     * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/4 高度处）
+     * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/5 高度处）
      * @author chiangyang
      */
     void showFullWidth();
