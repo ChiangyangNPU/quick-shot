@@ -50,30 +50,6 @@ constexpr int kTickMs = 33;
 constexpr qreal kSwayDeg = 3.0; // 摆动幅度（度）
 // 预览原图缓存上限（超出后整体清空，防止长时间驻留占用过多内存）
 constexpr int kFullImageCacheLimit = 24;
-
-// 这些顶层窗口上的交互不关闭晾衣绳（均为晾衣绳/预览触发的同链路工作流窗口）
-constexpr const char *kKeepOpenTopLevels[] = {
-    "SnipScreen",             // 截图覆盖层：复制/贴图/快照后晾衣绳保持打开并自动刷新
-    "RecordingControlWindow", // 录屏控制窗
-    "QMenu",                  // 预览右键菜单等弹出菜单
-    "PinWindow",              // 贴图窗口：预览“标注”/截图贴图后拖动、绘制标注不关闭
-    "PinAnnotationToolBar",   // 贴图标注工具栏（标注模式的独立顶层窗口）
-    "OcrResultDialog",        // 预览“文字识别/翻译”的结果对话框
-    "TranslateOverlayWindow", // 预览“翻译”的译文叠加窗口
-};
-
-/**
- * @brief 判断顶层窗口是否属于“保持晾衣绳打开”的工作流窗口
- * @author chiangyang
- */
-bool isKeepOpenTopLevel(const QWidget *top) {
-    for (const char *name : kKeepOpenTopLevels) {
-        if (top->inherits(name)) {
-            return true;
-        }
-    }
-    return false;
-}
 }
 
 /**
@@ -126,7 +102,7 @@ void ClotheslineWindow::showFullWidth() {
     m_showElapsed.start();
     m_animTimer->start();
 
-    // 点击窗口外（宠物除外）关闭
+    // 全局事件过滤：应用自身窗口上的点击不关闭（见 eventFilter 注释）
     qApp->installEventFilter(this);
 
     LOG_INFO(QString("ClotheslineWindow: shown with %1 card(s)").arg(m_cards.size()));
@@ -694,7 +670,16 @@ void ClotheslineWindow::keyPressEvent(QKeyEvent *event) {
 }
 
 /**
- * @brief 全局事件过滤：点击窗口外（宠物除外）关闭
+ * @brief 全局事件过滤：应用自身窗口上的点击不关闭晾衣绳
+ *
+ * 晾衣绳是常驻历史面板，关闭只走显式途径：右上角 ×、Esc、双击空白、
+ * 再次点击宠物。注意鼠标点击桌面/其他应用的事件不会进入本进程事件循环，
+ * 本过滤器只能看到本应用自己的窗口——“点窗外关闭”实际能触发的只有
+ * 点击本应用其他顶层窗口的情形（设置/历史/贴图/标注/OCR/翻译等），
+ * 而这些全是应用内交互，一律不关闭；仅当点击落在无法映射回 QWidget 的
+ * 窗口（原生对话框等）时才视为真正的窗外点击而关闭。
+ * @note 顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow 句柄），
+ *       需经 QWidget::find 映射回 widget 再判断
  * @author chiangyang
  */
 bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
@@ -707,23 +692,19 @@ bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
         const bool inPreview = m_preview && m_preview->isVisible()
                                && m_preview->geometry().contains(globalPos);
         if (!geometry().contains(globalPos) && !inPet && !inPreview) {
-            // 截图/录屏覆盖层上的交互不关闭晾衣绳：复制/贴图/快照后晾衣绳保持打开并自动刷新
-            // 注意：顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow 句柄），
-            // 需经 QWidget::find 映射回 widget 再判断顶层窗口类型
             QWidget *w = qobject_cast<QWidget *>(watched);
             if (!w) {
                 if (auto *win = qobject_cast<QWindow *>(watched)) {
                     w = QWidget::find(win->winId());
                 }
             }
-            QWidget *top = w ? w->window() : nullptr;
-            if (top && isKeepOpenTopLevel(top)) {
+            // 能映射回 QWidget 的都是应用自身窗口（含其子窗口）：不关闭
+            if (w) {
                 return QWidget::eventFilter(watched, event);
             }
-            // 诊断日志：记录触发关闭的事件来源（定位晾衣绳被误关闭的根因）
-            LOG_INFO(QString("ClotheslineWindow: close by outside press, watched=%1, top=%2")
-                     .arg(watched ? watched->metaObject()->className() : "null")
-                     .arg(top ? top->metaObject()->className() : "null"));
+            // 原生对话框等非 Qt 窗口：视为真正的窗外点击
+            LOG_INFO(QString("ClotheslineWindow: close by press on non-widget window, watched=%1")
+                     .arg(watched ? watched->metaObject()->className() : "null"));
             close();
         }
     }

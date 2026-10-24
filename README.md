@@ -195,7 +195,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
     *   **悬停放大预览**: 卡片悬停弹出放大预览，图片加载原图并支持滚轮 0.2–10 倍缩放，文本自动换行展示。
     *   **单击复制**: 点击卡片将内容重新复制到剪贴板（文本复制经 markTextAsRecorded 去重，不重复入库）。
     *   **右键菜单**: 预览上右键弹出复制 / 标注（创建贴图并直接进入标注模式）/ 文字识别 / 翻译。
-    *   **窗口操作**: 支持拖动、上下边缘与四角调整大小；右上角 ×、双击空白、Esc、点击窗口外、再次点击宠物均可关闭；与截图/录屏/贴图/标注等工作流窗口交互不会误关。
+    *   **窗口操作**: 支持拖动、上下边缘与四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次点击宠物；应用内其他窗口（设置/历史/贴图/标注等）上的点击不会误关。
 
 ## 📦 安装与部署
 
@@ -258,7 +258,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **工具栏子工具栏防闪烁**: BaseToolBar 切换工具时使用同步 `delete` 立即释放布局空间；`showSubTools` 包裹 `setUpdatesEnabled(false/true)` 阻塞中间绘制；PinWindow 独立顶层子工具栏窗口设置 `WA_NoSystemBackground` 阻止系统级背景清除。
 *   **历史记录**: 基于 SQLite 数据库存储截图和剪贴板文本，支持多选（拖拽框选/Ctrl追加/Shift范围选）、批量删除、自动清理（启动自动 cleanupExpired：7 天保留 + 1000 最大条数）、实时刷新（300ms 防抖）；HistoryManager::addScreenshotPixmap() 由所有截图生成路径统一调用（copy/save/pin/grabFullscreen/grabActiveWindow/snapshotRequested），供 Alt+P 贴图历史分页循环显示。
 *   **Alt+P 贴图剪贴板历史分页**: SnipScreen::pinClipboard() 基于 HistoryManager 时间倒序截图列表，首次按下在鼠标屏幕中心显示（QCursor::pos - QPoint(w/2, h/2)），后续按下 m_pinHistoryIndex++ 取模，窗口位置继承前一窗口 + (24,24)，qBound 夹到屏幕边界；QPointer<PinWindow> 安全跟踪，PinWindow WA_DeleteOnClose 关闭后指针自动置空。
-*   **桌面宠物模块 src/pet**: DesktopPetManager 单例统一管理开关/位置/外观持久化（pet/enabled、pet/posX、pet/posY、pet/style）与两种投喂入口（截图 feed() / 文本 feedText()）；PetWindow 纯 QPainter 绘制 6 种外观（猫/柴犬/熊猫/兔子/企鹅/青蛙）+ 张嘴/咀嚼/眨眼动画；ClotheslineWindow 悬链线晾衣绳挂载最近 12 条历史卡片（HistoryManager 信号驱动实时刷新），CardPreviewPopup 悬停放大预览（原图 + 滚轮缩放）右键接入复制/标注/文字识别/翻译；FlyAnimationWidget 飞入动画；PetUiScale 按主屏 DPI 缩放（夹取 1.0–3.0）；晾衣绳"点击窗口外关闭"事件过滤按顶层窗口类型豁免截图/录屏/贴图/标注/OCR/翻译等工作流窗口。
+*   **桌面宠物模块 src/pet**: DesktopPetManager 单例统一管理开关/位置/外观持久化（pet/enabled、pet/posX、pet/posY、pet/style）与两种投喂入口（截图 feed() / 文本 feedText()）；PetWindow 纯 QPainter 绘制 6 种外观（猫/柴犬/熊猫/兔子/企鹅/青蛙）+ 张嘴/咀嚼/眨眼动画；ClotheslineWindow 悬链线晾衣绳挂载最近 12 条历史卡片（HistoryManager 信号驱动实时刷新），CardPreviewPopup 悬停放大预览（原图 + 滚轮缩放）右键接入复制/标注/文字识别/翻译；FlyAnimationWidget 飞入动画；PetUiScale 按主屏 DPI 缩放（夹取 1.0–3.0）；晾衣绳关闭只走显式途径（×/Esc/双击空白/再点宠物），全局事件过滤保证应用自身窗口上的点击一律不关闭。
 *   **自定义统一 MessageBox**: 所有对话框（提示/确认/隐私/翻译错误详情）使用 src/widgets/MessageBox.h，继承 QMessageBox 自动 applyProjectStyle()（getMessageBoxStyle QSS + loadAppIcon 图标），提供 addOkButton()/addYesNoButtons()（tm->get("yes/no") 翻译按钮，默认否按钮）/centerOn(rect) 居中定位到选区、information/warning/critical/question 静态便捷方法一行调用；翻译错误支持「详细信息」次级 MessageBox。
 *   **配置持久化**: 使用 QSettings 持久化配置，ConfigManager 单例支持 saveConfigAsync()/loadConfigAsync() 异步读写，支持配置文件切换/重置/打开位置。
 *   **代码注释规范**: 采用标准的 Doxygen 风格注释（@brief、@param、@return、@note、@author），所有公共方法均有中文方法注释，确保代码的可读性和可维护性。
