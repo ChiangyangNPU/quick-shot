@@ -10,6 +10,7 @@
 #include <QScreen>
 #include <QLabel>
 #include <QComboBox>
+#include <QPointer>
 #include "MessageBox.h"
 #include <QCheckBox>
 #include <QVBoxLayout>
@@ -340,22 +341,31 @@ void OcrResultDialog::mouseReleaseEvent(QMouseEvent *event) {
  * @author chiangyang
  */
 void OcrResultDialog::onTranslate() {
-    // 检查翻译功能是否启用 + 首次隐私提示
-    if (!TranslateService::checkEnabledAndPrivacy(this)) {
-        return;
-    }
-
     if (m_translating || m_fullText.isEmpty()) {
         return;
     }
 
-    m_translating = true;
+    // 隐私确认与其他翻译入口统一走异步非模态（无父窗口消息框，不再有
+    // 模态降级/恢复链路）；弹窗打开期间禁用翻译按钮防重复弹出。
+    // 对话框关闭即销毁，QPointer 兜底。
     m_translateButton->setEnabled(false);
-    TranslationManager *tm = TranslationManager::instance();
-    m_translateButton->setText(tm->get("translate.loading", "Translating..."));
+    QPointer<OcrResultDialog> self(this);
+    TranslateService::checkEnabledAndPrivacyAsync(this, QRect(), [self](bool allowed) {
+        if (!self) {
+            return;
+        }
+        if (!allowed) {
+            self->m_translateButton->setEnabled(true);
+            return;
+        }
+        self->m_translating = true;
+        self->m_translateButton->setEnabled(false);
+        TranslationManager *tm = TranslationManager::instance();
+        self->m_translateButton->setText(tm->get("translate.loading", "Translating..."));
 
-    LOG_INFO("OcrResultDialog: translation requested");
-    TranslateService::instance()->translate(m_fullText);
+        LOG_INFO("OcrResultDialog: translation requested");
+        TranslateService::instance()->translate(self->m_fullText);
+    });
 }
 
 /**

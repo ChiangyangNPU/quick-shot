@@ -7,10 +7,11 @@
 #include "SecretStore.h"
 #include "../core/TranslationManager.h"
 #include "../core/StyleManager.h"
-#include "../utils/Utils.h"
 #include "../log/Logger.h"
 
 #include <QSettings>
+#include <QPointer>
+#include "../utils/Utils.h"
 #include "../widgets/MessageBox.h"
 #include <QCheckBox>
 #include <QPushButton>
@@ -33,67 +34,15 @@ TranslateService *TranslateService::instance() {
 }
 
 /**
- * @brief 检查翻译功能是否启用并处理首次隐私提示
- * @param parent 父窗口（用于定位隐私提示弹窗）
- * @return true 表示可以继续翻译，false 表示功能未启用或用户拒绝
- * @author chiangyang
- */
-bool TranslateService::checkEnabledAndPrivacy(QWidget *parent, const QRect &centerRect) {
-    QSettings *settings = ConfigManager::instance()->getSettings();
-    bool enabled = settings->value("translate/enabled", true).toBool();
-    if (!enabled) {
-        return false;
-    }
-
-    bool showWarning = settings->value("translate/showPrivacyWarning", true).toBool();
-    if (!showWarning) {
-        return true;
-    }
-
-    // 显示首次翻译隐私提示
-    TranslationManager *tm = TranslationManager::instance();
-
-    MessageBox msgBox(parent);
-    msgBox.setContent(tm->get("translate.privacyTitle", "Translation Privacy Notice"),
-                      tm->get("translate.privacyMsg",
-                              "Translation sends recognized text to a third-party service. Continue?"));
-
-    QCheckBox *dontAsk = new QCheckBox(tm->get("translate.privacyDontAsk", "Don't ask again"), &msgBox);
-    msgBox.setCheckBox(dontAsk);
-
-    QPushButton *yesButton = nullptr;
-    msgBox.addYesNoButtons(&yesButton, nullptr, true);
-
-    // 弹窗居中定位：优先使用 centerRect（如截图选区），否则居中在 parent 窗口
-    QRect targetRect = centerRect.isValid() ? centerRect :
-                       (parent ? parent->frameGeometry() : QRect());
-    if (targetRect.isValid()) {
-        msgBox.centerOn(targetRect);
-    }
-
-    // macOS：置顶覆盖层场景下降级父窗口，避免消息框开在覆盖层后面
-    Utils::beginModalOverOverlay(parent);
-    msgBox.exec();
-    Utils::endModalOverOverlay(parent);
-
-    if (msgBox.clickedButton() == yesButton) {
-        if (dontAsk->isChecked()) {
-            settings->setValue("translate/showPrivacyWarning", false);
-        }
-        return true;
-    }
-    return false;
-}
-
-/**
- * @brief 异步版隐私确认（结果经 onDecided 回调返回）
+ * @brief 异步隐私确认（结果经 onDecided 回调返回）
  *
- * Windows 上在置顶透明截图覆盖层之上弹应用模态框、关闭后，Qt/系统的鼠标
- * 派发会异常（诊断日志证实：后续点击命中测试指向工具栏按钮，事件却被派发
- * 给覆盖层内的全屏选区控件，工具栏完全无法点击；macOS 无此问题）。三种
- * 模态形态（改宿主窗口标志降级/恢复、免降级、延迟弹出）均复现，故 Windows
- * 改用"无父窗口 + 置顶 + 非模态"的消息框规避：不阻塞输入、不改宿主窗口、
- * 不触发模态禁用/恢复链路。macOS 保持模态行为不变。
+ * 全平台统一使用"无父窗口 + 置顶 + 非模态"的消息框，不阻塞输入、不改宿主
+ * 窗口标志、不触发模态禁用/恢复链路。统一的原因（见头文件注释）：Windows
+ * 上应用模态框在置顶透明覆盖层之上开合会破坏鼠标派发；macOS 上对可见窗口
+ * 切换窗口标志会销毁重建原生 NSWindow 导致整个界面闪烁。
+ * macOS 附加处理：Qt 把带模态性的 QMessageBox 固定在模态面板级别(8)且
+ * 手动抬级别会被重置，故弹框期间用 Utils 的 setLevel 方案把置顶宿主覆盖层
+ * 临时降到普通级别（不重建窗口、不闪烁），弹框关闭后在回调里恢复。
  * @author chiangyang
  */
 void TranslateService::checkEnabledAndPrivacyAsync(QWidget *parent, const QRect &centerRect,
@@ -110,11 +59,16 @@ void TranslateService::checkEnabledAndPrivacyAsync(QWidget *parent, const QRect 
 
     TranslationManager *tm = TranslationManager::instance();
 
+    // 无父窗口：不与置顶透明覆盖层产生属主/模态联动
 #ifdef Q_OS_MACOS
-    const bool allowed = checkEnabledAndPrivacy(parent, centerRect);
-    onDecided(allowed);
-#else
-    // 无父窗口：不与置顶透明覆盖层产生属主/模态联动；置顶保证盖在覆盖层上
+    // macOS：Qt 对带模态性的 QMessageBox 强制使用模态面板级别
+    // （NSModalPanelWindowLevel 8），手动抬级别（实测 setLevel 101）会在
+    // 窗口激活时被重置回 8，而截图覆盖层在 101，弹框会被完全挡住。改为
+    // 复用 Utils 的 setLevel 降级/恢复（直接改合成层级、不重建窗口、不
+    // 闪烁）：弹框期间把宿主覆盖层降到普通级别，弹框关闭后恢复。
+    QPointer<QWidget> hostWin = parent ? parent->window() : nullptr;
+    Utils::beginModalOverOverlay(hostWin.data());
+#endif
     auto *msgBox = new MessageBox(nullptr);
     msgBox->setContent(tm->get("translate.privacyTitle", "Translation Privacy Notice"),
                        tm->get("translate.privacyMsg",
@@ -134,16 +88,22 @@ void TranslateService::checkEnabledAndPrivacyAsync(QWidget *parent, const QRect 
     msgBox->setWindowFlag(Qt::WindowStaysOnTopHint, true);
 
     QObject::connect(msgBox, &QDialog::finished, msgBox,
-        [msgBox, yesButton, dontAsk, settings, onDecided](int) {
+        [msgBox, yesButton, dontAsk, settings, onDecided
+#ifdef Q_OS_MACOS
+         , hostWin
+#endif
+        ](int) {
         const bool allowed = (msgBox->clickedButton() == yesButton);
         if (allowed && dontAsk->isChecked()) {
             settings->setValue("translate/showPrivacyWarning", false);
         }
+#ifdef Q_OS_MACOS
+        Utils::endModalOverOverlay(hostWin.data());
+#endif
         msgBox->deleteLater();
         onDecided(allowed);
     });
     msgBox->show();
-#endif
 }
 
 /**

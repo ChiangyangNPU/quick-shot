@@ -32,27 +32,20 @@ public:
     static TranslateService *instance();
 
     /**
-     * @brief 检查翻译功能是否启用并处理首次隐私提示
+     * @brief 异步隐私确认（结果经 onDecided 回调返回）
      *
-     * 统一的翻译前置检查：读取 translate/enabled 配置判断功能是否启用，
-     * 若启用且首次使用则弹出隐私提示对话框。供 SnipScreen、PinWindow、
-     * OcrResultDialog 等所有翻译入口复用，消除重复代码。
-     * @param parent 父窗口（用于定位隐私提示弹窗），可为 nullptr
-     * @param centerRect 弹窗居中区域（全局坐标），为空则居中在 parent
-     * @return true 表示可以继续翻译，false 表示功能未启用或用户拒绝
-     * @author chiangyang
-     */
-    static bool checkEnabledAndPrivacy(QWidget *parent = nullptr,
-                                       const QRect &centerRect = QRect());
-
-    /**
-     * @brief 异步版隐私确认（结果经 onDecided 回调返回）
-     *
-     * Windows 上在置顶透明截图覆盖层之上弹应用模态框、关闭后，Qt/系统的
-     * 鼠标派发会异常（后续所有点击被派发给覆盖层内的全屏选区控件，工具栏
-     * 无法点击；macOS 无此问题），因此 Windows 用"无父窗口 + 置顶 + 非模态"
-     * 的消息框规避：不阻塞输入、不改宿主窗口、不触发模态禁用/恢复链路。
-     * macOS 保持模态行为不变。其余逻辑与 checkEnabledAndPrivacy 一致。
+     * 全平台统一使用"无父窗口 + 置顶 + 非模态"消息框，不阻塞输入、不改
+     * 宿主窗口，结果经 onDecided 回调返回（功能未启用或无需提示时同步
+     * 回调）。统一的原因：
+     * - Windows：在置顶透明截图覆盖层之上弹应用模态框、关闭后，Qt/系统
+     *   的鼠标派发会异常（后续点击命中测试指向工具栏按钮，事件却被派发
+     *   给覆盖层内的全屏选区控件，工具栏无法点击；三种模态形态均复现）
+     * - macOS：对可见窗口切换 WindowStaysOnTopHint 会销毁并重建原生
+     *   NSWindow，整个界面闪烁；且 Qt 把带模态性的 QMessageBox 固定在
+     *   模态面板级别(8)，手动抬级别会在窗口激活时被重置，弹框会被 101
+     *   级别的截图覆盖层完全挡住。故弹框期间用 Utils::beginModalOverOverlay
+     *   （setLevel 直接改合成层级，不重建窗口）把宿主覆盖层临时降到
+     *   普通级别，弹框关闭后在回调里恢复
      * @param parent 参考窗口（仅用于定位弹窗），可为 nullptr
      * @param centerRect 弹窗居中区域（全局坐标），为空则居中在 parent
      * @param onDecided 用户决定后的回调：true 可继续翻译 / false 拒绝或未启用
