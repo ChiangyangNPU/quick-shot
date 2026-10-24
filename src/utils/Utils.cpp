@@ -30,16 +30,22 @@
 #include <objc/objc.h>
 
 /**
- * @brief 将窗口级别恢复到菜单栏之上（与 SnipScreen 启动时的提升一致）
+ * @brief 直接调 [NSWindow setLevel:] 修改窗口合成层级
+ *
+ * 不走 QWidget::setWindowFlag：对可见窗口改窗口标志会销毁并重建原生
+ * NSWindow，整个覆盖层会闪烁一下；setLevel: 只改合成层级，窗口不重建。
+ * @param wid QWidget::winId() 返回的 NSView 指针
+ * @param level 目标 NSWindow 层级
  * @author chiangyang
  */
-static void restoreWindowAboveMenuBar(WId wid) {
+static void setNSWindowLevel(WId wid, long level) {
     if (!wid) return;
     id nsView = reinterpret_cast<id>(wid);
+    // [nsView window]
     id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
     if (!nsWindow) return;
-    // [nsWindow setLevel:NSPopUpMenuWindowLevel]
-    ((void (*)(id, SEL, long))objc_msgSend)(nsWindow, sel_registerName("setLevel:"), 101);
+    // [nsWindow setLevel:level]
+    ((void (*)(id, SEL, long))objc_msgSend)(nsWindow, sel_registerName("setLevel:"), level);
 }
 #endif
 
@@ -50,13 +56,18 @@ static void restoreWindowAboveMenuBar(WId wid) {
 void Utils::beginModalOverOverlay(QWidget *parent) {
     QWidget *win = parent ? parent->window() : nullptr;
     if (!win) return;
-    if (win->windowFlags() & Qt::WindowStaysOnTopHint) {
-        // 取消置顶会让 macOS 把 NSWindow 级别重置为普通窗口，
-        // 原生保存面板/消息框即可显示在覆盖层之上
-        win->setWindowFlag(Qt::WindowStaysOnTopHint, false);
-        win->show();
-        LOG_INFO("Overlay window lowered for modal dialog");
-    }
+    if (!(win->windowFlags() & Qt::WindowStaysOnTopHint)) return;
+#ifdef Q_OS_MACOS
+    // 层级降到普通窗口（NSNormalWindowLevel），原生保存面板/消息框即可
+    // 显示在覆盖层之上；窗口标志不动，不触发原生窗口重建
+    setNSWindowLevel(win->winId(), 0);
+#else
+    // 取消置顶会让系统把窗口层级重置为普通窗口，
+    // 原生保存面板/消息框即可显示在覆盖层之上
+    win->setWindowFlag(Qt::WindowStaysOnTopHint, false);
+    win->show();
+#endif
+    LOG_INFO("Overlay window lowered for modal dialog");
 }
 
 /**
@@ -66,14 +77,20 @@ void Utils::beginModalOverOverlay(QWidget *parent) {
 void Utils::endModalOverOverlay(QWidget *parent) {
     QWidget *win = parent ? parent->window() : nullptr;
     if (!win) return;
+#ifdef Q_OS_MACOS
+    // begin 只降了 NSWindow 层级（窗口标志未动），这里抬回菜单栏之上
+    // （NSPopUpMenuWindowLevel，与 SnipScreen 启动时的提升一致）
+    if (win->windowFlags() & Qt::WindowStaysOnTopHint) {
+        setNSWindowLevel(win->winId(), 101);
+        LOG_INFO("Overlay window restored after modal dialog");
+    }
+#else
     if (!(win->windowFlags() & Qt::WindowStaysOnTopHint)) {
         win->setWindowFlag(Qt::WindowStaysOnTopHint, true);
         win->show();
-#ifdef Q_OS_MACOS
-        restoreWindowAboveMenuBar(win->winId());
-#endif
         LOG_INFO("Overlay window restored after modal dialog");
     }
+#endif
 }
 
 bool Utils::saveImageToDesktop(const QPixmap& source, const QString& prefix) {

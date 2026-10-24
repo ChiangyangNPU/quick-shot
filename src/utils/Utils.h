@@ -97,7 +97,9 @@ public:
      *
      * macOS 截图覆盖层的 NSWindow 级别被抬到菜单栏之上（101），原生
      * 模态对话框（保存面板/消息框）会开在覆盖层后面而不可见。打开前
-     * 调用本方法取消置顶，对话框关闭后调用 endModalOverOverlay 恢复。
+     * 调用本方法降低覆盖层，对话框关闭后调用 endModalOverOverlay 恢复。
+     * macOS 直接调 [NSWindow setLevel:]（对可见窗口改窗口标志会重建
+     * 原生 NSWindow，整个界面闪烁）；其他平台临时移除 Qt::WindowStaysOnTopHint。
      * @param parent 模态对话框的父控件
      * @author chiangyang
      */
@@ -105,6 +107,9 @@ public:
 
     /**
      * @brief 恢复 beginModalOverOverlay 降低的置顶状态
+     *
+     * macOS 将 NSWindow 层级抬回菜单栏之上（101，与 SnipScreen 启动时
+     * 的提升一致）；其他平台恢复 Qt::WindowStaysOnTopHint 标志。
      * @param parent 模态对话框的父控件
      * @author chiangyang
      */
