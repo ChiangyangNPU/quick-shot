@@ -125,6 +125,7 @@ void ClotheslineWindow::reload() {
     m_cards.clear();
     // 预览原图缓存保留（有界，updateHoverPreview 中控制上限），避免频繁刷新后反复读盘
     hidePreview(); // 卡片重建后悬停态失效
+    m_highlightIndex = -1; // 卡片已重建，旧的高亮下标不再对应原记录
     for (const HistoryItem &item : items) {
         Card c;
         c.id = item.id;
@@ -239,6 +240,8 @@ void ClotheslineWindow::activateCard(int index) {
     // 按记录 ID 标记弹跳卡片：若复制触发历史刷新导致卡片重排，反馈仍落在原卡片上
     m_bounceId = c.id;
     m_bounceTimer.start();
+    // 点击的卡片同样标记高亮（指示"最近预览/点击的是哪张"）
+    m_highlightIndex = index;
 }
 
 /**
@@ -346,6 +349,17 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
                 opt.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
                 opt.setAlignment(Qt::AlignTop | Qt::AlignHCenter);
                 p.drawText(content, c.text.left(120), opt);
+            }
+
+            // 最近预览/点击的卡片：四周呼吸高亮描边（跟随卡片摆动变换绘制；
+            // 呼吸亮度由摆动相位驱动，动画 tick 每帧重绘），预览关闭后保留，
+            // 直至预览/点击其他卡片或历史刷新
+            if (i == m_highlightIndex) {
+                const qreal glow = 0.6 + 0.3 * qSin(m_phase * 2.0);
+                p.setPen(QPen(QColor(90, 190, 255, qRound(255 * glow)),
+                              2.5 * m_dpiScale));
+                p.setBrush(Qt::NoBrush);
+                p.drawRoundedRect(QRectF(c.rect).adjusted(-2, -2, 2, 2), 10, 10);
             }
 
             p.restore();
@@ -460,6 +474,8 @@ void ClotheslineWindow::updateHoverPreview(const QPoint &pos) {
         hidePreview();
         return;
     }
+    // 标记最近预览的卡片：预览关闭后高亮保留，直至预览/点击其他卡片
+    m_highlightIndex = idx;
     // 以晾衣绳窗口中心为基准居中弹出预览
     const Card &c = m_cards[idx];
     const QPoint center = mapToGlobal(QPoint(width() / 2, height() / 2));
@@ -488,6 +504,7 @@ void ClotheslineWindow::updateHoverPreview(const QPoint &pos) {
  */
 void ClotheslineWindow::hidePreview() {
     m_hoverIndex = -1;
+    // m_highlightIndex 保留：高亮标记"最近预览/点击的卡片"，预览关闭后仍显示
     if (m_preview) {
         m_preview->hide();
     }

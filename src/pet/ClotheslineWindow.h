@@ -135,7 +135,8 @@ private:
 
     /**
      * @brief 更新卡片悬停预览：悬停卡片时以窗口中心为基准弹出放大预览，
-     *        移出卡片/拖动/调整大小时隐藏
+     *        移出卡片/拖动/调整大小时隐藏；最近预览的卡片四周绘制呼吸高亮描边
+     *        （预览关闭后保留，直至预览/点击其他卡片）
      * @param pos 窗口局部坐标
      * @author chiangyang
      */
@@ -172,6 +173,7 @@ private:
     bool m_pendingClose = false;    ///< 双击空白区域请求关闭（等本次鼠标序列结束后执行，防止事件穿透到桌面）
     CardPreviewPopup *m_preview = nullptr; ///< 悬停放大预览弹窗（滚轮可缩放）
     int m_hoverIndex = -1;          ///< 当前悬停的卡片下标（-1 表示无悬停）
+    int m_highlightIndex = -1;      ///< 最近预览/点击的卡片下标（-1 无；四周呼吸高亮描边，预览关闭后保留）
     QHash<qint64, QPixmap> m_fullImageCache; ///< 预览原图缓存（记录 ID -> 原图，避免重复读盘）
 };
 
