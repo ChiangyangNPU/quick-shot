@@ -17,23 +17,6 @@ constexpr const char *kStyleKeys[] = {
 constexpr const char *kStyleFallbacks[] = {
     "Orange Cat", "Shiba", "Panda", "Bunny", "Penguin", "Frog"
 };
-
-/**
- * @brief 样式图标按钮的样式表（文字色随主题切换，选中态用主题强调色描边）
- * @author chiangyang
- */
-QString styleButtonStyle() {
-    // 文字色与 QCheckBox/QGroupBox 同款主题分支：按钮文字不指定色时会回落到
-    // Qt 默认调色板（跟随系统主题而非应用内主题），深色主题下黑字不可见
-    const bool dark = (StyleManager::themeMode() == StyleManager::ThemeMode::Dark);
-    return QString(
-        "QToolButton { border: 2px solid transparent; border-radius: 0.4em;"
-        "  padding: 0.2em; background: transparent; color: %1; }"
-        "QToolButton:hover { background: rgba(127, 127, 127, 60); }"
-        "QToolButton:checked { border-color: %2; }")
-        .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"),
-             StyleManager::getToolbarButtonCheckedColor().name());
-}
 }
 
 // ============================================================
@@ -85,7 +68,7 @@ void SettingsPetTab::setupUi() {
         btn->setIconSize(QSize(iconSize, iconSize));
         btn->setText(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
         btn->setToolTip(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
-        btn->setStyleSheet(styleButtonStyle());
+        btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
         m_styleButtons.append(btn);
         m_styleGroup->addButton(btn, i);
     }
@@ -148,7 +131,7 @@ void SettingsPetTab::refreshStyles() {
     if (m_petGroup) m_petGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_enablePetCheck) m_enablePetCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     for (QToolButton *btn : m_styleButtons) {
-        btn->setStyleSheet(styleButtonStyle());
+        btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
     }
     if (m_btnResetPos) m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
 }

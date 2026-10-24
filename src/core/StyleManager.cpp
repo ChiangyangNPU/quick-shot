@@ -853,6 +853,17 @@ QString StyleManager::getSettingsCheckBoxStyle() {
         ).arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
 }
 
+QString StyleManager::getSettingsToolButtonStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
+        return QString(
+            "QToolButton { border: 2px solid transparent; border-radius: 0.4em;"
+            "  padding: 0.2em; background: transparent; color: %1; }"
+            "QToolButton:hover { background: rgba(127, 127, 127, 60); }"
+            "QToolButton:checked { border-color: %2; }")
+            .arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"),
+                 qssColor(color(StyleColorId::ToolbarButtonChecked)));
+}
+
 QString StyleManager::getColorButtonStyle(const QString &color, const bool isSelected) {
         const bool dark = (themeMode() == ThemeMode::Dark);
         if (isSelected) {

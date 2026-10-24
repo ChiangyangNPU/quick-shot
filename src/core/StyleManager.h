@@ -324,6 +324,17 @@ public:
     static QString getSettingsCheckBoxStyle();
 
     /**
+     * @brief 获取设置界面可勾选工具按钮样式（QToolButton）
+     * @return 工具按钮样式字符串
+     * @note 使用位置: SettingsPetTab（宠物样式选择平铺按钮，checked 态描边）。
+     *       文字色与 getSettingsCheckBoxStyle() 同款主题分支：不指定色时按钮
+     *       文字回落到 Qt 默认调色板（跟随系统主题而非应用内主题），
+     *       深色主题下黑字不可见；选中态描边用可配置的 ToolbarButtonChecked 色。
+     * @author chiangyang
+     */
+    static QString getSettingsToolButtonStyle();
+
+    /**
      * @brief 获取颜色按钮样式
      * @param color 颜色值
      * @param isSelected 是否选中
