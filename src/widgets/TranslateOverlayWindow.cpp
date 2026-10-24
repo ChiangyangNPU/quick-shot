@@ -304,39 +304,92 @@ void TranslateOverlayWindow::drawOverlay(QPainter &painter) {
         if (br.isEmpty()) continue;
 
         if (m_viewMode == Translation) {
-            // 译文模式：在原文位置遮盖并显示译文
-            drawTranslatedText(painter, m_translatedTexts[i], br);
+            // 译文模式：在原文位置遮盖并显示译文（可向下扩展容纳长译文）
+            drawTranslatedText(painter, m_translatedTexts[i], br, m_pixmap.height());
         } else if (m_viewMode == Both) {
-            // 对照模式：在原文下方追加显示译文
-            drawTranslatedText(painter, m_translatedTexts[i], br.translated(0, br.height() + 2));
+            // 对照模式：在原文下方追加译文块，扩展下界受下一段原文约束，
+            // 避免长译文的白色背景盖住下一段原文
+            const qreal limit = nextBlockTopLimit(i, br);
+            QRectF target = br.translated(0, br.height() + 2);
+            target.setHeight(qMax(qreal(8), limit - target.top()));
+            drawTranslatedText(painter, m_translatedTexts[i], target, limit);
         }
     }
 }
 
 /**
- * @brief 在指定矩形区域绘制译文（半透明背景 + 自动换行 + 缩放字号）
- * @param painter 画笔
- * @param text 译文文本
- * @param rect 目标矩形区域
+ * @brief 计算对照模式下译文块向下扩展的下界
+ *
+ * 取横向与当前块有交叠的下一个原文块顶部 -2 与图片底边的较小者，
+ * 保证译文块扩展时不会盖住下一段原文的文字。
  * @author chiangyang
  */
-void TranslateOverlayWindow::drawTranslatedText(QPainter &painter, const QString &text, const QRectF &rect) {
+qreal TranslateOverlayWindow::nextBlockTopLimit(int index, const QRectF &br) const {
+    qreal limit = m_pixmap.height();
+    const int count = qMin(m_polygons.size(), m_translatedTexts.size());
+    for (int j = index + 1; j < count; ++j) {
+        const QRectF nb = m_polygons[j].boundingRect();
+        if (nb.isEmpty()) continue;
+        // 只约束横向有交叠、且位于当前块下方的相邻块
+        if (nb.top() >= br.bottom() && nb.left() < br.right() && nb.right() > br.left()) {
+            limit = qMin(limit, nb.top() - 2);
+        }
+    }
+    return limit;
+}
+
+/**
+ * @brief 在指定矩形区域绘制译文（半透明背景 + 自动换行 + 字号自适应）
+ *
+ * 字号从基准值（按区域高度估算）逐级向下试探，取能完整容纳译文的最大字号；
+ * 最小字号（8px）仍放不下时向下扩展矩形到 maxBottom，宁可轻微覆盖下方
+ * 内容也不截断译文（截断是这类叠加 UI 最影响可读性的问题）。
+ * @author chiangyang
+ */
+void TranslateOverlayWindow::drawTranslatedText(QPainter &painter, const QString &text,
+                                                QRectF rect, qreal maxBottom) {
     if (text.isEmpty() || rect.isEmpty()) return;
 
-    // 半透明白色背景遮盖原文
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(255, 255, 255, 230));
-    painter.drawRoundedRect(rect, 2, 2);
+    // 译文文字：深色；内边距稍宽避免文字贴边
+    const qreal padX = 3, padY = 2;
+    QRectF textRect = rect.adjusted(padX, padY, -padX, -padY);
 
-    // 译文文字：深色，字号根据区域高度自动缩放
-    painter.setPen(QColor(30, 30, 30));
+    // 字号自适应：从基准字号（按区域高度估算，夹取 8~22）向下试探，
+    // 取"换行排版后能完整容纳"的最大字号
     QFont font = painter.font();
-    const int fontSize = qBound(8, int(rect.height() * 0.75), 22);
-    font.setPixelSize(fontSize);
+    const int baseSize = qBound(8, int(rect.height() * 0.75), 22);
+    int size = baseSize;
+    QRectF br;
+    while (true) {
+        font.setPixelSize(size);
+        QFontMetricsF fm(font);
+        br = fm.boundingRect(textRect, Qt::TextWrapAnywhere | Qt::AlignCenter, text);
+        if (br.height() <= textRect.height() || size <= 8) {
+            break;
+        }
+        --size;
+    }
     painter.setFont(font);
 
-    // 在矩形内居中绘制，自动换行
-    const QRectF textRect = rect.adjusted(2, 1, -2, -1);
+    // 最小字号仍放不下：向下扩展矩形（不超过 maxBottom），再按扩展后的
+    // 区域重排一次；扩展后仍放不下则尽力绘制（底部裁剪）
+    if (br.height() > textRect.height()) {
+        const qreal avail = maxBottom - rect.top() - padY * 2;
+        if (avail > textRect.height()) {
+            rect.setHeight(avail + padY * 2);
+            textRect = rect.adjusted(padX, padY, -padX, -padY);
+            br = QFontMetricsF(font).boundingRect(
+                textRect, Qt::TextWrapAnywhere | Qt::AlignCenter, text);
+        }
+    }
+
+    // 半透明白色背景遮盖原文（在最终矩形上绘制，扩展部分同样有背景）
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(QColor(255, 255, 255, 230));
+    painter.drawRoundedRect(rect, 3, 3);
+
+    // 在矩形内居中绘制，按词边界自动换行（CJK 长串可在任意字符处断行）
+    painter.setPen(QColor(30, 30, 30));
     QTextOption option;
     option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
     option.setAlignment(Qt::AlignCenter);

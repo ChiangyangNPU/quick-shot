@@ -183,13 +183,18 @@ protected:
 
 private:
     /**
-     * @brief 在指定矩形区域绘制译文（半透明背景 + 自动换行 + 缩放字号）
+     * @brief 在指定矩形区域绘制译文（半透明背景 + 自动换行 + 字号自适应）
+     *
+     * 字号从基准值向下试探，取能完整容纳译文的最大字号；最小字号仍放不下时
+     * 向下扩展矩形（不超过 maxBottom），宁可轻微覆盖下方内容也不截断译文。
      * @param painter 画笔
      * @param text 译文文本
-     * @param rect 目标矩形区域
+     * @param rect 目标矩形区域（pixmap 坐标系）
+     * @param maxBottom 矩形向下扩展的下界（pixmap 坐标系 y 值）
      * @author chiangyang
      */
-    void drawTranslatedText(QPainter &painter, const QString &text, const QRectF &rect);
+    void drawTranslatedText(QPainter &painter, const QString &text,
+                            QRectF rect, qreal maxBottom);
 
     /**
      * @brief 绘制译文叠加层（根据当前视图模式）
@@ -197,6 +202,16 @@ private:
      * @author chiangyang
      */
     void drawOverlay(QPainter &painter);
+
+    /**
+     * @brief 计算对照模式下译文块向下扩展的下界：横向有交叠的下一个原文块
+     *        顶部与图片底边的较小者，避免译文块遮盖下一段原文
+     * @param index 当前块索引
+     * @param br 当前块（原文区域）外接矩形
+     * @return 允许的扩展下界（pixmap 坐标系 y 值）
+     * @author chiangyang
+     */
+    qreal nextBlockTopLimit(int index, const QRectF &br) const;
 
     /**
      * @brief 复制原文到剪贴板
