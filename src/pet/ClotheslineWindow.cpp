@@ -50,6 +50,30 @@ constexpr int kTickMs = 33;
 constexpr qreal kSwayDeg = 3.0; // 摆动幅度（度）
 // 预览原图缓存上限（超出后整体清空，防止长时间驻留占用过多内存）
 constexpr int kFullImageCacheLimit = 24;
+
+// 这些顶层窗口上的交互不关闭晾衣绳（均为晾衣绳/预览触发的同链路工作流窗口）
+constexpr const char *kKeepOpenTopLevels[] = {
+    "SnipScreen",             // 截图覆盖层：复制/贴图/快照后晾衣绳保持打开并自动刷新
+    "RecordingControlWindow", // 录屏控制窗
+    "QMenu",                  // 预览右键菜单等弹出菜单
+    "PinWindow",              // 贴图窗口：预览“标注”/截图贴图后拖动、绘制标注不关闭
+    "PinAnnotationToolBar",   // 贴图标注工具栏（标注模式的独立顶层窗口）
+    "OcrResultDialog",        // 预览“文字识别/翻译”的结果对话框
+    "TranslateOverlayWindow", // 预览“翻译”的译文叠加窗口
+};
+
+/**
+ * @brief 判断顶层窗口是否属于“保持晾衣绳打开”的工作流窗口
+ * @author chiangyang
+ */
+bool isKeepOpenTopLevel(const QWidget *top) {
+    for (const char *name : kKeepOpenTopLevels) {
+        if (top->inherits(name)) {
+            return true;
+        }
+    }
+    return false;
+}
 }
 
 /**
@@ -693,8 +717,7 @@ bool ClotheslineWindow::eventFilter(QObject *watched, QEvent *event) {
                 }
             }
             QWidget *top = w ? w->window() : nullptr;
-            if (top && (top->inherits("SnipScreen") || top->inherits("RecordingControlWindow")
-                        || top->inherits("QMenu"))) {  // 预览右键菜单等弹出菜单交互不关闭
+            if (top && isKeepOpenTopLevel(top)) {
                 return QWidget::eventFilter(watched, event);
             }
             // 诊断日志：记录触发关闭的事件来源（定位晾衣绳被误关闭的根因）
