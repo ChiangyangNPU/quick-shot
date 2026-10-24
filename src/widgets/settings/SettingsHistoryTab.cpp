@@ -39,8 +39,8 @@ void SettingsHistoryTab::setupUi() {
     scrollPal.setColor(QPalette::Window, StyleManager::getTabWidgetBgColor());
     scrollContent->setPalette(scrollPal);
     QVBoxLayout *layout = new QVBoxLayout(scrollContent);
-    layout->setContentsMargins(15, 15, 15, 15);
-    layout->setSpacing(15);
+    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setSpacing(10);
 
     // ===== 记录开关组 =====
     historyRecordGroup = new QGroupBox(tm->get("history.recordSettings", "Record Settings"), scrollContent);
