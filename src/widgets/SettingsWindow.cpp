@@ -544,6 +544,16 @@ void SettingsWindow::applyTabHeight(bool animated) {
     QScrollArea *tabScrollArea = currentTab->findChild<QScrollArea *>();
     int contentHeight = -1;
     if (tabScrollArea && tabScrollArea->widget()) {
+        // 上面 adjustSize() 把页面缩到了 sizeHint 宽（如宠物页 439px），
+        // FlowLayout 在窄宽度下会多折一行（macOS 按钮更宽，生肖按钮
+        // 3 行 vs 最终宽度下的 2 行），按窄视口宽估出的 hfw 高出真实
+        // 内容约一行高，窗口底部留下大片空白（Windows 按钮窄不触发）。
+        // 窗口宽度固定，先把页面宽度归位到选项卡栈宽再测量。
+        QWidget *stackPane = currentTab->parentWidget();
+        if (stackPane && stackPane->width() > 0 && currentTab->width() != stackPane->width()) {
+            currentTab->resize(stackPane->width(), currentTab->height());
+            currentTab->layout()->update();
+        }
         contentHeight =
             tabScrollArea->widget()->heightForWidth(tabScrollArea->viewport()->width());
         if (contentHeight >= 0) {
