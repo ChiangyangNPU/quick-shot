@@ -271,6 +271,9 @@ void SettingsWindow::setupGeneralTab() {
     connect(m_generalTabWidget, &SettingsGeneralTab::languageChanged, this,
             [this](const QString &code) {
                 retranslateUi();
+                // 文案长度随语言变化会改变当前页内容高度（如宠物页自动换行
+                // 的说明文案），重译后再适配一次窗口高度
+                applyTabHeight(true);
                 emit languageChanged(code);
             });
     tabWidget->addTab(m_generalTabWidget, "General");
@@ -545,17 +548,21 @@ void SettingsWindow::applyTabHeight(bool animated) {
     int contentHeight = -1;
     if (tabScrollArea && tabScrollArea->widget()) {
         // 上面 adjustSize() 把页面缩到了 sizeHint 宽（如宠物页 439px），
-        // FlowLayout 在窄宽度下会多折一行（macOS 按钮更宽，生肖按钮
-        // 3 行 vs 最终宽度下的 2 行），按窄视口宽估出的 hfw 高出真实
-        // 内容约一行高，窗口底部留下大片空白（Windows 按钮窄不触发）。
-        // 窗口宽度固定，先把页面宽度归位到选项卡栈宽再测量。
+        // FlowLayout / 自动换行 QLabel 在窄宽度下会多折一行（macOS 按钮
+        // 更宽，生肖按钮 3 行 vs 最终宽度下的 2 行），按窄视口宽估出的
+        // hfw 高出真实内容约一行高，窗口底部留下大片空白（Windows 按钮
+        // 窄不触发）。窗口宽度固定，先把页面宽度归位到选项卡栈宽再测量。
         QWidget *stackPane = currentTab->parentWidget();
         if (stackPane && stackPane->width() > 0 && currentTab->width() != stackPane->width()) {
             currentTab->resize(stackPane->width(), currentTab->height());
             currentTab->layout()->update();
         }
-        contentHeight =
-            tabScrollArea->widget()->heightForWidth(tabScrollArea->viewport()->width());
+        // 测量宽度用栈宽而非当前视口宽：测量瞬间纵向滚动条可能还挂着，
+        // 视口比最终宽度窄，换行标签会多算一行
+        const int measureWidth = (stackPane && stackPane->width() > 0)
+                                     ? stackPane->width()
+                                     : tabScrollArea->viewport()->width();
+        contentHeight = tabScrollArea->widget()->heightForWidth(measureWidth);
         if (contentHeight >= 0) {
             tabHeight = contentHeight + tabScrollArea->frameWidth() * 2;
         }

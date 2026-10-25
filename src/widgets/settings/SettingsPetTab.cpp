@@ -142,7 +142,11 @@ void SettingsPetTab::setupUi() {
 
     m_descLabel = new QLabel(tm->get("pet.description",
         "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet to open the clothesline and view recent screenshots and copied text."), m_petGroup);
-    m_descLabel->setWordWrap(false);
+    // 自动换行：各语言文案长度不一（英/日/韩首行远超可用宽度），关闭换行
+    // 会横向截断。此前换行导致窗口底部空白，根因是 applyTabHeight 在窄
+    // 宽度下估算 hfw（已修复：测量前按选项卡栈宽归位），换行后窗口高度
+    // 会随行数正确适配
+    m_descLabel->setWordWrap(true);
 
     petLayout->addWidget(m_enablePetCheck);
     petLayout->addWidget(m_styleLabel);
