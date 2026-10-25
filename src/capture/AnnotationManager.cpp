@@ -13,6 +13,7 @@ void AnnotationManager::add(std::unique_ptr<Annotation> annotation) {
         // 新标注使移动历史失效
         m_undoMoveState.valid = false;
         m_redoMoveState.valid = false;
+        m_moveIsLatestOp = false;
         // 新标注使清除重做快照失效（新操作丢弃重做历史）
         m_clearRedoSnapshot.valid = false;
 }
@@ -27,16 +28,18 @@ void AnnotationManager::updateLast(const QPoint &end) {
 void AnnotationManager::commit() {
         clearRedo();
         m_clearRedoSnapshot.valid = false;   // 新操作使清除重做快照失效
+        m_moveIsLatestOp = false;
 }
 
 void AnnotationManager::rollback() {
         ++m_contentVersion;
         if (!m_undoStack.empty()) {
-            m_undoStack.pop_back();
-            m_annotationSeqs.pop_back();
+                m_undoStack.pop_back();
+                m_annotationSeqs.pop_back();
         }
         m_undoMoveState.valid = false;
         m_redoMoveState.valid = false;
+        m_moveIsLatestOp = false;
         m_clearRedoSnapshot.valid = false;
 }
 
@@ -73,15 +76,19 @@ void AnnotationManager::undo() {
             m_nextOpSeq = m_clearUndoSnapshot.nextOpSeq;
 
             m_clearUndoSnapshot.valid = false;
+            m_moveIsLatestOp = false;
             return;
         }
 
-        // 优先级2：撤销移动操作
-        if (m_undoMoveState.valid && !m_undoStack.empty()) {
+        // 优先级2：撤销移动操作（仅当移动是最新操作，且栈顶即被移动标注——
+        // annSeq 校验防止旧移动记录套到撤销/重做后位于栈顶的其他标注上）
+        if (m_moveIsLatestOp && m_undoMoveState.valid && !m_undoStack.empty() &&
+            m_annotationSeqs.back() == m_undoMoveState.annSeq) {
             Annotation *last = m_undoStack.back().get();
             m_redoMoveState = saveAnnotationState(last);  // 保存当前（移动后）状态
             restoreAnnotationState(last, m_undoMoveState);  // 恢复到原始位置
             m_undoMoveState.valid = false;
+            m_moveIsLatestOp = true;   // 刚执行的"撤销移动"本身是最新操作，redo/undo 乒乓仍可续
             return;
         }
 
@@ -122,15 +129,19 @@ void AnnotationManager::redo() {
             m_nextOpSeq = m_clearRedoSnapshot.nextOpSeq;
 
             m_clearRedoSnapshot.valid = false;
+            m_moveIsLatestOp = false;
             return;
         }
 
-        // 优先级2：重做移动操作
-        if (m_redoMoveState.valid && !m_undoStack.empty()) {
+        // 优先级2：重做移动操作（仅当栈顶即被移动标注——annSeq 校验防止
+        // 被移动标注还在 redo 栈时，旧记录错套到当前栈顶的其他标注上）
+        if (m_redoMoveState.valid && !m_undoStack.empty() &&
+            m_annotationSeqs.back() == m_redoMoveState.annSeq) {
             Annotation *last = m_undoStack.back().get();
             m_undoMoveState = saveAnnotationState(last);  // 保存当前（移动前）状态
             restoreAnnotationState(last, m_redoMoveState);  // 恢复到移动后位置
             m_redoMoveState.valid = false;
+            m_moveIsLatestOp = true;
             return;
         }
 
@@ -179,6 +190,7 @@ void AnnotationManager::clear() {
         m_activeMosaicStroke.clear();
         m_undoMoveState.valid = false;
         m_redoMoveState.valid = false;
+        m_moveIsLatestOp = false;
 
         // 新清除操作使重做快照失效
         m_clearRedoSnapshot.valid = false;
@@ -229,11 +241,12 @@ void AnnotationManager::eraseAt(const QPoint &pos, const int size) {
 
 void AnnotationManager::endEraserStroke() {
         ++m_contentVersion;
+        m_moveIsLatestOp = false;
         if (!m_activeEraserStroke.empty()) {
-            m_eraserGroups.push_back({std::move(m_activeEraserStroke), m_nextOpSeq++});
-            m_activeEraserStroke.clear();
-            clearRedo();
-            m_clearRedoSnapshot.valid = false;
+                m_eraserGroups.push_back({std::move(m_activeEraserStroke), m_nextOpSeq++});
+                m_activeEraserStroke.clear();
+                clearRedo();
+                m_clearRedoSnapshot.valid = false;
         }
 }
 
@@ -258,11 +271,12 @@ void AnnotationManager::mosaicAt(const QPoint &pos, const int size) {
 
 void AnnotationManager::endMosaicStroke() {
         ++m_mosaicVersion;
+        m_moveIsLatestOp = false;
         if (!m_activeMosaicStroke.empty()) {
-            m_mosaicGroups.push_back({std::move(m_activeMosaicStroke), m_nextOpSeq++});
-            m_activeMosaicStroke.clear();
-            clearRedo();
-            m_clearRedoSnapshot.valid = false;
+                m_mosaicGroups.push_back({std::move(m_activeMosaicStroke), m_nextOpSeq++});
+                m_activeMosaicStroke.clear();
+                clearRedo();
+                m_clearRedoSnapshot.valid = false;
         }
 }
 
@@ -336,6 +350,9 @@ void AnnotationManager::moveLastControlPoint(int index, const QPoint &pos) {
 }
 
 void AnnotationManager::beginMove() {
+        // 已有未撤销的同标注移动记录时保留旧记录：连续多次拖动合并为一次撤销，
+        // 中途"按下未拖动"的空交互不冲掉上一次真实移动的撤销点
+        if (m_undoMoveState.valid && m_moveIsLatestOp) return;
         Annotation *last = lastAnnotation();
         if (!last) return;
         m_undoMoveState = saveAnnotationState(last);
@@ -352,16 +369,18 @@ void AnnotationManager::translateLast(const QPoint &offset) {
 void AnnotationManager::endMove() {
         Annotation *last = lastAnnotation();
         if (!last || !m_undoMoveState.valid) return;
-        // 判断位置是否变化
+        // 判断位置是否变化（三角形还需比较独立顶点，控制点拖拽可能只改顶点）
         MoveRecord now = saveAnnotationState(last);
         if (now.start != m_undoMoveState.start || now.end != m_undoMoveState.end ||
-            now.points != m_undoMoveState.points) {
-            // 位置变了，保留 m_undoMoveState（存原始位置），清空 redo
-            m_redoMoveState.valid = false;
-            m_clearRedoSnapshot.valid = false;   // 新操作使清除重做快照失效
+            now.points != m_undoMoveState.points || now.vertices != m_undoMoveState.vertices) {
+                // 位置变了，保留 m_undoMoveState（存原始位置），清空 redo
+                m_redoMoveState.valid = false;
+                m_clearRedoSnapshot.valid = false;   // 新操作使清除重做快照失效
+                m_moveIsLatestOp = true;
         } else {
-            // 位置没变，取消移动记录
-            m_undoMoveState.valid = false;
+                // 位置没变，取消移动记录
+                m_undoMoveState.valid = false;
+                m_moveIsLatestOp = false;
         }
 }
 
@@ -381,13 +400,15 @@ std::vector<QRect> AnnotationManager::mosaicStrokes() const {
 bool AnnotationManager::canUndo() const {
         return m_clearUndoSnapshot.valid || !m_undoStack.empty() ||
                !m_eraserGroups.empty() || !m_mosaicGroups.empty() ||
-               m_undoMoveState.valid;
+               (m_moveIsLatestOp && m_undoMoveState.valid && !m_undoStack.empty() &&
+                m_annotationSeqs.back() == m_undoMoveState.annSeq);
 }
 
 bool AnnotationManager::canRedo() const {
         return m_clearRedoSnapshot.valid || !m_redoStack.empty() ||
                !m_redoEraserGroups.empty() || !m_redoMosaicGroups.empty() ||
-               m_redoMoveState.valid;
+               (m_redoMoveState.valid && !m_undoStack.empty() &&
+                m_annotationSeqs.back() == m_redoMoveState.annSeq);
 }
 
 AnnotationManager::MoveRecord AnnotationManager::saveAnnotationState(const Annotation *ann) const {
@@ -395,12 +416,15 @@ AnnotationManager::MoveRecord AnnotationManager::saveAnnotationState(const Annot
         record.valid = true;
         record.start = ann->start();
         record.end = ann->end();
+        if (!m_annotationSeqs.empty()) {
+                record.annSeq = m_annotationSeqs.back();  // 调用方均传栈顶标注
+        }
         if (ann->type() == AnnotationType::Pen) {
-            record.points = static_cast<const PenAnnotation *>(ann)->points();
+                record.points = static_cast<const PenAnnotation *>(ann)->points();
         }
         // 三角形标注通过 dynamic_cast 识别（其 type 仍为 Rectangle）
         if (auto *tri = dynamic_cast<const TriangleAnnotation *>(ann)) {
-            record.vertices = tri->vertices();
+                record.vertices = tri->vertices();
         }
         return record;
 }
@@ -445,6 +469,7 @@ void AnnotationManager::scaleMosaicGroups(std::vector<MosaicStrokeGroup> &groups
 }
 
 void AnnotationManager::undoLastOperation() {
+        m_moveIsLatestOp = false;  // 撤销常规操作后，最新操作不再是移动
         bool hasAnn = !m_undoStack.empty();
         bool hasEraser = !m_eraserGroups.empty();
         bool hasMosaic = !m_mosaicGroups.empty();
@@ -473,6 +498,7 @@ void AnnotationManager::undoLastOperation() {
 }
 
 void AnnotationManager::redoEarliestOperation() {
+        m_moveIsLatestOp = false;  // 重做常规操作后，最新操作不再是移动
         bool hasAnn = !m_redoStack.empty();
         bool hasEraser = !m_redoEraserGroups.empty();
         bool hasMosaic = !m_redoMosaicGroups.empty();

@@ -111,6 +111,8 @@ public:
      *
      * 优先级：撤销清除操作 > 撤销移动操作 > 撤销最后一步操作（标注/橡皮擦组/马赛克组）。
      * 撤销清除时，将清除前的完整状态恢复；同时保存清除后的空状态到重做快照，使重做可再次清除。
+     * 撤销移动仅在「移动是最新操作」且栈顶即被移动标注时执行（m_moveIsLatestOp 与
+     * MoveRecord.annSeq 双重校验），避免把旧移动记录套到后来位于栈顶的其他标注上。
      * 撤销最后一步操作时，比较 undo 栈顶标注、橡皮擦组、马赛克组的序号，撤销序号最大的。
      * @author chiangyang
      */
@@ -121,6 +123,8 @@ public:
      *
      * 优先级：重做清除操作 > 重做移动操作 > 重做最早被撤销的操作。
      * 重做清除时，再次应用清除并将当前状态保存到撤销快照。
+     * 重做移动仅在栈顶即被移动标注时执行（MoveRecord.annSeq 校验），
+     * 防止标注被撤销又重做回来之前，旧移动记录错套到栈顶其他标注上。
      * 重做单个操作时，比较 redo 栈顶标注、橡皮擦组、马赛克组的序号，重做序号最小的（最早被撤销的）。
      * @author chiangyang
      */
@@ -344,17 +348,23 @@ public:
 
     /**
      * @brief 检查是否有可撤销的移动操作
-     * @return true 如果有未撤销的移动
+     * @return true 如果有未撤销的移动，且被移动标注仍在栈顶（seq 匹配）
      * @author chiangyang
      */
-    bool hasUndoMove() const { return m_undoMoveState.valid; }
+    bool hasUndoMove() const {
+        return m_moveIsLatestOp && m_undoMoveState.valid &&
+               !m_undoStack.empty() && m_annotationSeqs.back() == m_undoMoveState.annSeq;
+    }
 
     /**
      * @brief 检查是否有可重做的移动操作
-     * @return true 如果有可重做的移动
+     * @return true 如果有可重做的移动，且被移动标注仍在栈顶（seq 匹配）
      * @author chiangyang
      */
-    bool hasRedoMove() const { return m_redoMoveState.valid; }
+    bool hasRedoMove() const {
+        return m_redoMoveState.valid &&
+               !m_undoStack.empty() && m_annotationSeqs.back() == m_redoMoveState.annSeq;
+    }
 
     /**
      * @brief 获取马赛克笔迹列表（扁平化）
@@ -530,11 +540,14 @@ private:
     /**
      * @brief 移动记录结构
      *
-     * 保存标注的完整位置状态（start/end/points），用于拖动撤销/重做。
+     * 保存标注的完整位置状态（start/end/points/vertices）及被移动标注的操作序号，
+     * 用于拖动撤销/重做。annSeq 用于校验记录仍属于当前栈顶标注：
+     * 若被移动标注已被撤销出栈（栈顶换人），记录作废，防止错套到其他标注。
      * @author chiangyang
      */
     struct MoveRecord {
         bool valid = false;          ///< 记录是否有效
+        uint64_t annSeq = 0;         ///< 被移动标注的操作序号（应用前须与栈顶序号一致）
         QPoint start;                 ///< 起始点
         QPoint end;                   ///< 结束点
         QVector<QPoint> points;       ///< 路径点列表（仅 PenAnnotation 使用）
@@ -690,6 +703,7 @@ private:
     quint64 m_mosaicVersion = 0;                           ///< 马赛克笔迹版本（马赛克变化递增）
     MoveRecord m_undoMoveState;                            ///< undo 目标状态（移动前原始位置）
     MoveRecord m_redoMoveState;                            ///< redo 目标状态（移动后位置）
+    bool m_moveIsLatestOp = false;                         ///< 最新用户操作是否为移动/控制点调节（决定 undo 是否先走移动分支）
     ClearSnapshot m_clearUndoSnapshot;                     ///< 清除操作的撤销快照（保存清除前状态）
     ClearSnapshot m_clearRedoSnapshot;                     ///< 清除操作的重做快照（保存重做清除的前置状态）
 };

@@ -7,7 +7,8 @@
  *
  * 覆盖三操作流（标注/橡皮擦组/马赛克组）的序号合并撤销重做、
  * 清除快照（undo 恢复/redo 再清除）、移动记录（undo/redo 恢复位置、
- * 无位移不记录）、新操作失效语义（移动历史/清除重做快照/redo 栈）、
+ * 无位移不记录、陈旧记录不串标注、空交互不冲掉撤销点、被更新操作
+ * 打断后不抢先撤销）、新操作失效语义（移动历史/清除重做快照/redo 栈）、
  * scaleAll 全局缩放对栈内与快照内容的同步。
  * 纯逻辑无 GUI 依赖，QTEST_GUILESS_MAIN 即可。
  * @author chiangyang
@@ -225,6 +226,70 @@ private slots:
         auto *restored = static_cast<PenAnnotation *>(m.lastAnnotation());
         QCOMPARE(restored->points()[0], QPoint(0, 0));
         QCOMPARE(restored->points()[1], QPoint(10, 10));
+    }
+
+    void move_staleRecordNotAppliedToOtherAnnotation() {
+        // 回归：R2 移动被撤销、R2/R1 又被撤销后重做时，R2 的移动记录
+        // 不得错套到栈顶的 R1 上（旧实现 redo 会把 R1 瞬移到 R2 的位置）
+        AnnotationManager m;
+        m.add(makeRect(QPoint(0, 0), QPoint(10, 10)));     // R1 seq0
+        m.commit();
+        m.add(makeRect(QPoint(50, 50), QPoint(60, 60)));   // R2 seq1
+        m.commit();
+
+        m.beginMove();
+        m.translateLast(QPoint(5, 5));
+        m.endMove();                                       // R2 -> (55,55)
+
+        m.undo();   // 撤销 R2 的移动
+        QCOMPARE(m.lastAnnotation()->start(), QPoint(50, 50));
+        m.undo();   // R2 出栈
+        m.undo();   // R1 出栈
+        QCOMPARE(m.hasAnnotations(), false);
+
+        m.redo();   // R1 回栈：位置必须是原位，不被 R2 的移动记录污染
+        QCOMPARE(m.lastAnnotation()->start(), QPoint(0, 0));
+        QCOMPARE(m.lastAnnotation()->end(), QPoint(10, 10));
+        m.redo();   // R2 回栈
+        QCOMPARE(m.lastAnnotation()->start(), QPoint(50, 50));
+        m.redo();   // R2 回栈后其移动记录才生效（seq 匹配）
+        QCOMPARE(m.lastAnnotation()->start(), QPoint(55, 55));
+        QCOMPARE(m.canRedo(), false);
+    }
+
+    void undo_afterNewerEraserStroke_removesStrokeFirst() {
+        // 回归：移动之后有更新的橡皮擦笔迹时，撤销应先移除笔迹，
+        // 而不是抢先还原标注位置（旧实现移动分支无条件优先）
+        AnnotationManager m;
+        m.add(makeRect(QPoint(10, 10), QPoint(30, 30)));
+        m.commit();
+        m.beginMove();
+        m.translateLast(QPoint(5, 0));
+        m.endMove();                                       // 移动 -> (15,10)
+        m.eraseAt(QPoint(15, 15), 2);
+        m.endEraserStroke();                               // 更新的操作
+
+        m.undo();   // 先撤销橡皮擦笔迹
+        QVERIFY(m.eraserRegion().isEmpty());
+        QCOMPARE(m.lastAnnotation()->start(), QPoint(15, 10));   // 位置保持
+        m.undo();   // 再撤销标注本身
+        QCOMPARE(m.hasAnnotations(), false);
+    }
+
+    void move_clickWithoutDrag_keepsPreviousMoveUndo() {
+        // 回归：移动后再"按下未拖动"的空交互不得冲掉上一次移动的撤销点
+        AnnotationManager m;
+        m.add(makeRect(QPoint(10, 10), QPoint(20, 20)));
+        m.commit();
+        m.beginMove();
+        m.translateLast(QPoint(5, 5));
+        m.endMove();
+
+        m.beginMove();   // 点击不动
+        m.endMove();
+        QVERIFY(m.hasUndoMove());
+        m.undo();
+        QCOMPARE(m.lastAnnotation()->start(), QPoint(10, 10));
     }
 
     void newOperation_invalidatesMoveState() {
