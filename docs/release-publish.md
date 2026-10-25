@@ -37,9 +37,9 @@ CI 与本地**共用同一个脚本**（`deploy/gitee/publish_gitee_release.sh`�
 # 1. 提交改动
 git add -A && git commit -m "chore: bump to vX.Y.Z"
 
-# 2. 打【附注】标签。发布说明建议写在仓库文件 docs/release-notes-vX.Y.Z.md（随仓库长期保存，
-#    重发同版本时不用重写文案），用它作为 tag 注释
-git tag -a vX.Y.Z -F docs/release-notes-vX.Y.Z.md --cleanup=verbatim
+# 2. 打【附注】标签。发布说明建议写在仓库文件 docs/release-notes/release-notes-vX.Y.Z.md
+#    （随仓库长期保存，重发同版本时不用重写文案），用它作为 tag 注释
+git tag -a vX.Y.Z -F docs/release-notes/release-notes-vX.Y.Z.md --cleanup=verbatim
 #    注意：必须 -a（附注标签），且要加 --cleanup=verbatim（否则 Markdown 的 # 标题行会被 git 清理掉）；
 #    轻量标签取不到说明文字，会退化成提交信息
 
