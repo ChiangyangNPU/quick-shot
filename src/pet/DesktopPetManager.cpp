@@ -2,6 +2,7 @@
 #include "PetWindow.h"
 #include "FlyAnimationWidget.h"
 #include "ClotheslineWindow.h"
+#include "PetUiScale.h"
 #include "../core/ConfigManager.h"
 #include "../history/HistoryManager.h"
 #include "../history/HistoryItem.h"
@@ -12,6 +13,14 @@
 #include <QCursor>
 #include <QPainter>
 #include <QFontMetrics>
+#include <QTimer>
+
+namespace {
+// 主屏顶边热区：光标进入上边界以内该逻辑像素深度视为"移到屏幕上边界"
+constexpr int kHotEdgeTriggerPx = 5;
+// 热区轮询间隔
+constexpr int kHotEdgePollMs = 60;
+}
 
 DesktopPetManager* DesktopPetManager::s_instance = nullptr;
 
@@ -71,7 +80,9 @@ void DesktopPetManager::setEnabled(bool enabled) {
 
     if (enabled) {
         createPetWindow();
+        startHotEdgeWatch();
     } else {
+        stopHotEdgeWatch();
         if (m_clothesline) {
             m_clothesline->close();
             m_clothesline = nullptr;
@@ -201,13 +212,14 @@ QPixmap DesktopPetManager::renderTextCard(const QString &text) const {
 }
 
 /**
- * @brief 切换晾衣绳窗口显隐（宠物点击槽）
+ * @brief 切换晾衣绳窗口显隐（宠物点击/顶边热区共用槽）
  * @author chiangyang
  */
 void DesktopPetManager::toggleClothesline() {
     if (m_clothesline && m_clothesline->isVisible()) {
-        m_clothesline->close();
-        m_clothesline = nullptr;
+        // 上滑收起是异步的：滑出屏幕后窗口走 close()/deleteLater 自毁，
+        // m_clothesline（QPointer）随之自动清空
+        m_clothesline->hideWithSlide();
         return;
     }
 
@@ -216,6 +228,50 @@ void DesktopPetManager::toggleClothesline() {
     }
     m_clothesline = new ClotheslineWindow();
     m_clothesline->showFullWidth();
+}
+
+/**
+ * @brief 启动主屏顶边热区轮询
+ * @author chiangyang
+ */
+void DesktopPetManager::startHotEdgeWatch() {
+    if (!m_hotEdgeTimer) {
+        m_hotEdgeTimer = new QTimer(this);
+        m_hotEdgeTimer->setInterval(kHotEdgePollMs);
+        connect(m_hotEdgeTimer, &QTimer::timeout, this, &DesktopPetManager::pollHotEdge);
+    }
+    m_hotEdgeArmed = true;
+    m_hotEdgeTimer->start();
+}
+
+/**
+ * @brief 停止主屏顶边热区轮询
+ * @author chiangyang
+ */
+void DesktopPetManager::stopHotEdgeWatch() {
+    if (m_hotEdgeTimer) {
+        m_hotEdgeTimer->stop();
+    }
+}
+
+/**
+ * @brief 顶边热区轮询：光标进入主屏上边界热区时切换晾衣绳显隐
+ * @author chiangyang
+ */
+void DesktopPetManager::pollHotEdge() {
+    QScreen *screen = QGuiApplication::primaryScreen();
+    if (!screen) {
+        return;
+    }
+    const int triggerY = screen->geometry().top() + PetUi::scaled(kHotEdgeTriggerPx);
+    if (QCursor::pos().y() <= triggerY) {
+        if (m_hotEdgeArmed) {
+            m_hotEdgeArmed = false; // 一次进入只切换一次，离开热区后重新武装
+            toggleClothesline();
+        }
+    } else {
+        m_hotEdgeArmed = true;
+    }
 }
 
 /**

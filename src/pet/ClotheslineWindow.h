@@ -6,6 +6,8 @@
 #include <QElapsedTimer>
 #include <QList>
 #include <QHash>
+#include <QPointer>
+#include <QVariantAnimation>
 
 class CardPreviewPopup;
 
@@ -18,6 +20,7 @@ class CardPreviewPopup;
  * - 拖动空白区域可移动窗口位置；单击卡片：把对应截图/文本重新复制到系统剪贴板
  * - 悬停卡片：以晾衣绳窗口中心为基准弹出放大预览，移出卡片即消失
  * - 双击空白区域：隐藏晾衣绳；左上角/右上角/左下角/右下角与上下边界可拖拽调整窗口大小；右上角 × 按钮关闭
+ * - 显隐均带整体滑动动画：显示时从屏幕上方向下挂入，隐藏时向上滑出屏幕
  * - 关闭：× 按钮、双击空白、Esc、再次点击宠物、点击窗口外（截图/录屏覆盖层上的交互除外，
  *   截图复制/贴图/快照后晾衣绳保持打开并自动刷新最新记录）
  * - 历史增删时实时刷新（刷新时保留用户拖动后的位置）
@@ -35,9 +38,20 @@ public:
 
     /**
      * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/5 高度处）
+     *
+     * 窗口先落到屏幕上边界之外的起始位（整体不可见），再整体向下滑入到
+     * 目标位置，营造"从上面挂下来"的出场感。
      * @author chiangyang
      */
     void showFullWidth();
+
+    /**
+     * @brief 上滑收起：整体向上滑出屏幕后按既有 close() 路径清理
+     *
+     * 已在收起动画中时重复调用是空操作；不可见时直接走 close()。
+     * @author chiangyang
+     */
+    void hideWithSlide();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
@@ -148,6 +162,16 @@ private:
      */
     void hidePreview();
 
+    /**
+     * @brief 启动整体上下滑动动画（驱动窗口 y 坐标，x/宽高不变）
+     * @param toY 目标窗口 y 坐标
+     * @param durationMs 动画时长
+     * @param curve 缓动曲线（挂入用减速曲线，滑出用加速曲线）
+     * @param hideOnFinish 动画结束时是否走 close() 清理（收起用）
+     * @author chiangyang
+     */
+    void startSlide(int toY, int durationMs, QEasingCurve::Type curve, bool hideOnFinish);
+
     QList<Card> m_cards;            ///< 卡片列表
     QTimer *m_animTimer = nullptr;  ///< 摆动/入场动画定时器
     qreal m_phase = 0.0;            ///< 摆动相位
@@ -175,6 +199,8 @@ private:
     int m_hoverIndex = -1;          ///< 当前悬停的卡片下标（-1 表示无悬停）
     int m_highlightIndex = -1;      ///< 最近预览/点击的卡片下标（-1 无；四周呼吸高亮描边，预览关闭后保留）
     QHash<qint64, QPixmap> m_fullImageCache; ///< 预览原图缓存（记录 ID -> 原图，避免重复读盘）
+    QPointer<QVariantAnimation> m_slideAnim; ///< 整体滑动动画（DeleteWhenStopped 自毁后自动置空；新动画开始前 stop，避免叠加互相覆写）
+    bool m_slideHideRunning = false;         ///< 上滑收起动画进行中（期间忽略重复收起请求）
 };
 
 #endif // CLOTHESLINEWINDOW_H

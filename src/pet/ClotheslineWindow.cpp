@@ -48,6 +48,9 @@ constexpr int kMinH = kRopeY + kRopeSag + kPinLen + kCardH + 8;
 // 动画
 constexpr int kTickMs = 33;
 constexpr qreal kSwayDeg = 3.0; // 摆动幅度（度）
+// 整体滑动动画（挂入/滑出）
+constexpr int kSlideDownMs = 260; // 下滑挂入：减速曲线，有"荡下来挂住"的观感
+constexpr int kSlideUpMs = 200;   // 上滑收起：加速曲线，干脆利落
 // 预览原图缓存上限（超出后整体清空，防止长时间驻留占用过多内存）
 constexpr int kFullImageCacheLimit = 24;
 }
@@ -95,7 +98,11 @@ void ClotheslineWindow::showFullWidth() {
     // 重新打开时恢复默认几何；显示期间历史刷新则保留用户拖动/调整后的几何
     QScreen *screen = QGuiApplication::primaryScreen();
     const QRect screenGeo = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
-    setGeometry(screenGeo.left(), screenGeo.top() + screenGeo.height() / 5,
+    const int targetY = screenGeo.top() + screenGeo.height() / 5;
+
+    // 起始位整体落在屏幕上边界之外（不可见区域），随后向下滑入到目标位，
+    // 营造"从上面挂下来"的出场感
+    setGeometry(screenGeo.left(), screenGeo.top() - sc(kWindowH),
                 screenGeo.width(), sc(kWindowH));
 
     reload();
@@ -118,7 +125,57 @@ void ClotheslineWindow::showFullWidth() {
     // 全局事件过滤：应用自身窗口上的点击不关闭（见 eventFilter 注释）
     qApp->installEventFilter(this);
 
+    startSlide(targetY, kSlideDownMs, QEasingCurve::OutCubic, false);
+
     LOG_INFO(QString("ClotheslineWindow: shown with %1 card(s)").arg(m_cards.size()));
+}
+
+/**
+ * @brief 上滑收起：整体向上滑出屏幕后走 close() 清理
+ * @author chiangyang
+ */
+void ClotheslineWindow::hideWithSlide() {
+    // 已在收起动画中：忽略重复请求。窗口在动画结束前一直可见，宠物点击/
+    // 顶边热区的切换判断看到的都是 isVisible，重入在这里挡住
+    if (m_slideHideRunning) {
+        return;
+    }
+    if (!isVisible()) {
+        close();
+        return;
+    }
+    QScreen *screen = QGuiApplication::primaryScreen();
+    const int endY = (screen ? screen->geometry().top() : 0) - height();
+    startSlide(endY, kSlideUpMs, QEasingCurve::InCubic, true);
+}
+
+/**
+ * @brief 启动整体上下滑动动画（valueChanged 驱动窗口 y，x/宽高不变）
+ * @author chiangyang
+ */
+void ClotheslineWindow::startSlide(int toY, int durationMs, QEasingCurve::Type curve, bool hideOnFinish) {
+    // 停掉进行中的滑动动画（DeleteWhenStopped，stop 即销毁），flag 同步为
+    // 新动画的模式：旧收起动画被中途替换时其 finished 不会触发，flag 不能残留
+    if (m_slideAnim) {
+        m_slideAnim->stop();
+    }
+    m_slideHideRunning = hideOnFinish;
+
+    m_slideAnim = new QVariantAnimation(this);
+    m_slideAnim->setStartValue(y());
+    m_slideAnim->setEndValue(toY);
+    m_slideAnim->setDuration(durationMs);
+    m_slideAnim->setEasingCurve(curve);
+    connect(m_slideAnim, &QVariantAnimation::valueChanged, this, [this](const QVariant &value) {
+        move(x(), qRound(value.toReal()));
+    });
+    if (hideOnFinish) {
+        connect(m_slideAnim, &QVariantAnimation::finished, this, [this]() {
+            m_slideHideRunning = false;
+            close();
+        });
+    }
+    m_slideAnim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
 /**

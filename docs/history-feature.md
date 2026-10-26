@@ -700,7 +700,7 @@ flowchart TD
 
 除 HistoryWindow 外，桌面宠物模块（`src/pet/`）是历史数据的另一组消费方：
 
-- **晾衣绳窗口（ClotheslineWindow）**：打开时经 `getItems(HistoryType::All, 0, 12)` 拉取最近 12 条记录，在悬垂绳上渲染成卡片（截图显示缩略图、文本显示摘要）；连接 `itemAdded`/`itemRemoved`/`cleared` 信号实时重建布局。单击卡片将内容重新复制到剪贴板——文本复制前调用 `ClipboardMonitor::markTextAsRecorded()` 预置去重标记，避免复制动作本身再生成一条重复记录。
+- **晾衣绳窗口（ClotheslineWindow）**：打开时经 `getItems(HistoryType::All, 0, 12)` 拉取最近 12 条记录，在悬垂绳上渲染成卡片（截图显示缩略图、文本显示摘要）；连接 `itemAdded`/`itemRemoved`/`cleared` 信号实时重建布局。单击卡片将内容重新复制到剪贴板——文本复制前调用 `ClipboardMonitor::markTextAsRecorded()` 预置去重标记，避免复制动作本身再生成一条重复记录。显隐入口有两处（单击宠物、鼠标移到主屏上边界热区），均带整体滑动动画：显示时窗口从屏幕上方向下挂入，隐藏时向上滑出屏幕。
 - **文字复制投喂（DesktopPetManager）**：监听 `itemAdded`，非截图记录（即剪贴板文本）触发 `feedText()`，把文本渲染成圆角小卡片从鼠标位置飞入宠物（截图记录的投喂由截图/贴图/快照流程显式调用 `feed()`）。
 
 ---

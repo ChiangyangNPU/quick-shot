@@ -8,6 +8,7 @@
 #include "PetWindow.h"
 
 class ClotheslineWindow;
+class QTimer;
 
 /**
  * @brief 桌面宠物管理器（单例）
@@ -19,6 +20,8 @@ class ClotheslineWindow;
  * - 截图复制/贴图后的"投喂"入口：触发飞行动画与宠物进食动作
  * - 文字复制后的"投喂"入口：文字渲染成小卡片从鼠标位置飞入宠物
  * - 宠物点击后晾衣绳历史窗口的显隐切换
+ * - 主屏顶边热区：宠物开启期间，鼠标移到屏幕上边界可切换晾衣绳显隐
+ *   （宠物点击与热区触发均带下滑挂入/上滑收起的整体滑动动画）
  * @author chiangyang
  */
 class DesktopPetManager : public QObject {
@@ -130,10 +133,34 @@ private:
     QPoint defaultPetPosition() const;
 
     /**
-     * @brief 切换晾衣绳窗口显隐（宠物点击槽）
+     * @brief 切换晾衣绳窗口显隐（宠物点击/顶边热区共用槽）
+     *
+     * 可见时上滑收起（异步，结束后窗口自毁、QPointer 自动清空），
+     * 不可见时创建并以下滑挂入动画显示。
      * @author chiangyang
      */
     void toggleClothesline();
+
+    /**
+     * @brief 启动主屏顶边热区轮询（宠物开启期间运行）
+     * @author chiangyang
+     */
+    void startHotEdgeWatch();
+
+    /**
+     * @brief 停止主屏顶边热区轮询
+     * @author chiangyang
+     */
+    void stopHotEdgeWatch();
+
+    /**
+     * @brief 顶边热区轮询：光标进入主屏上边界热区时切换晾衣绳显隐
+     *
+     * 边沿触发：一次进入热区只切换一次，离开热区后重新武装，
+     * 避免在热区内悬停时反复弹收。
+     * @author chiangyang
+     */
+    void pollHotEdge();
 
     /**
      * @brief 将文字渲染成圆角小卡片图像（文字投喂的飞行内容）
@@ -147,6 +174,8 @@ private:
     bool m_enabled = false;                 ///< 是否开启
     QPointer<PetWindow> m_petWindow;        ///< 宠物窗口（未开启时为 nullptr）
     QPointer<ClotheslineWindow> m_clothesline; ///< 晾衣绳窗口（未显示时为 nullptr）
+    QTimer *m_hotEdgeTimer = nullptr;       ///< 主屏顶边热区轮询定时器（宠物开启期间运行）
+    bool m_hotEdgeArmed = true;             ///< 光标离开热区后重新武装（边沿触发防反复弹收）
 };
 
 #endif // DESKTOPPETMANAGER_H
