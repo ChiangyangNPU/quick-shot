@@ -1,4 +1,5 @@
 #include "PetWindow.h"
+#include "../utils/Utils.h"
 
 #include <QPainter>
 #include <QPainterPath>
@@ -738,6 +739,13 @@ PetWindow::PetWindow(QWidget *parent)
     setCursor(Qt::OpenHandCursor);
 
     scheduleBlink();
+
+#ifdef Q_OS_MACOS
+    // 点击宠物不激活应用：macOS 激活应用时会把应用全部窗口整体抬到其他
+    // 应用之上，被盖住的窗口（如设置）会跟着冒出来；非激活面板的点击/拖动
+    // 照常送达，不影响交互
+    Utils::setNSPanelNonActivating(this);
+#endif
 }
 
 /**

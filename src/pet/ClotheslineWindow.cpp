@@ -101,8 +101,16 @@ void ClotheslineWindow::showFullWidth() {
     reload();
 
     show();
-    raise();
-    activateWindow();
+    // 注意：这里不能调 raise()。macOS 上 QCocoaWindow::raise 会按
+    // QT_MAC_SET_RAISE_PROCESS（默认开启）调 activateIgnoringOtherApps 把
+    // 整个应用拉到前台，应用所有窗口随之被系统整体抬到其他应用之上，
+    // 被盖住的窗口（如设置窗口）会跟着冒出来。晾衣绳是 Qt::Tool 置顶窗口
+    // （NSPanel utility 层级），本就压在其他应用的普通窗口之上，无需 raise。
+    // 仅在应用已激活时顺带激活窗口：从宠物点击打开时（宠物为非激活面板，
+    // 点击不激活应用），不应把应用拉到前台；Esc 在点击晾衣绳后生效
+    if (QGuiApplication::applicationState() == Qt::ApplicationActive) {
+        activateWindow();
+    }
 
     m_showElapsed.start();
     m_animTimer->start();

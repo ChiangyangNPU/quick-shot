@@ -47,6 +47,28 @@ static void setNSWindowLevel(WId wid, long level) {
     // [nsWindow setLevel:level]
     ((void (*)(id, SEL, long))objc_msgSend)(nsWindow, sel_registerName("setLevel:"), level);
 }
+
+/**
+ * @brief 给 NSPanel 加上 NSWindowStyleMaskNonactivatingPanel（点击不激活应用）
+ *
+ * 非激活面板：点击时 AppKit 不激活所属应用，应用其余窗口不会随激活被系统
+ * 整体抬到其他应用之上（被盖住的仍被盖住）；面板自身的鼠标点击/拖动照常
+ * 送达。仅对 Qt::Tool 映射出的 NSPanel 有效。
+ * @param wid QWidget::winId() 返回的 NSView 指针
+ * @author chiangyang
+ */
+static void setNSWindowNonActivatingPanel(WId wid) {
+    if (!wid) return;
+    id nsView = reinterpret_cast<id>(wid);
+    // [nsView window]
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) return;
+    // [nsWindow styleMask]
+    unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(nsWindow, sel_registerName("styleMask"));
+    mask |= (1UL << 7); // NSWindowStyleMaskNonactivatingPanel
+    // [nsWindow setStyleMask:mask]
+    ((void (*)(id, SEL, unsigned long))objc_msgSend)(nsWindow, sel_registerName("setStyleMask:"), mask);
+}
 #endif
 
 /**
@@ -90,6 +112,25 @@ void Utils::endModalOverOverlay(QWidget *parent) {
         win->show();
         LOG_INFO("Overlay window restored after modal dialog");
     }
+#endif
+}
+
+/**
+ * @brief 将 Qt::Tool 窗口设为非激活面板：点击它不把应用拉到前台（仅 macOS）
+ *
+ * macOS 激活应用时会把应用全部窗口整体抬到其他应用之上，被盖住的窗口
+ * （如设置窗口）会跟着冒出来。桌面宠物等环境型窗口设置本属性后，点击
+ * 不会激活应用，其余窗口保持原状；窗口自身的点击/拖动不受影响。
+ * 其他平台为空实现。
+ * @param win 目标 Qt::Tool 顶层窗口
+ * @author chiangyang
+ */
+void Utils::setNSPanelNonActivating(QWidget *win) {
+#ifdef Q_OS_MACOS
+    if (!win) return;
+    setNSWindowNonActivatingPanel(win->winId());
+#else
+    Q_UNUSED(win);
 #endif
 }
 

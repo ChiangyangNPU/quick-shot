@@ -115,6 +115,17 @@ public:
      */
     static void endModalOverOverlay(QWidget *parent);
 
+    /**
+     * @brief 将 Qt::Tool 窗口设为非激活面板：点击它不把应用拉到前台（仅 macOS）
+     *
+     * 设置 NSWindowStyleMaskNonactivatingPanel：点击该窗口不会激活应用，
+     * 应用里被其他应用窗口盖住的窗口不会随激活被系统整体抬起；窗口自身的
+     * 鼠标点击/拖动仍正常送达。其他平台为空实现。
+     * @param win 目标 Qt::Tool 顶层窗口
+     * @author chiangyang
+     */
+    static void setNSPanelNonActivating(QWidget *win);
+
 #ifdef Q_OS_WIN
     /**
      * @brief 抓取指定 Windows 窗口的物理像素截图（供活动窗口截图复用）
