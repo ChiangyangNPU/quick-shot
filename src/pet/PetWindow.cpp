@@ -728,6 +728,11 @@ PetWindow::PetWindow(QWidget *parent)
     : QWidget(parent)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+#ifdef Q_OS_MACOS
+    // macOS 上 Qt::Tool 映射为 NSPanel，默认应用失活（点击其他应用/桌面）即被系统隐藏；
+    // 宠物需常驻桌面，此属性关掉该行为
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
     setAttribute(Qt::WA_TranslucentBackground);
     setFixedSize(petSize(), petSize());
     setCursor(Qt::OpenHandCursor);

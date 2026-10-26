@@ -122,6 +122,11 @@ PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     }
 
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+#ifdef Q_OS_MACOS
+    // macOS 上 Qt::Tool 映射为 NSPanel，默认应用失活（点击其他应用/桌面）即被系统隐藏；
+    // 贴图需长期驻留桌面，此属性关掉该行为
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
     setAttribute(Qt::WA_DeleteOnClose);
     setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);

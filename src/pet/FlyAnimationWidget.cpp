@@ -25,6 +25,11 @@ FlyAnimationWidget::FlyAnimationWidget(const QPixmap &pixmap,
     , m_pixmap(pixmap)
 {
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+#ifdef Q_OS_MACOS
+    // macOS 上应用失活会隐藏 Qt::Tool 窗口，飞行中的"食物"会凭空消失导致宠物吃空；
+    // 此属性保证动画播完
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
     setAttribute(Qt::WA_TranslucentBackground);
     // 鼠标穿透：动画窗口不拦截任何桌面交互
     setAttribute(Qt::WA_TransparentForMouseEvents);

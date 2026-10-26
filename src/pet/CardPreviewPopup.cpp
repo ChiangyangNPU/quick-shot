@@ -43,6 +43,10 @@ constexpr qreal kZoomMax = 10.0;  // 最大缩放倍数
 CardPreviewPopup::CardPreviewPopup(QWidget *parent)
     : QWidget(parent, Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool)
 {
+#ifdef Q_OS_MACOS
+    // macOS 上应用失活会隐藏 Qt::Tool 窗口，预览弹窗须随晾衣绳常驻可见
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
     setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_ShowWithoutActivating);
     m_pad = PetUi::scaled(kPreviewPad);

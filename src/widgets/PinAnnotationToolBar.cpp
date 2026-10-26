@@ -31,6 +31,11 @@ void PinAnnotationToolBar::setupUi() {
     // 独立顶层窗口：工具类型、无边框、置顶，与 PinWindow 同级显示。
     // 窗口属性与两级布局（三个工具栏子类共用的外壳）
     initShell(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+#ifdef Q_OS_MACOS
+    // macOS 上 Qt::Tool 窗口默认随应用失活隐藏；标注中途切到其他应用再切回时
+    // 工具栏不应消失，与贴图本体保持一致
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
 
     // 标注工具按钮（基类统一创建：矩形/椭圆/箭头/画笔/直线/文本/马赛克/橡皮擦）
     createAnnotationTools();
