@@ -486,7 +486,8 @@ ClotheslineWindow::ResizeMode ClotheslineWindow::hitTestResize(const QPoint &pos
  */
 QRect ClotheslineWindow::closeButtonRect() const {
     const int size = sc(kCloseBtnSize);
-    return QRect(width() - size - sc(8), sc(6), size, size);
+    // 圆心与绳子端点的水平线（y = kRopeY）对齐
+    return QRect(width() - size - sc(8), sc(kRopeY) - size / 2, size, size);
 }
 
 /**
