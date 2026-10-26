@@ -90,15 +90,15 @@ ClotheslineWindow::ClotheslineWindow(QWidget *parent)
 }
 
 /**
- * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/5 高度处）
+ * @brief 以主屏幕全宽显示在屏幕上方（顶部往下 1/10 高度处）
  * @author chiangyang
  */
 void ClotheslineWindow::showFullWidth() {
-    // 默认几何：宽度铺满主屏幕，位置在顶部往下 1/5 高度处（靠屏幕上边界）
+    // 默认几何：宽度铺满主屏幕，位置在顶部往下 1/10 高度处（靠屏幕上边界）
     // 重新打开时恢复默认几何；显示期间历史刷新则保留用户拖动/调整后的几何
     QScreen *screen = QGuiApplication::primaryScreen();
     const QRect screenGeo = screen ? screen->geometry() : QRect(0, 0, 1920, 1080);
-    const int targetY = screenGeo.top() + screenGeo.height() / 5;
+    const int targetY = screenGeo.top() + screenGeo.height() / 10;
 
     // 起始位整体落在屏幕上边界之外（不可见区域），随后向下滑入到目标位，
     // 营造"从上面挂下来"的出场感
