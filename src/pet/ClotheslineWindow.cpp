@@ -324,21 +324,21 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
 
-    // 半透明底板，保证绳子/卡片在复杂桌面背景上可读
-    QPainterPath bg;
-    bg.addRoundedRect(rect().adjusted(2, 2, -2, -2), 12, 12);
-    p.setPen(Qt::NoPen);
-    p.setBrush(QColor(30, 30, 34, 150));
-    p.drawPath(bg);
-
+    // 无整体底板：绳与卡片直接悬浮在桌面上。窗口仍是整块矩形接收鼠标，
+    // 拖动/调整区命中不受绘制上的透明区域影响
     if (m_cards.isEmpty()) {
-        // 空历史提示
-        p.setPen(QPen(QColor(255, 255, 255, 220)));
+        // 空历史提示：小面积深色圆角托底，保证在任意桌面背景上可读
+        const QString tip = TranslationManager::instance()->get("pet.empty", "No history yet");
         QFont f = p.font();
         f.setPointSize(10);
         p.setFont(f);
-        p.drawText(rect(), Qt::AlignCenter,
-                   TranslationManager::instance()->get("pet.empty", "No history yet"));
+        QRect tipRect = p.fontMetrics().boundingRect(tip).adjusted(-sc(14), -sc(8), sc(14), sc(8));
+        tipRect.moveCenter(rect().center());
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(30, 30, 34, 170));
+        p.drawRoundedRect(tipRect, 10, 10);
+        p.setPen(QPen(QColor(255, 255, 255, 220)));
+        p.drawText(tipRect, Qt::AlignCenter, tip);
     } else {
         // 晾衣绳（悬垂曲线 + 两端木桩感端点）
         const int ropeY = sc(kRopeY);
@@ -383,6 +383,15 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
                     p.scale(s, s);
                     p.translate(-c.rect.center());
                 }
+            }
+
+            // 柔和投影：无整体底板后给卡片悬浮感（随摆动变换一起绘制，
+            // 三层由内到外扩散的低透明度圆角矩形叠出渐变边缘）
+            p.setPen(Qt::NoPen);
+            for (int spread = 3; spread >= 1; --spread) {
+                p.setBrush(QColor(0, 0, 0, 20));
+                p.drawRoundedRect(QRectF(c.rect).adjusted(-spread, -spread + 2, spread, spread + 2),
+                                  8 + spread, 8 + spread);
             }
 
             // 衣夹
@@ -436,10 +445,10 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
         }
     }
 
-    // 右上角关闭按钮（×）
+    // 右上角关闭按钮（×）：无底板后用深色圆片托底，浅色桌面上也可辨
     const QRect btn = closeButtonRect();
     p.setPen(Qt::NoPen);
-    p.setBrush(m_closeHovered ? QColor(232, 17, 35, 200) : QColor(255, 255, 255, 50));
+    p.setBrush(m_closeHovered ? QColor(232, 17, 35, 200) : QColor(30, 30, 34, 130));
     p.drawEllipse(btn);
     p.setPen(QPen(Qt::white, 2 * m_dpiScale, Qt::SolidLine, Qt::RoundCap));
     const QPointF bc = btn.center();
