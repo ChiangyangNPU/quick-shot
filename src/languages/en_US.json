@@ -176,7 +176,7 @@
   "pet.group": "Desktop Pet",
   "pet.enable": "Enable Desktop Pet",
   "pet.resetPosition": "Reset Pet Position",
-  "pet.description": "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet to open the clothesline and view recent screenshots and copied text.",
+  "pet.description": "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet or move the mouse to the top edge of the screen to open or close the clothesline and view recent screenshots and copied text.",
   "pet.empty": "No history yet",
   "pet.styleLabel": "Pet Style",
   "pet.style.cat": "Orange Cat",
