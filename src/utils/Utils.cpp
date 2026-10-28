@@ -209,7 +209,14 @@ QString Utils::savePixmapToFile(QWidget* parent, std::function<QPixmap()> pixmap
 
     // 对话框确认后才获取图片，避免提前隐藏UI元素
     const QPixmap pixmap = pixmapProvider();
-    if (pixmap.save(filename)) {
+
+    // JPEG 为有损格式：Qt 默认质量(-1 → 75)且固定 4:2:0 色度子采样，
+    // 截图中的彩色文字与细线条会出现明显色偏，故显式使用最高质量。
+    // PNG 的 quality 会被映射为 zlib 压缩级别（传 100 体积膨胀数十倍），
+    // BMP 为无压缩无损格式，二者均保持默认值。
+    const QString suffix = QFileInfo(filename).suffix().toLower();
+    const int quality = (suffix == QStringLiteral("jpg") || suffix == QStringLiteral("jpeg")) ? 100 : -1;
+    if (pixmap.save(filename, nullptr, quality)) {
         LOG_INFO(QString("Image saved to: %1").arg(filename));
         return filename;
     } else {
