@@ -231,21 +231,23 @@ QColor hoverColor(bool dark) {
 }
 
 /**
- * @brief 主强调色（宠物主题的暖橙色，深浅主题各取一档保证对比度）
- * @param dark 是否深色主题
+ * @brief 主强调色（沿用应用配置的蓝色，与设置菜单的按钮同色）
+ * @param dark 是否深色主题（深色下取一档更亮保证对比度）
  * @author chiangyang
  */
 QColor accentColor(bool dark) {
-    return dark ? QColor(240, 160, 97) : QColor(199, 94, 36);
+    const QColor base = StyleManager::getToolbarButtonCheckedColor();
+    return dark ? base.lighter(118) : base;
 }
 
 /**
- * @brief 强调色上的文字颜色
+ * @brief 强调色上的文字颜色（蓝色底统一用白字）
  * @param dark 是否深色主题
  * @author chiangyang
  */
 QColor accentTextColor(bool dark) {
-    return dark ? QColor(42, 22, 8) : QColor(255, 255, 255);
+    Q_UNUSED(dark);
+    return QColor(255, 255, 255);
 }
 
 /**
@@ -398,14 +400,13 @@ QString primaryButtonStyle(bool dark) {
 /**
  * @brief 行内勾选框样式
  *
- * 覆盖全局 QCheckBox 的应用强调色（偏蓝），改用窗口自身的暖橙，
+ * 勾选态沿用应用统一的蓝色强调色（与设置菜单的按钮/复选框一致），
  * 并固定指示器尺寸，避免勾选前后尺寸跳变。
  * @param dark 是否深色主题
  * @author chiangyang
  */
 QString checkStyle(bool dark) {
-    // 深色下亮橙底配白色对勾对比不足，选中态取一档更深的橙
-    const QColor checked = dark ? QColor(198, 118, 64) : accentColor(false);
+    const QColor checked = StyleManager::getToolbarButtonCheckedColor();
     return QStringLiteral(
         "QCheckBox::indicator { width: 1.05em; height: 1.05em;"
         " border: 1px solid %1; border-radius: 0.22em; background: transparent; }"
