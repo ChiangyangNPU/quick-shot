@@ -1,5 +1,6 @@
 #include "TodoWindow.h"
 #include "TodoStore.h"
+#include "PetTheme.h"
 #include "PetUiScale.h"
 #include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
@@ -180,103 +181,6 @@ void polishLayoutWidgets(QLayout *layout) {
 }
 
 /**
- * @brief 是否深色主题
- * @author chiangyang
- */
-bool isDarkTheme() {
-    return StyleManager::themeMode() == StyleManager::ThemeMode::Dark;
-}
-
-/**
- * @brief 主文字颜色
- * @author chiangyang
- */
-QColor textColor(bool dark) {
-    return dark ? QColor(232, 234, 237) : QColor(32, 33, 36);
-}
-
-/**
- * @brief 次要文字颜色（统计、日期、完成态、空状态）
- * @author chiangyang
- */
-QColor mutedColor(bool dark) {
-    return dark ? QColor(142, 144, 149) : QColor(128, 132, 139);
-}
-
-/**
- * @brief 输入框/下拉等控件的填充底色（以选项卡背景为基准微调一档）
- * @author chiangyang
- */
-QColor fieldColor(bool dark) {
-    const QColor base = StyleManager::getTabWidgetBgColor();
-    return dark ? base.lighter(142) : base.darker(105);
-}
-
-/**
- * @brief 分隔线颜色
- * @author chiangyang
- */
-QColor dividerColor(bool dark) {
-    const QColor base = StyleManager::getTabWidgetBgColor();
-    return dark ? base.lighter(150) : base.darker(111);
-}
-
-/**
- * @brief 行悬停底色（极浅，仅用于反馈）
- * @author chiangyang
- */
-QColor hoverColor(bool dark) {
-    const QColor base = StyleManager::getTabWidgetBgColor();
-    return dark ? base.lighter(126) : base.darker(103);
-}
-
-/**
- * @brief 主强调色（沿用应用配置的蓝色，与设置菜单的按钮同色）
- * @param dark 是否深色主题（深色下取一档更亮保证对比度）
- * @author chiangyang
- */
-QColor accentColor(bool dark) {
-    const QColor base = StyleManager::getToolbarButtonCheckedColor();
-    return dark ? base.lighter(118) : base;
-}
-
-/**
- * @brief 强调色上的文字颜色（蓝色底统一用白字）
- * @param dark 是否深色主题
- * @author chiangyang
- */
-QColor accentTextColor(bool dark) {
-    Q_UNUSED(dark);
-    return QColor(255, 255, 255);
-}
-
-/**
- * @brief 逾期提示色
- * @author chiangyang
- */
-QColor overdueColor(bool dark) {
-    return dark ? QColor(255, 123, 114) : QColor(200, 68, 64);
-}
-
-/**
- * @brief 今天到期提示色
- * @author chiangyang
- */
-QColor todayColor(bool dark) {
-    return dark ? QColor(236, 178, 84) : QColor(178, 116, 18);
-}
-
-/**
- * @brief 下拉箭头图标（深色主题换用白色箭头资源，SVG 无法动态染色）
- * @param dark 是否深色主题
- * @author chiangyang
- */
-QString downArrowIcon(bool dark) {
-    return dark ? QStringLiteral(":/icons/spinner-down-dark.svg")
-                : QStringLiteral(":/icons/spinner-down.svg");
-}
-
-/**
  * @brief 下拉弹窗通用样式（保证弹出项不透明且可读）
  * @param dark 是否深色主题
  * @author chiangyang
@@ -288,8 +192,8 @@ QString popupViewStyle(bool dark) {
         "QComboBox QAbstractItemView::item { padding: 0.3em 0.5em; }"
         "QComboBox QAbstractItemView::item:hover { background-color: %4; }"
         "QComboBox QAbstractItemView::item:selected { background-color: %4; color: %2; }")
-        .arg(fieldColor(dark).name(), textColor(dark).name(),
-             dividerColor(dark).name(), hoverColor(dark).name());
+        .arg(PetTheme::fieldColor(dark).name(), PetTheme::textColor(dark).name(),
+             PetTheme::dividerColor(dark).name(), PetTheme::hoverColor(dark).name());
 }
 
 /**
@@ -302,8 +206,8 @@ QString inputStyle(bool dark) {
         "QLineEdit { background-color: %1; border: none; border-radius: 8px;"
         " padding: 0 0.7em; color: %2; font-size: 10.5pt;"
         " selection-background-color: %3; selection-color: %4; }")
-        .arg(fieldColor(dark).name(), textColor(dark).name(),
-             accentColor(dark).name(), accentTextColor(dark).name());
+        .arg(PetTheme::fieldColor(dark).name(), PetTheme::textColor(dark).name(),
+             PetTheme::accentColor(dark).name(), PetTheme::accentTextColor(dark).name());
 }
 
 /**
@@ -317,7 +221,7 @@ QString fieldComboStyle(bool dark) {
         " padding: 0 0.6em; color: %2; font-size: 9.5pt; }"
         "QComboBox::drop-down { border: none; width: 1.1em; }"
         "QComboBox::down-arrow { image: url(%3); width: 0.5em; height: 0.5em; }")
-        .arg(fieldColor(dark).name(), textColor(dark).name(), downArrowIcon(dark))
+        .arg(PetTheme::fieldColor(dark).name(), PetTheme::textColor(dark).name(), PetTheme::downArrowIcon(dark))
         + popupViewStyle(dark);
 }
 
@@ -333,7 +237,7 @@ QString metaComboStyle(bool dark) {
         "QComboBox:disabled { color: %1; }"
         "QComboBox::drop-down { border: none; width: 0.85em; }"
         "QComboBox::down-arrow { image: url(%2); width: 0.42em; height: 0.42em; }")
-        .arg(mutedColor(dark).name(), downArrowIcon(dark))
+        .arg(PetTheme::mutedColor(dark).name(), PetTheme::downArrowIcon(dark))
         + popupViewStyle(dark);
 }
 
@@ -348,7 +252,7 @@ QString fieldDateStyle(bool dark) {
         " padding: 0 0.5em; color: %2; font-size: 9.5pt; }"
         "QDateEdit::drop-down { border: none; width: 1.1em; }"
         "QDateEdit::down-arrow { image: url(%3); width: 0.5em; height: 0.5em; }")
-        .arg(fieldColor(dark).name(), textColor(dark).name(), downArrowIcon(dark));
+        .arg(PetTheme::fieldColor(dark).name(), PetTheme::textColor(dark).name(), PetTheme::downArrowIcon(dark));
 }
 
 /**
@@ -364,7 +268,7 @@ QString metaDateStyle(const QColor &color, bool dark) {
         "QDateEdit:disabled { color: %1; }"
         "QDateEdit::drop-down { border: none; width: 0.85em; }"
         "QDateEdit::down-arrow { image: url(%2); width: 0.42em; height: 0.42em; }")
-        .arg(color.name(), downArrowIcon(dark));
+        .arg(color.name(), PetTheme::downArrowIcon(dark));
 }
 
 /**
@@ -378,7 +282,7 @@ QString toggleChipStyle(bool dark) {
         " padding: 0 0.6em; color: %1; font-size: 9pt; }"
         "QPushButton:hover { color: %2; }"
         "QPushButton:checked { background-color: %3; color: %2; }")
-        .arg(mutedColor(dark).name(), textColor(dark).name(), fieldColor(dark).name());
+        .arg(PetTheme::mutedColor(dark).name(), PetTheme::textColor(dark).name(), PetTheme::fieldColor(dark).name());
 }
 
 /**
@@ -387,13 +291,13 @@ QString toggleChipStyle(bool dark) {
  * @author chiangyang
  */
 QString primaryButtonStyle(bool dark) {
-    const QColor accent = accentColor(dark);
+    const QColor accent = PetTheme::accentColor(dark);
     return QStringLiteral(
         "QPushButton { background-color: %1; color: %2; border: none;"
         " border-radius: 8px; padding: 0 1.1em; font-weight: 600; font-size: 9.5pt; }"
         "QPushButton:hover { background-color: %3; }"
         "QPushButton:pressed { background-color: %4; }")
-        .arg(accent.name(), accentTextColor(dark).name(),
+        .arg(accent.name(), PetTheme::accentTextColor(dark).name(),
              accent.lighter(112).name(), accent.darker(112).name());
 }
 
@@ -413,7 +317,7 @@ QString checkStyle(bool dark) {
         "QCheckBox::indicator:hover { border-color: %2; }"
         "QCheckBox::indicator:checked { border-color: %3; background-color: %3;"
         " image: url(:/icons/check.svg); }")
-        .arg(dividerColor(dark).name(), mutedColor(dark).name(), checked.name());
+        .arg(PetTheme::dividerColor(dark).name(), PetTheme::mutedColor(dark).name(), checked.name());
 }
 
 /**
@@ -425,7 +329,7 @@ QString ghostDeleteStyle(bool dark) {
         "QPushButton { background: transparent; color: %1; border: none;"
         " border-radius: 5px; font-size: 12pt; padding: 0; }"
         "QPushButton:hover { color: %2; }")
-        .arg(mutedColor(dark).name(), overdueColor(dark).name());
+        .arg(PetTheme::mutedColor(dark).name(), PetTheme::overdueColor(dark).name());
 }
 
 /**
@@ -704,20 +608,20 @@ QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
 
     // 按当前完成/截止状态刷新文字与控件配色（主题切换时复用此回调）
     auto refresh = [row, title, rawTitle, doneBox, prio, dueEdit, dueBtn, delBtn]() {
-        const bool dark = isDarkTheme();
+        const bool dark = PetTheme::isDark();
         const bool done = doneBox->isChecked();
         const bool hasDue = dueEdit->property("hasDue").toBool();
         const QDate due = hasDue ? dueEdit->date() : QDate();
         const bool overdue = TodoWindow::isOverdue(done, due);
         const bool today = TodoWindow::isDueToday(done, due);
 
-        row->setColors(dividerColor(dark), hoverColor(dark));
+        row->setColors(PetTheme::dividerColor(dark), PetTheme::hoverColor(dark));
 
         // 完成态：标题置灰（勾选 + 灰字 + 下沉排序表达已完成）
         title->setFullText(rawTitle);
         title->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10.5pt; font-weight: %2;")
-                .arg(done ? mutedColor(dark).name() : textColor(dark).name())
+                .arg(done ? PetTheme::mutedColor(dark).name() : PetTheme::textColor(dark).name())
                 .arg(done ? QStringLiteral("400") : QStringLiteral("500")));
 
         // 勾选框保持主题内配色，避免沿用全局蓝色强调色
@@ -737,13 +641,13 @@ QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
                            " text-align: left; padding: 0 0.2em; font-size: 9pt; color: %1; }"
                            "QPushButton:hover { color: %2; }"
                            "QPushButton:disabled { color: %1; }")
-                .arg(mutedColor(dark).name(), textColor(dark).name()));
+                .arg(PetTheme::mutedColor(dark).name(), PetTheme::textColor(dark).name()));
 
-        QColor dateColor = mutedColor(dark);
+        QColor dateColor = PetTheme::mutedColor(dark);
         if (overdue) {
-            dateColor = overdueColor(dark);
+            dateColor = PetTheme::overdueColor(dark);
         } else if (today) {
-            dateColor = todayColor(dark);
+            dateColor = PetTheme::todayColor(dark);
         }
         dueEdit->setStyleSheet(metaDateStyle(dateColor, dark));
 
@@ -891,12 +795,12 @@ void TodoWindow::reloadItems() {
         emptyBox->show(); // 隐藏控件不参与布局尺寸计算
 
         m_rowRefreshers.append([glyph, emptyText]() {
-            const bool dark = isDarkTheme();
+            const bool dark = PetTheme::isDark();
             glyph->setStyleSheet(
                 QStringLiteral("color: %1; font-size: 20pt; font-weight: 500;")
-                    .arg(mutedColor(dark).name()));
+                    .arg(PetTheme::mutedColor(dark).name()));
             emptyText->setStyleSheet(
-                QStringLiteral("color: %1; font-size: 9.5pt;").arg(mutedColor(dark).name()));
+                QStringLiteral("color: %1; font-size: 9.5pt;").arg(PetTheme::mutedColor(dark).name()));
         });
         m_rowRefreshers.last()();
     } else {
@@ -919,7 +823,7 @@ void TodoWindow::reloadItems() {
  * @author chiangyang
  */
 void TodoWindow::updateWindowColors() {
-    const bool dark = isDarkTheme();
+    const bool dark = PetTheme::isDark();
 
     // 气泡背景由 paintEvent 自绘，子控件保持透明以露出面板圆角
     setAutoFillBackground(false);
@@ -934,11 +838,11 @@ void TodoWindow::updateWindowColors() {
     // 标题行：左标题右统计，靠字号与字重拉开层级
     if (m_headerTitle) {
         m_headerTitle->setStyleSheet(QStringLiteral(
-            "color: %1; font-size: 17pt; font-weight: 600;").arg(textColor(dark).name()));
+            "color: %1; font-size: 17pt; font-weight: 600;").arg(PetTheme::textColor(dark).name()));
     }
     if (m_statsLabel) {
         m_statsLabel->setStyleSheet(QStringLiteral(
-            "color: %1; font-size: 9pt;").arg(mutedColor(dark).name()));
+            "color: %1; font-size: 9pt;").arg(PetTheme::mutedColor(dark).name()));
     }
 
     // 输入区控件：统一填充式外观，消除系统灰白方块的割裂感
@@ -961,7 +865,7 @@ void TodoWindow::updateWindowColors() {
     // 细分隔线
     if (m_separator) {
         QPalette sepPalette = m_separator->palette();
-        sepPalette.setColor(QPalette::Window, dividerColor(dark));
+        sepPalette.setColor(QPalette::Window, PetTheme::dividerColor(dark));
         m_separator->setPalette(sepPalette);
         m_separator->setAutoFillBackground(true);
     }
@@ -1079,9 +983,9 @@ void TodoWindow::paintEvent(QPaintEvent *event) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
 
-    const bool dark = isDarkTheme();
+    const bool dark = PetTheme::isDark();
     const QColor bg = StyleManager::getTabWidgetBgColor();
-    const QColor border = dividerColor(dark);
+    const QColor border = PetTheme::dividerColor(dark);
     const int radius = PetUi::scaled(14);
 
     // 面板矩形：四周留投影空间，三角所在侧额外让出三角高度

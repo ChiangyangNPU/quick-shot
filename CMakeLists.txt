@@ -274,6 +274,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/TodoWindow.cpp
         src/pet/TodoWindow.h
         src/pet/PetUiScale.h
+        src/pet/PetTheme.cpp
+        src/pet/PetTheme.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp
