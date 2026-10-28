@@ -5,6 +5,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include <QMovie>
 #include <QImageReader>
 #include <QPropertyAnimation>
@@ -1168,6 +1169,15 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
     m_dragging = false;
     setCursor(Qt::OpenHandCursor);
     QWidget::mouseReleaseEvent(event);
+}
+
+/**
+ * @brief 右键：发出打开待办清单窗口的请求（不弹出系统右键菜单）
+ * @author chiangyang
+ */
+void PetWindow::contextMenuEvent(QContextMenuEvent *event) {
+    emit contextMenuRequested();
+    event->accept();
 }
 
 /**

@@ -10,6 +10,7 @@
 #include "CustomPetStore.h"
 
 class ClotheslineWindow;
+class TodoWindow;
 class QTimer;
 
 /**
@@ -150,6 +151,21 @@ public:
      */
     bool removeCustomPet(const QString &customPetId);
 
+    /**
+     * @brief 显示待办清单窗口（右击宠物触发）
+     *
+     * 窗口在首次打开时创建并定位到宠物附近，之后复用同一实例
+     * （已打开则提到前台）。
+     * @author chiangyang
+     */
+    void showTodoWindow();
+
+    /**
+     * @brief 按当前主题刷新待办清单窗口（主题切换时由主窗口调用）
+     * @author chiangyang
+     */
+    void refreshTodoWindowStyle();
+
 signals:
     /**
      * @brief 开关状态变更信号
@@ -230,10 +246,17 @@ private:
      */
     QPixmap renderTextCard(const QString &text) const;
 
+    /**
+     * @brief 将待办清单窗口摆到宠物窗口左侧（空间不足时夹到屏幕可用区域内）
+     * @author chiangyang
+     */
+    void positionTodoWindow();
+
     static DesktopPetManager* s_instance;   ///< 单例实例
     bool m_enabled = false;                 ///< 是否开启
     QPointer<PetWindow> m_petWindow;        ///< 宠物窗口（未开启时为 nullptr）
     QPointer<ClotheslineWindow> m_clothesline; ///< 晾衣绳窗口（未显示时为 nullptr）
+    QPointer<TodoWindow> m_todoWindow;      ///< 待办清单窗口（未打开时为 nullptr）
     QTimer *m_hotEdgeTimer = nullptr;       ///< 主屏顶边热区轮询定时器（宠物开启期间运行）
     bool m_hotEdgeArmed = true;             ///< 光标离开热区后重新武装（边沿触发防反复弹收）
 };

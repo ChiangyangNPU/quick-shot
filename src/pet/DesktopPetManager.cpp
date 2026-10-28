@@ -1,5 +1,6 @@
 #include "DesktopPetManager.h"
 #include "PetWindow.h"
+#include "TodoWindow.h"
 #include "FlyAnimationWidget.h"
 #include "ClotheslineWindow.h"
 #include "PetUiScale.h"
@@ -91,6 +92,12 @@ void DesktopPetManager::setEnabled(bool enabled) {
             m_petWindow->close();
             m_petWindow = nullptr;
         }
+        // 待办清单随宠物一起关闭（宠物关闭后无法再次打开它）
+        if (m_todoWindow) {
+            m_todoWindow->close();
+            m_todoWindow->deleteLater();
+            m_todoWindow = nullptr;
+        }
     }
     LOG_INFO(QString("DesktopPetManager: pet %1").arg(enabled ? "enabled" : "disabled"));
     emit enabledChanged(enabled);
@@ -131,6 +138,10 @@ void DesktopPetManager::createPetWindow() {
 
     // 点击切换晾衣绳
     connect(m_petWindow, &PetWindow::clicked, this, &DesktopPetManager::toggleClothesline);
+
+    // 右键打开待办清单
+    connect(m_petWindow, &PetWindow::contextMenuRequested,
+            this, &DesktopPetManager::showTodoWindow);
 
     m_petWindow->show();
     m_petWindow->raise();
@@ -424,4 +435,63 @@ void DesktopPetManager::applySelection() {
     }
     m_petWindow->clearCustomPet();
     m_petWindow->setStyle(petStyle());
+}
+
+/**
+ * @brief 显示待办清单窗口（右击宠物触发）
+ * @author chiangyang
+ */
+void DesktopPetManager::showTodoWindow() {
+    if (!m_enabled) {
+        return;
+    }
+    // 首次打开时创建并摆到宠物左侧，之后复用同一窗口
+    if (!m_todoWindow) {
+        m_todoWindow = new TodoWindow();
+        positionTodoWindow();
+    }
+    m_todoWindow->show();
+    m_todoWindow->raise();
+    m_todoWindow->activateWindow();
+}
+
+/**
+ * @brief 将待办清单窗口摆到宠物窗口左侧
+ * @author chiangyang
+ */
+void DesktopPetManager::positionTodoWindow() {
+    if (!m_todoWindow) {
+        return;
+    }
+
+    QScreen *screen = m_petWindow ? m_petWindow->screen() : QGuiApplication::primaryScreen();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    const QRect available = screen ? screen->availableGeometry() : QRect(0, 0, 1920, 1080);
+
+    const int margin = PetUi::scaled(12);
+    const int width = m_todoWindow->width();
+    const int height = m_todoWindow->height();
+
+    // 默认贴着宠物左上方展开：右边缘对齐宠物左侧，底边对齐宠物底部
+    const QPoint anchor = m_petWindow ? m_petWindow->geometry().topLeft()
+                                      : available.bottomRight();
+    int x = anchor.x() - width - margin;
+    int y = anchor.y() + PetWindow::petSize() - height;
+
+    // 贴边兜底：夹到当前屏幕可用区域内
+    x = qBound(available.left() + margin, x, available.right() - width - margin);
+    y = qBound(available.top() + margin, y, available.bottom() - height - margin);
+    m_todoWindow->move(x, y);
+}
+
+/**
+ * @brief 按当前主题刷新待办清单窗口
+ * @author chiangyang
+ */
+void DesktopPetManager::refreshTodoWindowStyle() {
+    if (m_todoWindow) {
+        m_todoWindow->updateWindowColors();
+    }
 }

@@ -12,6 +12,7 @@
 
 class QMovie;
 class QPainter;
+class QContextMenuEvent;
 
 /**
  * @brief 桌面宠物窗口
@@ -180,6 +181,12 @@ signals:
      */
     void dragFinished(const QPoint &newPos);
 
+    /**
+     * @brief 右键单击信号（用于打开待办清单窗口）
+     * @author chiangyang
+     */
+    void contextMenuRequested();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -187,6 +194,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void contextMenuEvent(QContextMenuEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
 

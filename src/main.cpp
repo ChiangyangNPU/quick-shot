@@ -225,6 +225,13 @@ int main(int argc, char *argv[]) {
                          &PinWindow::refreshAllTheme);
         QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
                          historyWindow, &HistoryWindow::updateWindowColors);
+        // 主题/选项卡背景变化时同步刷新宠物右键打开的待办清单窗口
+        QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
+                         DesktopPetManager::instance(),
+                         &DesktopPetManager::refreshTodoWindowStyle);
+        QObject::connect(settingsWindow, &SettingsWindow::tabWidgetBgColorChanged,
+                         DesktopPetManager::instance(),
+                         &DesktopPetManager::refreshTodoWindowStyle);
         // 托盘菜单样式在创建时一次性设置，主题切换后需重设
         QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
                          trayMenu, [trayMenu]() {
