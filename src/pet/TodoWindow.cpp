@@ -11,14 +11,18 @@
 #include <QCursor>
 #include <QDateEdit>
 #include <QEnterEvent>
+#include <QFontMetrics>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QShowEvent>
 #include <QTimer>
@@ -83,6 +87,97 @@ private:
     QColor m_hover;            ///< 悬停底色
     bool m_hovered = false;    ///< 当前是否悬停
 };
+
+/**
+ * @brief 单行省略标题（宽度不足时以省略号收尾）
+ *
+ * 待办标题在气泡内保持单行，既符合紧凑列表，也让行高可预测，
+ * 便于气泡按内容高度自适应。
+ * @author chiangyang
+ */
+class ElidedLabel : public QLabel {
+public:
+    explicit ElidedLabel(QWidget *parent = nullptr) : QLabel(parent) {
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    }
+
+    /**
+     * @brief 设置完整文本（绘制时按可用宽度省略）
+     * @param text 完整标题
+     * @author chiangyang
+     */
+    void setFullText(const QString &text) {
+        m_fullText = text;
+        updateGeometry();
+        update();
+    }
+
+    /**
+     * @brief 尺寸提示：按文本宽度与单行行高给出，保证行高稳定
+     * @return 提示尺寸
+     * @author chiangyang
+     */
+    QSize sizeHint() const override {
+        const_cast<ElidedLabel *>(this)->ensurePolished();
+        const QFontMetrics fm(font());
+        return QSize(fm.horizontalAdvance(m_fullText), fm.height());
+    }
+
+    /**
+     * @brief 最小尺寸提示：高度与提示一致，避免布局压缩成 0
+     * @return 最小提示尺寸
+     * @author chiangyang
+     */
+    QSize minimumSizeHint() const override {
+        const_cast<ElidedLabel *>(this)->ensurePolished();
+        const QFontMetrics fm(font());
+        return QSize(0, fm.height());
+    }
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        Q_UNUSED(event);
+        QPainter p(this);
+        const QFontMetrics fm(font());
+        const QString shown = fm.elidedText(m_fullText, Qt::ElideRight, width());
+        p.setPen(palette().color(QPalette::WindowText));
+        p.drawText(rect(), Qt::AlignLeft | Qt::AlignVCenter, shown);
+    }
+
+    void resizeEvent(QResizeEvent *event) override {
+        QLabel::resizeEvent(event);
+        update();
+    }
+
+private:
+    QString m_fullText; ///< 完整标题
+};
+
+/**
+ * @brief 递归抛光布局内的控件
+ *
+ * 新建的控件在首次显示前尚未完成样式抛光，此时 sizeHint 按默认字体计算，
+ * 会让按内容自适应的气泡高度偏小；这里主动抛光一次，保证测量稳定。
+ * @param layout 目标布局
+ * @author chiangyang
+ */
+void polishLayoutWidgets(QLayout *layout) {
+    if (!layout) {
+        return;
+    }
+    for (int i = 0; i < layout->count(); ++i) {
+        QLayoutItem *item = layout->itemAt(i);
+        if (!item) {
+            continue;
+        }
+        if (QWidget *w = item->widget()) {
+            w->ensurePolished();
+            polishLayoutWidgets(w->layout());
+        } else if (QLayout *child = item->layout()) {
+            polishLayoutWidgets(child);
+        }
+    }
+}
 
 /**
  * @brief 是否深色主题
@@ -364,11 +459,17 @@ TodoWindow::TodoWindow(QWidget *parent)
     : QWidget(parent) {
     setWindowTitle(TranslationManager::instance()->get("todo.windowTitle", "Todo List"));
     setWindowIcon(StyleManager::loadAppIcon());
-    setWindowFlags(windowFlags() | Qt::Window);
 
-    // 窗口尺寸按屏幕 DPI 缩放（与应用其余窗口一致：96 为逻辑基准）
-    resize(PetUi::scaled(520), PetUi::scaled(620));
-    setMinimumSize(PetUi::scaled(460), PetUi::scaled(380));
+    // 气泡形态：无边框 + 半透明背景，自绘圆角面板与指向宠物的小三角
+    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    setAttribute(Qt::WA_TranslucentBackground, true);
+
+    // 尺寸按屏幕 DPI 缩放（与应用其余窗口一致：96 为逻辑基准）
+    m_shadowPad = PetUi::scaled(10);
+    m_arrowHeight = PetUi::scaled(10);
+    m_contentPad = PetUi::scaled(16);
+    resize(PetUi::scaled(470), PetUi::scaled(560));
+    setMinimumWidth(PetUi::scaled(420));
 
     setupUi();
     updateWindowColors();
@@ -389,10 +490,10 @@ TodoWindow::TodoWindow(QWidget *parent)
 void TodoWindow::setupUi() {
     TranslationManager *tm = TranslationManager::instance();
 
-    auto *root = new QVBoxLayout(this);
-    root->setContentsMargins(PetUi::scaled(20), PetUi::scaled(18),
-                             PetUi::scaled(20), PetUi::scaled(8));
-    root->setSpacing(PetUi::scaled(10));
+    m_rootLayout = new QVBoxLayout(this);
+    m_rootLayout->setSpacing(PetUi::scaled(10));
+    updateContentMargins();
+    QVBoxLayout *root = m_rootLayout;
 
     // ===== 标题行：左标题、右统计 =====
     auto *header = new QHBoxLayout();
@@ -433,7 +534,8 @@ void TodoWindow::setupUi() {
     fillPriorityCombo(m_priority);
     m_priority->setCurrentIndex(m_priority->findData(int(TodoPriority::Medium)));
     m_priority->setFixedHeight(PetUi::scaled(28));
-    m_priority->setMinimumWidth(PetUi::scaled(88));
+    // 胶囊按文案自适应宽度，避免出现大片空白
+    m_priority->setSizeAdjustPolicy(QComboBox::AdjustToContents);
     m_priority->setCursor(Qt::PointingHandCursor);
 
     // "截止"用可勾选胶囊按钮，替代复选框，与输入区其他控件保持同一视觉语言
@@ -556,10 +658,7 @@ QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
     doneBox->setToolTip(tm->get("todo.markDone", "Mark as done"));
     doneBox->setCursor(Qt::PointingHandCursor);
 
-    auto *title = new QLabel(row);
-    title->setTextFormat(Qt::PlainText);
-    title->setWordWrap(true);
-    title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    auto *title = new ElidedLabel(row);
 
     // 行内优先级：透明小号下拉，不额外占用视觉重量
     auto *prio = new QComboBox(row);
@@ -614,7 +713,7 @@ QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
         row->setColors(dividerColor(dark), hoverColor(dark));
 
         // 完成态：标题置灰（勾选 + 灰字 + 下沉排序表达已完成）
-        title->setText(rawTitle);
+        title->setFullText(rawTitle);
         title->setStyleSheet(
             QStringLiteral("color: %1; font-size: 10.5pt; font-weight: %2;")
                 .arg(done ? mutedColor(dark).name() : textColor(dark).name())
@@ -770,7 +869,7 @@ void TodoWindow::reloadItems() {
         // 空状态：极简灰阶提示，不引入额外色彩
         auto *emptyBox = new QWidget(m_rowsContainer);
         auto *emptyLayout = new QVBoxLayout(emptyBox);
-        emptyLayout->setContentsMargins(0, PetUi::scaled(56), 0, 0);
+        emptyLayout->setContentsMargins(0, 0, 0, 0);
         emptyLayout->setSpacing(PetUi::scaled(8));
 
         auto *glyph = new QLabel(QStringLiteral("✓"), emptyBox);
@@ -788,6 +887,7 @@ void TodoWindow::reloadItems() {
         m_rowsLayout->addStretch(1);
         m_rowsLayout->addWidget(emptyBox);
         m_rowsLayout->addStretch(1);
+        emptyBox->show(); // 隐藏控件不参与布局尺寸计算
 
         m_rowRefreshers.append([glyph, emptyText]() {
             const bool dark = isDarkTheme();
@@ -800,12 +900,17 @@ void TodoWindow::reloadItems() {
         m_rowRefreshers.last()();
     } else {
         for (const TodoItem &item : items) {
-            m_rowsLayout->addWidget(createRowWidget(item));
+            QWidget *row = createRowWidget(item);
+            m_rowsLayout->addWidget(row);
+            row->show(); // 隐藏控件不参与布局尺寸计算
         }
         m_rowsLayout->addStretch(1);
     }
 
     updateHeaderStats();
+    updateBubbleHeight();
+    // 布局在下一轮事件循环才完成尺寸计算，届时校准一次高度
+    QTimer::singleShot(0, this, [this]() { updateBubbleHeight(); });
 }
 
 /**
@@ -814,26 +919,16 @@ void TodoWindow::reloadItems() {
  */
 void TodoWindow::updateWindowColors() {
     const bool dark = isDarkTheme();
-    const QColor bg = StyleManager::getTabWidgetBgColor();
 
-    // 窗口与滚动区背景用调色板上色（不用样式表，避免影响子控件原生绘制）
-    QPalette windowPalette = palette();
-    windowPalette.setColor(QPalette::Window, bg);
-    setPalette(windowPalette);
-    setAutoFillBackground(true);
-
+    // 气泡背景由 paintEvent 自绘，子控件保持透明以露出面板圆角
+    setAutoFillBackground(false);
     if (m_rowsContainer) {
-        QPalette rowsPalette = m_rowsContainer->palette();
-        rowsPalette.setColor(QPalette::Window, bg);
-        m_rowsContainer->setPalette(rowsPalette);
-        m_rowsContainer->setAutoFillBackground(true);
+        m_rowsContainer->setAutoFillBackground(false);
     }
     if (m_scroll) {
-        m_scroll->viewport()->setAutoFillBackground(true);
-        QPalette viewportPalette = m_scroll->viewport()->palette();
-        viewportPalette.setColor(QPalette::Window, bg);
-        m_scroll->viewport()->setPalette(viewportPalette);
+        m_scroll->viewport()->setAutoFillBackground(false);
     }
+    update();
 
     // 标题行：左标题右统计，靠字号与字重拉开层级
     if (m_headerTitle) {
@@ -870,9 +965,6 @@ void TodoWindow::updateWindowColors() {
         m_separator->setAutoFillBackground(true);
     }
 
-    // 系统标题栏浅色/深色随主题
-    StyleManager::applyDarkTitleBar(winId());
-
     // 各行的文字/控件风格
     for (const auto &refresh : m_rowRefreshers) {
         refresh();
@@ -907,6 +999,175 @@ void TodoWindow::retranslateUi() {
                                               : m_priority->findData(int(TodoPriority::Medium)));
     }
     reloadItems();
+}
+
+/**
+ * @brief 设置气泡相对宠物的朝向
+ * @param arrowBelow true 表示气泡在宠物上方、小三角朝下；false 表示在下方、朝上
+ * @param anchorX 小三角在窗口内的水平位置（宠物中心）
+ * @author chiangyang
+ */
+void TodoWindow::setBubblePlacement(bool arrowBelow, int anchorX) {
+    m_arrowBelow = arrowBelow;
+    // 三角不在两端过近处，避免圆心落在圆角外
+    const int edge = PetUi::scaled(28);
+    m_anchorX = qBound(edge, anchorX, width() - edge);
+    updateContentMargins();
+    update();
+}
+
+/**
+ * @brief 按小三角所在侧重新计算内容边距（给小三角和投影留出空间）
+ * @author chiangyang
+ */
+void TodoWindow::updateContentMargins() {
+    if (!m_rootLayout) {
+        return;
+    }
+    const int side = m_shadowPad + m_contentPad;
+    const int top = m_shadowPad + m_contentPad + (m_arrowBelow ? 0 : m_arrowHeight);
+    const int bottom = m_shadowPad + m_contentPad + (m_arrowBelow ? m_arrowHeight : 0);
+    m_rootLayout->setContentsMargins(side, top, side, bottom);
+}
+
+/**
+ * @brief 按任务数量调整气泡高度（内容少时贴合，超过上限时列表滚动）
+ * @author chiangyang
+ */
+void TodoWindow::updateBubbleHeight() {
+    if (!m_scroll || !m_rowsLayout || !m_rootLayout) {
+        return;
+    }
+    // 先抛光新建控件，避免读到按默认字体算出的偏小尺寸
+    polishLayoutWidgets(m_rowsLayout);
+    polishLayoutWidgets(m_rootLayout);
+
+    const int minRows = PetUi::scaled(110);
+    const int maxRows = PetUi::scaled(380);
+    const int rows = qBound(minRows, m_rowsLayout->sizeHint().height(), maxRows);
+    m_scroll->setFixedHeight(rows);
+
+    // 累加列表中除滚动区以外的固定内容（标题行、输入区、分隔线）与内边距
+    const QMargins margins = m_rootLayout->contentsMargins();
+    int fixedPart = margins.top() + margins.bottom();
+    int fixedItems = 0;
+    for (int i = 0; i < m_rootLayout->count(); ++i) {
+        QLayoutItem *item = m_rootLayout->itemAt(i);
+        if (!item || item->widget() == m_scroll) {
+            continue;
+        }
+        fixedPart += item->sizeHint().height();
+        ++fixedItems;
+    }
+    fixedPart += m_rootLayout->spacing() * fixedItems;
+
+    const int total = fixedPart + rows;
+    if (height() != total) {
+        resize(width(), total);
+        emit bubbleSizeChanged();
+    }
+}
+
+/**
+ * @brief 绘制气泡背景：圆角面板、柔和投影与指向宠物的小三角
+ * @param event 绘制事件
+ * @author chiangyang
+ */
+void TodoWindow::paintEvent(QPaintEvent *event) {
+    Q_UNUSED(event);
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+
+    const bool dark = isDarkTheme();
+    const QColor bg = StyleManager::getTabWidgetBgColor();
+    const QColor border = dividerColor(dark);
+    const int radius = PetUi::scaled(14);
+
+    // 面板矩形：四周留投影空间，三角所在侧额外让出三角高度
+    QRectF panel = QRectF(rect()).adjusted(m_shadowPad, m_shadowPad,
+                                           -m_shadowPad, -m_shadowPad);
+    if (m_arrowBelow) {
+        panel.setBottom(panel.bottom() - m_arrowHeight);
+    } else {
+        panel.setTop(panel.top() + m_arrowHeight);
+    }
+
+    // 柔和投影：几层逐渐外扩的低透明度圆角矩形
+    p.setPen(Qt::NoPen);
+    for (int i = 4; i >= 1; --i) {
+        const int spread = PetUi::scaled(i);
+        p.setBrush(QColor(0, 0, 0, dark ? 28 : 14));
+        p.drawRoundedRect(panel.adjusted(-spread, -spread + PetUi::scaled(2),
+                                         spread, spread + PetUi::scaled(2)),
+                          radius + spread, radius + spread);
+    }
+
+    // 面板
+    p.setBrush(bg);
+    p.setPen(QPen(border, 1));
+    p.drawRoundedRect(panel.adjusted(0.5, 0.5, -0.5, -0.5), radius, radius);
+
+    // 指向宠物的小三角（填充面板色，仅描两侧边，避免压住面板描边）
+    const int half = PetUi::scaled(9);
+    const qreal x = (m_anchorX >= 0) ? m_anchorX : width() / 2.0;
+    QPolygonF tri;
+    if (m_arrowBelow) {
+        tri << QPointF(x - half, panel.bottom())
+            << QPointF(x, panel.bottom() + m_arrowHeight)
+            << QPointF(x + half, panel.bottom());
+    } else {
+        tri << QPointF(x - half, panel.top())
+            << QPointF(x, panel.top() - m_arrowHeight)
+            << QPointF(x + half, panel.top());
+    }
+    p.setPen(Qt::NoPen);
+    p.setBrush(bg);
+    p.drawPolygon(tri);
+    p.setPen(QPen(border, 1));
+    p.drawLine(tri.at(0), tri.at(1));
+    p.drawLine(tri.at(1), tri.at(2));
+}
+
+/**
+ * @brief 按住空白处记录拖动起点（无标题栏）
+ * @param event 鼠标事件
+ * @author chiangyang
+ */
+void TodoWindow::mousePressEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        m_dragOffset = event->globalPosition().toPoint() - frameGeometry().topLeft();
+        event->accept();
+        return;
+    }
+    QWidget::mousePressEvent(event);
+}
+
+/**
+ * @brief 拖动气泡窗口
+ * @param event 鼠标事件
+ * @author chiangyang
+ */
+void TodoWindow::mouseMoveEvent(QMouseEvent *event) {
+    if ((event->buttons() & Qt::LeftButton) && !m_dragOffset.isNull()) {
+        move(event->globalPosition().toPoint() - m_dragOffset);
+        event->accept();
+        return;
+    }
+    QWidget::mouseMoveEvent(event);
+}
+
+/**
+ * @brief Esc 收起气泡
+ * @param event 按键事件
+ * @author chiangyang
+ */
+void TodoWindow::keyPressEvent(QKeyEvent *event) {
+    if (event->key() == Qt::Key_Escape) {
+        hide();
+        event->accept();
+        return;
+    }
+    QWidget::keyPressEvent(event);
 }
 
 /**

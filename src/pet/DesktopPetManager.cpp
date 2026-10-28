@@ -438,51 +438,71 @@ void DesktopPetManager::applySelection() {
 }
 
 /**
- * @brief 显示待办清单窗口（右击宠物触发）
+ * @brief 显示/收起待办清单气泡（右击宠物触发）
  * @author chiangyang
  */
 void DesktopPetManager::showTodoWindow() {
     if (!m_enabled) {
         return;
     }
-    // 首次打开时创建并摆到宠物左侧，之后复用同一窗口
+    // 已展开时再次右击即收起
+    if (m_todoWindow && m_todoWindow->isVisible()) {
+        m_todoWindow->hide();
+        return;
+    }
     if (!m_todoWindow) {
         m_todoWindow = new TodoWindow();
-        positionTodoWindow();
+        // 气泡高度随任务数量变化，尺寸变化后重新贴合宠物
+        connect(m_todoWindow, &TodoWindow::bubbleSizeChanged, this, [this]() {
+            if (m_todoWindow && m_todoWindow->isVisible()) {
+                positionTodoWindow();
+            }
+        });
     }
     m_todoWindow->show();
+    // 先显示（showEvent 会重算内容高度），再按最终尺寸定位
+    positionTodoWindow();
     m_todoWindow->raise();
     m_todoWindow->activateWindow();
 }
 
 /**
- * @brief 将待办清单窗口摆到宠物窗口左侧
+ * @brief 将待办气泡摆到宠物上方（空间不足时移到下方），小三角指向宠物
  * @author chiangyang
  */
 void DesktopPetManager::positionTodoWindow() {
-    if (!m_todoWindow) {
+    if (!m_todoWindow || !m_petWindow) {
         return;
     }
 
-    QScreen *screen = m_petWindow ? m_petWindow->screen() : QGuiApplication::primaryScreen();
+    QScreen *screen = m_petWindow->screen();
     if (!screen) {
         screen = QGuiApplication::primaryScreen();
     }
     const QRect available = screen ? screen->availableGeometry() : QRect(0, 0, 1920, 1080);
 
-    const int margin = PetUi::scaled(12);
-    const int width = m_todoWindow->width();
-    const int height = m_todoWindow->height();
+    const int margin = PetUi::scaled(8);
+    const int gap = PetUi::scaled(6);
+    const QSize size = m_todoWindow->size();
+    const QRect pet = m_petWindow->geometry();
+    const int petCenterX = pet.center().x();
 
-    // 默认贴着宠物左上方展开：右边缘对齐宠物左侧，底边对齐宠物底部
-    const QPoint anchor = m_petWindow ? m_petWindow->geometry().topLeft()
-                                      : available.bottomRight();
-    int x = anchor.x() - width - margin;
-    int y = anchor.y() + PetWindow::petSize() - height;
+    // 默认悬在宠物上方，气泡的小三角朝下
+    int x = petCenterX - size.width() / 2;
+    int y = pet.top() - size.height() - gap;
+    bool arrowBelow = true;
 
-    // 贴边兜底：夹到当前屏幕可用区域内
-    x = qBound(available.left() + margin, x, available.right() - width - margin);
-    y = qBound(available.top() + margin, y, available.bottom() - height - margin);
+    // 上方放不下就翻到宠物下方，小三角改为朝上
+    if (y < available.top() + margin) {
+        y = pet.bottom() + gap;
+        arrowBelow = false;
+    }
+
+    // 贴边兜底：夹到当前屏幕可用区域内，并保证三角始终指向宠物中心
+    x = qBound(available.left() + margin, x, available.right() - size.width() - margin);
+    y = qBound(available.top() + margin, y, available.bottom() - size.height() - margin);
+
+    m_todoWindow->setBubblePlacement(arrowBelow, petCenterX - x);
     m_todoWindow->move(x, y);
 }
 

@@ -152,10 +152,10 @@ public:
     bool removeCustomPet(const QString &customPetId);
 
     /**
-     * @brief 显示待办清单窗口（右击宠物触发）
+     * @brief 显示/收起待办气泡（右击宠物触发）
      *
-     * 窗口在首次打开时创建并定位到宠物附近，之后复用同一实例
-     * （已打开则提到前台）。
+     * 首次打开时创建气泡窗口并贴合宠物上方，之后复用同一实例；
+     * 已展开时再次右击即收起。
      * @author chiangyang
      */
     void showTodoWindow();
@@ -247,7 +247,7 @@ private:
     QPixmap renderTextCard(const QString &text) const;
 
     /**
-     * @brief 将待办清单窗口摆到宠物窗口左侧（空间不足时夹到屏幕可用区域内）
+     * @brief 将待办气泡摆到宠物上方（空间不足时移到下方），小三角指向宠物
      * @author chiangyang
      */
     void positionTodoWindow();
