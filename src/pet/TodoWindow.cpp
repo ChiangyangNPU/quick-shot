@@ -5,13 +5,17 @@
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 
+#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCursor>
 #include <QDateEdit>
+#include <QEnterEvent>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPainter>
 #include <QPalette>
 #include <QPushButton>
@@ -24,25 +28,27 @@
 namespace {
 
 /**
- * @brief 待办行卡片（自绘圆角背景，避免样式表级联影响子控件的原生渲染）
+ * @brief 任务行控件
  *
- * 不通过 setStyleSheet 上色：Qt 中给父控件设置样式表会让子控件
- * （尤其是 QCheckBox）退出原生主题绘制，深色模式下对勾可能不可见。
+ * 透明背景，悬停时绘制一层很浅的圆角底色，底部绘制 1px 分隔线。
+ * 用细线与灰阶层次替代卡片，避免多重色彩叠加。
  * @author chiangyang
  */
 class TodoRowWidget : public QWidget {
 public:
-    explicit TodoRowWidget(QWidget *parent = nullptr) : QWidget(parent) {}
+    explicit TodoRowWidget(QWidget *parent = nullptr) : QWidget(parent) {
+        setAttribute(Qt::WA_Hover, true);
+    }
 
     /**
-     * @brief 更新行背景与描边颜色
-     * @param background 背景色
-     * @param border 描边色
+     * @brief 更新分隔线与悬停底色
+     * @param divider 分隔线颜色
+     * @param hover 悬停底色
      * @author chiangyang
      */
-    void setColors(const QColor &background, const QColor &border) {
-        m_background = background;
-        m_border = border;
+    void setColors(const QColor &divider, const QColor &hover) {
+        m_divider = divider;
+        m_hover = hover;
         update();
     }
 
@@ -51,16 +57,280 @@ protected:
         Q_UNUSED(event);
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing);
-        const QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-        p.setPen(QPen(m_border, 1));
-        p.setBrush(m_background);
-        p.drawRoundedRect(r, 8, 8);
+        if (m_hovered && m_hover.alpha() > 0) {
+            p.setPen(Qt::NoPen);
+            p.setBrush(m_hover);
+            p.drawRoundedRect(QRectF(rect()).adjusted(0, 1, 0, -1.5), 8, 8);
+        }
+        p.setPen(QPen(m_divider, 1));
+        p.drawLine(QPointF(0, height() - 0.5), QPointF(width(), height() - 0.5));
+    }
+
+    void enterEvent(QEnterEvent *event) override {
+        QWidget::enterEvent(event);
+        m_hovered = true;
+        update();
+    }
+
+    void leaveEvent(QEvent *event) override {
+        QWidget::leaveEvent(event);
+        m_hovered = false;
+        update();
     }
 
 private:
-    QColor m_background; ///< 行背景色
-    QColor m_border;     ///< 行描边色
+    QColor m_divider;          ///< 底部分隔线颜色
+    QColor m_hover;            ///< 悬停底色
+    bool m_hovered = false;    ///< 当前是否悬停
 };
+
+/**
+ * @brief 是否深色主题
+ * @author chiangyang
+ */
+bool isDarkTheme() {
+    return StyleManager::themeMode() == StyleManager::ThemeMode::Dark;
+}
+
+/**
+ * @brief 主文字颜色
+ * @author chiangyang
+ */
+QColor textColor(bool dark) {
+    return dark ? QColor(232, 234, 237) : QColor(32, 33, 36);
+}
+
+/**
+ * @brief 次要文字颜色（统计、日期、完成态、空状态）
+ * @author chiangyang
+ */
+QColor mutedColor(bool dark) {
+    return dark ? QColor(142, 144, 149) : QColor(128, 132, 139);
+}
+
+/**
+ * @brief 输入框/下拉等控件的填充底色（以选项卡背景为基准微调一档）
+ * @author chiangyang
+ */
+QColor fieldColor(bool dark) {
+    const QColor base = StyleManager::getTabWidgetBgColor();
+    return dark ? base.lighter(142) : base.darker(105);
+}
+
+/**
+ * @brief 分隔线颜色
+ * @author chiangyang
+ */
+QColor dividerColor(bool dark) {
+    const QColor base = StyleManager::getTabWidgetBgColor();
+    return dark ? base.lighter(150) : base.darker(111);
+}
+
+/**
+ * @brief 行悬停底色（极浅，仅用于反馈）
+ * @author chiangyang
+ */
+QColor hoverColor(bool dark) {
+    const QColor base = StyleManager::getTabWidgetBgColor();
+    return dark ? base.lighter(126) : base.darker(103);
+}
+
+/**
+ * @brief 主强调色（宠物主题的暖橙色，深浅主题各取一档保证对比度）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor accentColor(bool dark) {
+    return dark ? QColor(240, 160, 97) : QColor(199, 94, 36);
+}
+
+/**
+ * @brief 强调色上的文字颜色
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor accentTextColor(bool dark) {
+    return dark ? QColor(42, 22, 8) : QColor(255, 255, 255);
+}
+
+/**
+ * @brief 逾期提示色
+ * @author chiangyang
+ */
+QColor overdueColor(bool dark) {
+    return dark ? QColor(255, 123, 114) : QColor(200, 68, 64);
+}
+
+/**
+ * @brief 今天到期提示色
+ * @author chiangyang
+ */
+QColor todayColor(bool dark) {
+    return dark ? QColor(236, 178, 84) : QColor(178, 116, 18);
+}
+
+/**
+ * @brief 下拉箭头图标（深色主题换用白色箭头资源，SVG 无法动态染色）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString downArrowIcon(bool dark) {
+    return dark ? QStringLiteral(":/icons/spinner-down-dark.svg")
+                : QStringLiteral(":/icons/spinner-down.svg");
+}
+
+/**
+ * @brief 下拉弹窗通用样式（保证弹出项不透明且可读）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString popupViewStyle(bool dark) {
+    return QStringLiteral(
+        "QComboBox QAbstractItemView { background-color: %1; color: %2;"
+        " border: 1px solid %3; outline: none; padding: 0.2em; }"
+        "QComboBox QAbstractItemView::item { padding: 0.3em 0.5em; }"
+        "QComboBox QAbstractItemView::item:hover { background-color: %4; }"
+        "QComboBox QAbstractItemView::item:selected { background-color: %4; color: %2; }")
+        .arg(fieldColor(dark).name(), textColor(dark).name(),
+             dividerColor(dark).name(), hoverColor(dark).name());
+}
+
+/**
+ * @brief 输入框样式（填充式、无边框、圆角，与下拉/日期视觉统一）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString inputStyle(bool dark) {
+    return QStringLiteral(
+        "QLineEdit { background-color: %1; border: none; border-radius: 8px;"
+        " padding: 0 0.7em; color: %2; font-size: 10.5pt;"
+        " selection-background-color: %3; selection-color: %4; }")
+        .arg(fieldColor(dark).name(), textColor(dark).name(),
+             accentColor(dark).name(), accentTextColor(dark).name());
+}
+
+/**
+ * @brief 输入区下拉样式（填充式小胶囊）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString fieldComboStyle(bool dark) {
+    return QStringLiteral(
+        "QComboBox { background-color: %1; border: none; border-radius: 8px;"
+        " padding: 0 0.6em; color: %2; font-size: 9.5pt; }"
+        "QComboBox::drop-down { border: none; width: 1.1em; }"
+        "QComboBox::down-arrow { image: url(%3); width: 0.5em; height: 0.5em; }")
+        .arg(fieldColor(dark).name(), textColor(dark).name(), downArrowIcon(dark))
+        + popupViewStyle(dark);
+}
+
+/**
+ * @brief 行内优先级下拉样式（透明无边框、小号灰字）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString metaComboStyle(bool dark) {
+    return QStringLiteral(
+        "QComboBox { background: transparent; border: none; padding: 0 0.1em;"
+        " color: %1; font-size: 9pt; }"
+        "QComboBox:disabled { color: %1; }"
+        "QComboBox::drop-down { border: none; width: 0.85em; }"
+        "QComboBox::down-arrow { image: url(%2); width: 0.42em; height: 0.42em; }")
+        .arg(mutedColor(dark).name(), downArrowIcon(dark))
+        + popupViewStyle(dark);
+}
+
+/**
+ * @brief 输入区日期样式（填充式胶囊）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString fieldDateStyle(bool dark) {
+    return QStringLiteral(
+        "QDateEdit { background-color: %1; border: none; border-radius: 8px;"
+        " padding: 0 0.5em; color: %2; font-size: 9.5pt; }"
+        "QDateEdit::drop-down { border: none; width: 1.1em; }"
+        "QDateEdit::down-arrow { image: url(%3); width: 0.5em; height: 0.5em; }")
+        .arg(fieldColor(dark).name(), textColor(dark).name(), downArrowIcon(dark));
+}
+
+/**
+ * @brief 行内日期样式（透明无边框文字，颜色表达逾期/今天）
+ * @param color 日期文字颜色
+ * @param dark 是否深色主题（决定箭头图标明暗）
+ * @author chiangyang
+ */
+QString metaDateStyle(const QColor &color, bool dark) {
+    return QStringLiteral(
+        "QDateEdit { background: transparent; border: none; padding: 0 0.1em;"
+        " color: %1; font-size: 9pt; }"
+        "QDateEdit:disabled { color: %1; }"
+        "QDateEdit::drop-down { border: none; width: 0.85em; }"
+        "QDateEdit::down-arrow { image: url(%2); width: 0.42em; height: 0.42em; }")
+        .arg(color.name(), downArrowIcon(dark));
+}
+
+/**
+ * @brief "截止"开关样式（未开启透明，开启后填充胶囊）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString toggleChipStyle(bool dark) {
+    return QStringLiteral(
+        "QPushButton { background: transparent; border: none; border-radius: 8px;"
+        " padding: 0 0.6em; color: %1; font-size: 9pt; }"
+        "QPushButton:hover { color: %2; }"
+        "QPushButton:checked { background-color: %3; color: %2; }")
+        .arg(mutedColor(dark).name(), textColor(dark).name(), fieldColor(dark).name());
+}
+
+/**
+ * @brief 添加按钮样式（强调色填充、悬停/按下微调明度）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString primaryButtonStyle(bool dark) {
+    const QColor accent = accentColor(dark);
+    return QStringLiteral(
+        "QPushButton { background-color: %1; color: %2; border: none;"
+        " border-radius: 8px; padding: 0 1.1em; font-weight: 600; font-size: 9.5pt; }"
+        "QPushButton:hover { background-color: %3; }"
+        "QPushButton:pressed { background-color: %4; }")
+        .arg(accent.name(), accentTextColor(dark).name(),
+             accent.lighter(112).name(), accent.darker(112).name());
+}
+
+/**
+ * @brief 行内勾选框样式
+ *
+ * 覆盖全局 QCheckBox 的应用强调色（偏蓝），改用窗口自身的暖橙，
+ * 并固定指示器尺寸，避免勾选前后尺寸跳变。
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QString checkStyle(bool dark) {
+    // 深色下亮橙底配白色对勾对比不足，选中态取一档更深的橙
+    const QColor checked = dark ? QColor(198, 118, 64) : accentColor(false);
+    return QStringLiteral(
+        "QCheckBox::indicator { width: 1.05em; height: 1.05em;"
+        " border: 1px solid %1; border-radius: 0.22em; background: transparent; }"
+        "QCheckBox::indicator:hover { border-color: %2; }"
+        "QCheckBox::indicator:checked { border-color: %3; background-color: %3;"
+        " image: url(:/icons/check.svg); }")
+        .arg(dividerColor(dark).name(), mutedColor(dark).name(), checked.name());
+}
+
+/**
+ * @brief 删除按钮样式（静默幽灵按钮，悬停变红）
+ * @author chiangyang
+ */
+QString ghostDeleteStyle(bool dark) {
+    return QStringLiteral(
+        "QPushButton { background: transparent; color: %1; border: none;"
+        " border-radius: 5px; font-size: 12pt; padding: 0; }"
+        "QPushButton:hover { color: %2; }")
+        .arg(mutedColor(dark).name(), overdueColor(dark).name());
+}
 
 /**
  * @brief 排序规则：未完成优先 → 有截止的在前且按日期升序 → 优先级高在前 → 创建早在前
@@ -84,34 +354,6 @@ bool todoLessThan(const TodoItem &a, const TodoItem &b) {
     return a.createdAt < b.createdAt;
 }
 
-/**
- * @brief 行背景色（普通 / 今天到期 / 已逾期，随主题）
- * @author chiangyang
- */
-QColor rowBackground(bool dark, bool overdue, bool today) {
-    if (overdue) {
-        return dark ? QColor(58, 34, 36) : QColor(253, 236, 236);
-    }
-    if (today) {
-        return dark ? QColor(58, 47, 29) : QColor(255, 246, 229);
-    }
-    return dark ? QColor(35, 35, 42) : QColor(247, 247, 249);
-}
-
-/**
- * @brief 行描边色（普通 / 今天到期 / 已逾期，随主题）
- * @author chiangyang
- */
-QColor rowBorder(bool dark, bool overdue, bool today) {
-    if (overdue) {
-        return dark ? QColor(192, 85, 85) : QColor(224, 108, 117);
-    }
-    if (today) {
-        return dark ? QColor(200, 155, 74) : QColor(232, 180, 90);
-    }
-    return dark ? QColor(255, 255, 255, 38) : QColor(227, 227, 230);
-}
-
 } // namespace
 
 /**
@@ -125,12 +367,12 @@ TodoWindow::TodoWindow(QWidget *parent)
     setWindowFlags(windowFlags() | Qt::Window);
 
     // 窗口尺寸按屏幕 DPI 缩放（与应用其余窗口一致：96 为逻辑基准）
-    resize(PetUi::scaled(580), PetUi::scaled(620));
-    setMinimumSize(PetUi::scaled(480), PetUi::scaled(360));
+    resize(PetUi::scaled(520), PetUi::scaled(620));
+    setMinimumSize(PetUi::scaled(460), PetUi::scaled(380));
 
     setupUi();
     updateWindowColors();
-    reloadItems();
+    retranslateUi();
     m_input->setFocus();
 
     // 语言切换时刷新标题/占位文字/列表文案
@@ -148,46 +390,81 @@ void TodoWindow::setupUi() {
     TranslationManager *tm = TranslationManager::instance();
 
     auto *root = new QVBoxLayout(this);
-    const int margin = PetUi::scaled(14);
-    root->setContentsMargins(margin, margin, margin, margin);
+    root->setContentsMargins(PetUi::scaled(20), PetUi::scaled(18),
+                             PetUi::scaled(20), PetUi::scaled(8));
     root->setSpacing(PetUi::scaled(10));
 
-    // ===== 输入区 =====
+    // ===== 标题行：左标题、右统计 =====
+    auto *header = new QHBoxLayout();
+    header->setSpacing(PetUi::scaled(10));
+    m_headerTitle = new QLabel(this);
+    m_statsLabel = new QLabel(this);
+    header->addWidget(m_headerTitle);
+    header->addStretch(1);
+    header->addWidget(m_statsLabel, 0, Qt::AlignBottom);
+    root->addLayout(header);
+
+    // ===== 输入区（无外框，仅控件填充） =====
+    auto *inputGroup = new QVBoxLayout();
+    inputGroup->setSpacing(PetUi::scaled(8));
+
     auto *inputRow = new QHBoxLayout();
     inputRow->setSpacing(PetUi::scaled(8));
 
     m_input = new QLineEdit(this);
     m_input->setPlaceholderText(tm->get("todo.placeholder", "Add a todo..."));
-    m_input->setStyleSheet(StyleManager::getPathEditStyle());
+    m_input->setMinimumHeight(PetUi::scaled(32));
     connect(m_input, &QLineEdit::returnPressed, this, &TodoWindow::addItemFromInput);
+
+    m_addBtn = new QPushButton(tm->get("todo.add", "Add"), this);
+    m_addBtn->setFixedHeight(PetUi::scaled(32));
+    m_addBtn->setMinimumWidth(PetUi::scaled(66));
+    m_addBtn->setCursor(Qt::PointingHandCursor);
+    connect(m_addBtn, &QPushButton::clicked, this, &TodoWindow::addItemFromInput);
+
+    inputRow->addWidget(m_input, 1);
+    inputRow->addWidget(m_addBtn);
+
+    auto *optionRow = new QHBoxLayout();
+    optionRow->setSpacing(PetUi::scaled(6));
 
     m_priority = new QComboBox(this);
     StyleManager::useHighlightOnlyPopup(m_priority);
     fillPriorityCombo(m_priority);
     m_priority->setCurrentIndex(m_priority->findData(int(TodoPriority::Medium)));
-    m_priority->setMinimumWidth(PetUi::scaled(76));
-    m_priority->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    m_priority->setFixedHeight(PetUi::scaled(28));
+    m_priority->setMinimumWidth(PetUi::scaled(88));
+    m_priority->setCursor(Qt::PointingHandCursor);
 
-    m_dueCheck = new QCheckBox(tm->get("todo.dueLabel", "Due"), this);
+    // "截止"用可勾选胶囊按钮，替代复选框，与输入区其他控件保持同一视觉语言
+    m_dueCheck = new QPushButton(tm->get("todo.dueLabel", "Due"), this);
+    m_dueCheck->setCheckable(true);
+    m_dueCheck->setFixedHeight(PetUi::scaled(28));
+    m_dueCheck->setCursor(Qt::PointingHandCursor);
+
     m_dueEdit = new QDateEdit(this);
     m_dueEdit->setCalendarPopup(true);
     m_dueEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
     m_dueEdit->setDate(QDate::currentDate());
-    m_dueEdit->setEnabled(false);
-    m_dueEdit->setMinimumWidth(PetUi::scaled(120));
-    m_dueEdit->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    connect(m_dueCheck, &QCheckBox::toggled, m_dueEdit, &QWidget::setEnabled);
+    m_dueEdit->setFixedHeight(PetUi::scaled(28));
+    m_dueEdit->setMinimumWidth(PetUi::scaled(108));
+    m_dueEdit->setVisible(false);
+    // 未开启"截止"时隐藏日期控件，保持输入区简洁
+    connect(m_dueCheck, &QPushButton::toggled, m_dueEdit, &QWidget::setVisible);
 
-    m_addBtn = new QPushButton(tm->get("todo.add", "Add"), this);
-    m_addBtn->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    connect(m_addBtn, &QPushButton::clicked, this, &TodoWindow::addItemFromInput);
+    optionRow->addWidget(m_priority);
+    optionRow->addWidget(m_dueCheck);
+    optionRow->addWidget(m_dueEdit);
+    optionRow->addStretch(1);
 
-    inputRow->addWidget(m_input, 1);
-    inputRow->addWidget(m_priority);
-    inputRow->addWidget(m_dueCheck);
-    inputRow->addWidget(m_dueEdit);
-    inputRow->addWidget(m_addBtn);
-    root->addLayout(inputRow);
+    inputGroup->addLayout(inputRow);
+    inputGroup->addLayout(optionRow);
+    root->addLayout(inputGroup);
+
+    // ===== 输入区与列表的细分隔线 =====
+    m_separator = new QWidget(this);
+    m_separator->setFixedHeight(1);
+    root->addWidget(m_separator);
 
     // ===== 列表区 =====
     m_scroll = new QScrollArea(this);
@@ -197,8 +474,8 @@ void TodoWindow::setupUi() {
 
     m_rowsContainer = new QWidget(m_scroll);
     m_rowsLayout = new QVBoxLayout(m_rowsContainer);
-    m_rowsLayout->setContentsMargins(0, 0, PetUi::scaled(4), 0);
-    m_rowsLayout->setSpacing(PetUi::scaled(8));
+    m_rowsLayout->setContentsMargins(0, 0, PetUi::scaled(6), 0);
+    m_rowsLayout->setSpacing(0);
     m_scroll->setWidget(m_rowsContainer);
     root->addWidget(m_scroll, 1);
 }
@@ -213,6 +490,28 @@ void TodoWindow::fillPriorityCombo(QComboBox *combo) {
     combo->addItem(tm->get("todo.priority.low", "Low"), int(TodoPriority::Low));
     combo->addItem(tm->get("todo.priority.medium", "Medium"), int(TodoPriority::Medium));
     combo->addItem(tm->get("todo.priority.high", "High"), int(TodoPriority::High));
+}
+
+/**
+ * @brief 刷新标题右侧"未完成 / 已完成"统计文字
+ * @author chiangyang
+ */
+void TodoWindow::updateHeaderStats() {
+    if (!m_statsLabel) {
+        return;
+    }
+    int done = 0;
+    const QVector<TodoItem> items = TodoStore::instance()->list();
+    for (const TodoItem &item : items) {
+        if (item.done) {
+            ++done;
+        }
+    }
+    const int open = items.size() - done;
+    m_statsLabel->setText(
+        TranslationManager::instance()->get("todo.stats", "Open %1 · Done %2")
+            .arg(open)
+            .arg(done));
 }
 
 /**
@@ -240,90 +539,124 @@ void TodoWindow::addItemFromInput() {
 }
 
 /**
- * @brief 按待办项创建一行列表控件
+ * @brief 按待办项创建一行列表控件（单行：勾选 + 标题 + 优先级 + 截止 + 删除）
  * @author chiangyang
  */
 QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
     TranslationManager *tm = TranslationManager::instance();
 
     auto *row = new TodoRowWidget(m_rowsContainer);
-    auto *layout = new QHBoxLayout(row);
-    layout->setContentsMargins(PetUi::scaled(10), PetUi::scaled(8),
-                               PetUi::scaled(10), PetUi::scaled(8));
-    layout->setSpacing(PetUi::scaled(8));
+    auto *h = new QHBoxLayout(row);
+    h->setContentsMargins(PetUi::scaled(4), PetUi::scaled(6),
+                          PetUi::scaled(4), PetUi::scaled(6));
+    h->setSpacing(PetUi::scaled(10));
 
-    // 完成勾选
     auto *doneBox = new QCheckBox(row);
     doneBox->setChecked(item.done);
     doneBox->setToolTip(tm->get("todo.markDone", "Mark as done"));
+    doneBox->setCursor(Qt::PointingHandCursor);
 
-    // 待办内容（长文本自动换行）
-    auto *title = new QLabel(item.title, row);
+    auto *title = new QLabel(row);
+    title->setTextFormat(Qt::PlainText);
     title->setWordWrap(true);
     title->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
 
-    // 优先级
+    // 行内优先级：透明小号下拉，不额外占用视觉重量
     auto *prio = new QComboBox(row);
     StyleManager::useHighlightOnlyPopup(prio);
     fillPriorityCombo(prio);
     prio->setCurrentIndex(prio->findData(int(item.priority)));
-    prio->setMinimumWidth(PetUi::scaled(70));
+    prio->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+    prio->setMinimumHeight(PetUi::scaled(22));
+    prio->setCursor(Qt::PointingHandCursor);
 
-    // 截止日期：勾选"截止"后才可编辑，取消勾选即清除截止日期
-    auto *dueCheck = new QCheckBox(tm->get("todo.dueLabel", "Due"), row);
-    dueCheck->setChecked(item.dueDate.isValid());
+    // 截止日期：有日期时显示精简日期文字，无日期时显示可点击的"截止"
     auto *dueEdit = new QDateEdit(row);
     dueEdit->setCalendarPopup(true);
-    dueEdit->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
+    dueEdit->setDisplayFormat(QStringLiteral("MM-dd"));
     dueEdit->setDate(item.dueDate.isValid() ? item.dueDate : QDate::currentDate());
-    dueEdit->setEnabled(item.dueDate.isValid());
-    dueEdit->setMinimumWidth(PetUi::scaled(115));
+    dueEdit->setFixedWidth(PetUi::scaled(50));
+    dueEdit->setMinimumHeight(PetUi::scaled(22));
+    dueEdit->setProperty("hasDue", item.dueDate.isValid());
+    dueEdit->setCursor(Qt::PointingHandCursor);
+    dueEdit->setContextMenuPolicy(Qt::CustomContextMenu);
+    dueEdit->setToolTip(tm->get("todo.clearDueHint", "Right-click to clear due date"));
 
-    // 删除
+    auto *dueBtn = new QPushButton(tm->get("todo.dueLabel", "Due"), row);
+    dueBtn->setFixedHeight(PetUi::scaled(24));
+    dueBtn->setFixedWidth(PetUi::scaled(50));
+    dueBtn->setCursor(Qt::PointingHandCursor);
+    dueBtn->setFlat(true);
+
     auto *delBtn = new QPushButton(QStringLiteral("×"), row);
     delBtn->setToolTip(tm->get("todo.delete", "Delete"));
-    delBtn->setFixedSize(PetUi::scaled(26), PetUi::scaled(26));
+    delBtn->setFixedSize(PetUi::scaled(22), PetUi::scaled(22));
+    delBtn->setCursor(Qt::PointingHandCursor);
 
-    layout->addWidget(doneBox);
-    layout->addWidget(title, 1);
-    layout->addWidget(prio);
-    layout->addWidget(dueCheck);
-    layout->addWidget(dueEdit);
-    layout->addWidget(delBtn);
+    h->addWidget(doneBox);
+    h->addWidget(title, 1);
+    h->addWidget(prio);
+    h->addWidget(dueEdit);
+    h->addWidget(dueBtn);
+    h->addWidget(delBtn);
 
-    // 按当前完成/截止状态刷新行的颜色与文字（主题切换时也复用此回调）
-    auto refresh = [row, title, doneBox, prio, dueCheck, dueEdit, delBtn]() {
-        const bool dark = StyleManager::themeMode() == StyleManager::ThemeMode::Dark;
+    const QString rawTitle = item.title;
+
+    // 按当前完成/截止状态刷新文字与控件配色（主题切换时复用此回调）
+    auto refresh = [row, title, rawTitle, doneBox, prio, dueEdit, dueBtn, delBtn]() {
+        const bool dark = isDarkTheme();
         const bool done = doneBox->isChecked();
-        const QDate due = dueCheck->isChecked() ? dueEdit->date() : QDate();
+        const bool hasDue = dueEdit->property("hasDue").toBool();
+        const QDate due = hasDue ? dueEdit->date() : QDate();
         const bool overdue = TodoWindow::isOverdue(done, due);
         const bool today = TodoWindow::isDueToday(done, due);
 
-        row->setColors(rowBackground(dark, overdue, today),
-                       rowBorder(dark, overdue, today));
+        row->setColors(dividerColor(dark), hoverColor(dark));
 
-        if (done) {
-            title->setStyleSheet(QStringLiteral("color: %1;")
-                .arg(dark ? QStringLiteral("#8a8a90") : QStringLiteral("#9a9a9a")));
-        } else if (overdue) {
-            title->setStyleSheet(QStringLiteral("color: %1;")
-                .arg(dark ? QStringLiteral("#ff7b72") : QStringLiteral("#c0392b")));
+        // 完成态：标题置灰（勾选 + 灰字 + 下沉排序表达已完成）
+        title->setText(rawTitle);
+        title->setStyleSheet(
+            QStringLiteral("color: %1; font-size: 10.5pt; font-weight: %2;")
+                .arg(done ? mutedColor(dark).name() : textColor(dark).name())
+                .arg(done ? QStringLiteral("400") : QStringLiteral("500")));
+
+        // 勾选框保持主题内配色，避免沿用全局蓝色强调色
+        doneBox->setStyleSheet(checkStyle(dark));
+
+        // 完成后保留行结构（仅禁用与置灰），避免勾选瞬间行高和信息跳变
+        prio->setVisible(true);
+        dueEdit->setVisible(hasDue);
+        dueBtn->setVisible(!hasDue);
+        prio->setEnabled(!done);
+        dueEdit->setEnabled(!done && hasDue);
+        dueBtn->setEnabled(!done && !hasDue);
+
+        prio->setStyleSheet(metaComboStyle(dark));
+        dueBtn->setStyleSheet(
+            QStringLiteral("QPushButton { background: transparent; border: none;"
+                           " text-align: left; padding: 0 0.2em; font-size: 9pt; color: %1; }"
+                           "QPushButton:hover { color: %2; }"
+                           "QPushButton:disabled { color: %1; }")
+                .arg(mutedColor(dark).name(), textColor(dark).name()));
+
+        QColor dateColor = mutedColor(dark);
+        if (overdue) {
+            dateColor = overdueColor(dark);
         } else if (today) {
-            title->setStyleSheet(QStringLiteral("color: %1;")
-                .arg(dark ? QStringLiteral("#f0b85c") : QStringLiteral("#b9770e")));
-        } else {
-            title->setStyleSheet(QString());
+            dateColor = todayColor(dark);
         }
+        dueEdit->setStyleSheet(metaDateStyle(dateColor, dark));
 
-        prio->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-        QString dueStyle = StyleManager::getSettingsComboBoxStyle();
-        if (!done && (overdue || today)) {
-            dueStyle += QStringLiteral("QDateEdit { color: %1; }")
-                .arg(overdue ? (dark ? QStringLiteral("#ff7b72") : QStringLiteral("#c0392b"))
-                             : (dark ? QStringLiteral("#f0b85c") : QStringLiteral("#b9770e")));
+        // 日期控件的提示同时说明当前状态与右键清除入口
+        TranslationManager *tm = TranslationManager::instance();
+        if (overdue) {
+            dueEdit->setToolTip(tm->get("todo.status.overdue", "Overdue"));
+        } else if (today) {
+            dueEdit->setToolTip(tm->get("todo.status.today", "Due today"));
+        } else {
+            dueEdit->setToolTip(tm->get("todo.clearDueHint", "Right-click to clear due date"));
         }
-        dueEdit->setStyleSheet(dueStyle);
-        delBtn->setStyleSheet(StyleManager::getSettingsButtonStyle());
+        delBtn->setStyleSheet(ghostDeleteStyle(dark));
     };
 
     // 勾选完成：写回存储并重建列表（完成后排到未完成项之后）
@@ -345,21 +678,26 @@ QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
         refresh();
     });
 
-    // 勾选/取消"截止"：取消即清除截止日期
-    connect(dueCheck, &QCheckBox::toggled, this, [id = item.id, dueEdit, refresh](bool checked) {
-        dueEdit->setEnabled(checked);
+    // 点击"截止"：设为今天并展开日期控件
+    connect(dueBtn, &QPushButton::clicked, this, [id = item.id, dueEdit, refresh]() {
         TodoItem current = TodoStore::instance()->find(id);
         if (current.id.isEmpty()) {
             return;
         }
-        current.dueDate = checked ? dueEdit->date() : QDate();
+        const QDate today = QDate::currentDate();
+        current.dueDate = today;
         TodoStore::instance()->update(current);
+        dueEdit->setProperty("hasDue", true);
+        dueEdit->blockSignals(true);
+        dueEdit->setDate(today);
+        dueEdit->blockSignals(false);
         refresh();
     });
 
     // 修改截止日期
-    connect(dueEdit, &QDateEdit::dateChanged, this, [id = item.id, dueCheck, refresh](const QDate &date) {
-        if (!dueCheck->isChecked()) {
+    connect(dueEdit, &QDateEdit::dateChanged, this,
+            [id = item.id, dueEdit, refresh](const QDate &date) {
+        if (!dueEdit->property("hasDue").toBool()) {
             return;
         }
         TodoItem current = TodoStore::instance()->find(id);
@@ -368,6 +706,25 @@ QWidget *TodoWindow::createRowWidget(const TodoItem &item) {
         }
         current.dueDate = date;
         TodoStore::instance()->update(current);
+        refresh();
+    });
+
+    // 右键清除截止日期
+    connect(dueEdit, &QWidget::customContextMenuRequested, this,
+            [id = item.id, dueEdit, refresh](const QPoint &) {
+        QMenu menu;
+        QAction *clear = menu.addAction(
+            TranslationManager::instance()->get("todo.clearDue", "Clear due date"));
+        if (menu.exec(QCursor::pos()) != clear) {
+            return;
+        }
+        TodoItem current = TodoStore::instance()->find(id);
+        if (current.id.isEmpty()) {
+            return;
+        }
+        current.dueDate = QDate();
+        TodoStore::instance()->update(current);
+        dueEdit->setProperty("hasDue", false);
         refresh();
     });
 
@@ -410,24 +767,45 @@ void TodoWindow::reloadItems() {
     std::sort(items.begin(), items.end(), todoLessThan);
 
     if (items.isEmpty()) {
-        auto *empty = new QLabel(
-            TranslationManager::instance()->get("todo.empty", "No todos yet"), m_rowsContainer);
-        empty->setAlignment(Qt::AlignCenter);
-        empty->setWordWrap(true);
-        m_rowsLayout->addWidget(empty);
-        // 空提示的文字色同样随主题刷新
-        m_rowRefreshers.append([empty]() {
-            const bool dark = StyleManager::themeMode() == StyleManager::ThemeMode::Dark;
-            empty->setStyleSheet(QStringLiteral("color: %1;")
-                .arg(dark ? QStringLiteral("#8a8a90") : QStringLiteral("#8a8a8a")));
+        // 空状态：极简灰阶提示，不引入额外色彩
+        auto *emptyBox = new QWidget(m_rowsContainer);
+        auto *emptyLayout = new QVBoxLayout(emptyBox);
+        emptyLayout->setContentsMargins(0, PetUi::scaled(56), 0, 0);
+        emptyLayout->setSpacing(PetUi::scaled(8));
+
+        auto *glyph = new QLabel(QStringLiteral("✓"), emptyBox);
+        glyph->setAlignment(Qt::AlignCenter);
+
+        auto *emptyText = new QLabel(
+            TranslationManager::instance()->get("todo.empty", "No todos yet"), emptyBox);
+        emptyText->setAlignment(Qt::AlignCenter);
+        emptyText->setWordWrap(true);
+        emptyText->setFixedWidth(PetUi::scaled(320));
+
+        emptyLayout->addWidget(glyph);
+        emptyLayout->addWidget(emptyText, 0, Qt::AlignHCenter);
+
+        m_rowsLayout->addStretch(1);
+        m_rowsLayout->addWidget(emptyBox);
+        m_rowsLayout->addStretch(1);
+
+        m_rowRefreshers.append([glyph, emptyText]() {
+            const bool dark = isDarkTheme();
+            glyph->setStyleSheet(
+                QStringLiteral("color: %1; font-size: 20pt; font-weight: 500;")
+                    .arg(mutedColor(dark).name()));
+            emptyText->setStyleSheet(
+                QStringLiteral("color: %1; font-size: 9.5pt;").arg(mutedColor(dark).name()));
         });
         m_rowRefreshers.last()();
     } else {
         for (const TodoItem &item : items) {
             m_rowsLayout->addWidget(createRowWidget(item));
         }
+        m_rowsLayout->addStretch(1);
     }
-    m_rowsLayout->addStretch(1);
+
+    updateHeaderStats();
 }
 
 /**
@@ -435,6 +813,7 @@ void TodoWindow::reloadItems() {
  * @author chiangyang
  */
 void TodoWindow::updateWindowColors() {
+    const bool dark = isDarkTheme();
     const QColor bg = StyleManager::getTabWidgetBgColor();
 
     // 窗口与滚动区背景用调色板上色（不用样式表，避免影响子控件原生绘制）
@@ -456,24 +835,45 @@ void TodoWindow::updateWindowColors() {
         m_scroll->viewport()->setPalette(viewportPalette);
     }
 
-    // 输入区控件配色随主题
+    // 标题行：左标题右统计，靠字号与字重拉开层级
+    if (m_headerTitle) {
+        m_headerTitle->setStyleSheet(QStringLiteral(
+            "color: %1; font-size: 17pt; font-weight: 600;").arg(textColor(dark).name()));
+    }
+    if (m_statsLabel) {
+        m_statsLabel->setStyleSheet(QStringLiteral(
+            "color: %1; font-size: 9pt;").arg(mutedColor(dark).name()));
+    }
+
+    // 输入区控件：统一填充式外观，消除系统灰白方块的割裂感
     if (m_input) {
-        m_input->setStyleSheet(StyleManager::getPathEditStyle());
-    }
-    if (m_priority) {
-        m_priority->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    }
-    if (m_dueEdit) {
-        m_dueEdit->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+        m_input->setStyleSheet(inputStyle(dark));
     }
     if (m_addBtn) {
-        m_addBtn->setStyleSheet(StyleManager::getSettingsButtonStyle());
+        m_addBtn->setStyleSheet(primaryButtonStyle(dark));
+    }
+    if (m_priority) {
+        m_priority->setStyleSheet(fieldComboStyle(dark));
+    }
+    if (m_dueCheck) {
+        m_dueCheck->setStyleSheet(toggleChipStyle(dark));
+    }
+    if (m_dueEdit) {
+        m_dueEdit->setStyleSheet(fieldDateStyle(dark));
+    }
+
+    // 细分隔线
+    if (m_separator) {
+        QPalette sepPalette = m_separator->palette();
+        sepPalette.setColor(QPalette::Window, dividerColor(dark));
+        m_separator->setPalette(sepPalette);
+        m_separator->setAutoFillBackground(true);
     }
 
     // 系统标题栏浅色/深色随主题
     StyleManager::applyDarkTitleBar(winId());
 
-    // 各行背景/文字颜色
+    // 各行的文字/控件风格
     for (const auto &refresh : m_rowRefreshers) {
         refresh();
     }
@@ -486,6 +886,9 @@ void TodoWindow::updateWindowColors() {
 void TodoWindow::retranslateUi() {
     TranslationManager *tm = TranslationManager::instance();
     setWindowTitle(tm->get("todo.windowTitle", "Todo List"));
+    if (m_headerTitle) {
+        m_headerTitle->setText(tm->get("todo.windowTitle", "Todo List"));
+    }
     if (m_input) {
         m_input->setPlaceholderText(tm->get("todo.placeholder", "Add a todo..."));
     }
