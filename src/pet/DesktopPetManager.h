@@ -5,7 +5,9 @@
 #include <QPixmap>
 #include <QRect>
 #include <QPointer>
+#include <QVector>
 #include "PetWindow.h"
+#include "CustomPetStore.h"
 
 class ClotheslineWindow;
 class QTimer;
@@ -103,6 +105,51 @@ public:
      */
     void setPetStyle(PetWindow::PetStyle style);
 
+    /**
+     * @brief 获取当前选择标识（"builtin:<n>" 或 "custom:<id>"）
+     * @return 选择标识
+     * @author chiangyang
+     */
+    QString selection() const;
+
+    /**
+     * @brief 选择内置造型（切换后清除自定义素材）
+     * @param style 样式枚举值
+     * @author chiangyang
+     */
+    void selectBuiltin(PetWindow::PetStyle style);
+
+    /**
+     * @brief 选择自定义宠物（立即生效并持久化）
+     * @param customPetId 自定义素材 id
+     * @author chiangyang
+     */
+    void selectCustom(const QString &customPetId);
+
+    /**
+     * @brief 获取已导入的自定义宠物列表
+     * @return 记录列表
+     * @author chiangyang
+     */
+    QVector<CustomPet> customPets() const;
+
+    /**
+     * @brief 导入自定义宠物素材（成功后自动选中）
+     * @param sourcePath 用户选择的原图路径
+     * @param errorMessage 失败原因输出（可为 nullptr）
+     * @return 导入成功返回记录，失败返回无效记录
+     * @author chiangyang
+     */
+    CustomPet addCustomPet(const QString &sourcePath, QString *errorMessage = nullptr);
+
+    /**
+     * @brief 删除自定义宠物素材（删除当前选中项时回落到默认造型）
+     * @param customPetId 自定义素材 id
+     * @return 是否删除成功
+     * @author chiangyang
+     */
+    bool removeCustomPet(const QString &customPetId);
+
 signals:
     /**
      * @brief 开关状态变更信号
@@ -110,6 +157,13 @@ signals:
      * @author chiangyang
      */
     void enabledChanged(bool enabled);
+
+    /**
+     * @brief 宠物外观选择变更信号（内置样式或自定义素材）
+     * @param selection 新的选择标识
+     * @author chiangyang
+     */
+    void selectionChanged(const QString &selection);
 
 private:
     /**
@@ -124,6 +178,12 @@ private:
      * @author chiangyang
      */
     void createPetWindow();
+
+    /**
+     * @brief 按当前选择刷新宠物窗口外观（内置造型或自定义素材）
+     * @author chiangyang
+     */
+    void applySelection();
 
     /**
      * @brief 计算宠物默认位置（主屏幕右下角内收边距）

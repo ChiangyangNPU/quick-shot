@@ -3,10 +3,15 @@
 
 #include <QWidget>
 #include <QPoint>
+#include <QRectF>
+#include <QString>
 #include <QPixmap>
 #include <QAbstractAnimation>
 #include <QPointer>
 #include "PetUiScale.h"
+
+class QMovie;
+class QPainter;
 
 /**
  * @brief 桌面宠物窗口
@@ -87,6 +92,38 @@ public:
     static QPixmap renderStylePreview(PetStyle style, int size);
 
     /**
+     * @brief 渲染自定义宠物素材的预览图（设置页缩略图用）
+     * @param sourcePath 素材文件路径（静态图或 GIF，GIF 取首帧）
+     * @param size 预览图边长（像素）
+     * @return 透明背景、等比居中缩放的预览图；无法解码时返回空图
+     * @author chiangyang
+     */
+    static QPixmap renderCustomPreview(const QString &sourcePath, int size);
+
+    /**
+     * @brief 切换为自定义宠物素材（替代内置造型绘制）
+     *
+     * GIF 用 QMovie 循环播放，静态图直接绘制；两者均按窗口等比居中，
+     * 进食/咀嚼动效改为整体挤压回弹（见 paintCustomPet）。
+     * @param sourcePath 素材文件路径，传空字符串等同于 clearCustomPet()
+     * @author chiangyang
+     */
+    void setCustomPet(const QString &sourcePath);
+
+    /**
+     * @brief 清除自定义素材，恢复内置造型绘制
+     * @author chiangyang
+     */
+    void clearCustomPet() { setCustomPet(QString()); }
+
+    /**
+     * @brief 当前是否处于自定义素材模式
+     * @return 是否有自定义素材
+     * @author chiangyang
+     */
+    bool isCustomActive() const { return !m_customPath.isEmpty(); }
+
+    /**
      * @brief 切换宠物外观样式（立即重绘）
      * @param style 新样式
      * @author chiangyang
@@ -145,6 +182,8 @@ signals:
 
 protected:
     void paintEvent(QPaintEvent *event) override;
+    void showEvent(QShowEvent *event) override;
+    void hideEvent(QHideEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
@@ -152,6 +191,25 @@ protected:
     void leaveEvent(QEvent *event) override;
 
 private:
+    /**
+     * @brief 绘制自定义素材（静态图或 GIF 当前帧）
+     *
+     * 与内置造型共用咀嚼挤压/张嘴动效参数：形象整体绕中心挤压回弹，
+     * 张嘴时轻微上浮放大；完成后同样在形象左上闪一颗奖励星星。
+     * @param p 画笔（已按 96 基准坐标系缩放）
+     * @author chiangyang
+     */
+    void paintCustomPet(QPainter &p);
+
+    /**
+     * @brief 计算自定义素材在 96 基准坐标系中的绘制矩形
+     *
+     * 按素材宽高比等比 contain 到窗口内并居中，非正方形素材不会变形。
+     * @return 素材绘制矩形
+     * @author chiangyang
+     */
+    QRectF customTargetRect() const;
+
     /**
      * @brief 调度下一次眨眼（随机 2.4~5 秒；星星闪烁期间自动跳过）
      * @author chiangyang
@@ -170,6 +228,10 @@ private:
     bool m_eyesClosed = false;      ///< 眨眼瞬间为 true
     PetStyle m_style = PetStyle::Cat; ///< 当前外观样式
     QPointer<QAbstractAnimation> m_mouthAnim; ///< 进行中的嘴部/咀嚼动画（新动画开始前 stop，避免叠加互相覆写）
+
+    QString m_customPath;           ///< 自定义素材路径（空表示使用内置造型）
+    QPixmap m_customImage;          ///< 自定义静态素材图像（GIF 模式为空）
+    QPointer<QMovie> m_movie;       ///< GIF 播放器（静态素材/内置造型时为 nullptr）
 
     bool m_pressing = false;        ///< 左键按下中
     bool m_dragging = false;        ///< 已判定为拖动（移动距离超阈值）

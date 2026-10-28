@@ -5,12 +5,17 @@
 #include "../../pet/PetWindow.h"
 #include "../../pet/PetUiScale.h"
 #include "../FlowLayout.h"
+#include "../MessageBox.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
+#include <QFileDialog>
 
 namespace {
+// 自定义宠物按钮在互斥组中的 id 偏移（避免与 PetStyle 枚举值 0~15 冲突）
+constexpr int kCustomIdBase = 1000;
+
 // 样式名 i18n 键与英文兜底文案（下标对应 PetWindow::PetStyle 枚举值；
 // 经典组 = 猫/熊猫/企鹅/青蛙，生肖组含全部 12 属相，兔/狗复用 Bunny/Shiba 造型）
 constexpr const char *kStyleKeys[] = {
@@ -110,7 +115,16 @@ void SettingsPetTab::setupUi() {
         m_styleGroup->addButton(btn, i);
     }
     m_styleGroup->button(int(DesktopPetManager::instance()->petStyle()))->setChecked(true);
-    connect(m_styleGroup, &QButtonGroup::idClicked, this, [](int id) {
+    connect(m_styleGroup, &QButtonGroup::idClicked, this, [this](int id) {
+        // 自定义缩略图按钮 id 从 kCustomIdBase 起偏移，与内置样式共用互斥组
+        if (id >= kCustomIdBase) {
+            const int index = id - kCustomIdBase;
+            if (index >= 0 && index < m_customButtons.size()) {
+                DesktopPetManager::instance()->selectCustom(
+                    m_customButtons[index]->property("customPetId").toString());
+            }
+            return;
+        }
         DesktopPetManager::instance()->setPetStyle(static_cast<PetWindow::PetStyle>(id));
     });
 
@@ -133,6 +147,46 @@ void SettingsPetTab::setupUi() {
         if (idx < m_styleButtons.size()) zodiacRow->addWidget(m_styleButtons[idx]);
     }
 
+    // ===== 自定义宠物：缩略图平铺 + 添加/删除 =====
+    // 自定义项与内置样式共用 m_styleGroup 保证选择互斥，素材入库到应用数据目录
+    m_customGroup = new QGroupBox(tm->get("pet.customGroup", "Custom Pets"), m_petGroup);
+    m_customGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    QVBoxLayout *customLayout = new QVBoxLayout(m_customGroup);
+
+    // FlowLayout 同理必须无父创建，再由 addLayout 收养
+    m_customFlow = new FlowLayout(nullptr, PetUi::scaled(6), PetUi::scaled(6));
+
+    QHBoxLayout *customActions = new QHBoxLayout();
+    customActions->setSpacing(PetUi::scaled(6));
+    m_btnAddCustom = new QPushButton(tm->get("pet.addCustom", "Add Image/GIF"), m_customGroup);
+    m_btnAddCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    m_btnAddCustom->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    connect(m_btnAddCustom, &QPushButton::clicked, this, &SettingsPetTab::addCustomPetFromFile);
+
+    m_btnRemoveCustom = new QPushButton(tm->get("pet.removeCustom", "Delete Selected"), m_customGroup);
+    m_btnRemoveCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    m_btnRemoveCustom->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    m_btnRemoveCustom->setEnabled(false);
+    connect(m_btnRemoveCustom, &QPushButton::clicked, this, &SettingsPetTab::removeSelectedCustomPet);
+
+    customActions->addWidget(m_btnAddCustom);
+    customActions->addWidget(m_btnRemoveCustom);
+    customActions->addStretch();
+
+    m_customHint = new QLabel(
+        tm->get("pet.customHint",
+                "Transparent PNG or GIF works best; non-square images are scaled to fit."),
+        m_customGroup);
+    m_customHint->setWordWrap(true);
+
+    customLayout->addLayout(customActions);
+    customLayout->addLayout(m_customFlow);
+    customLayout->addWidget(m_customHint);
+
+    // 选中态变更（添加/删除/切换）时同步按钮与删除按钮可用性
+    connect(DesktopPetManager::instance(), &DesktopPetManager::selectionChanged,
+            this, [this](const QString &) { syncSelection(); });
+
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_petGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
     m_btnResetPos->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
@@ -154,6 +208,7 @@ void SettingsPetTab::setupUi() {
     petLayout->addLayout(styleRow);
     petLayout->addWidget(m_zodiacLabel);
     petLayout->addLayout(zodiacRow);
+    petLayout->addWidget(m_customGroup);
     petLayout->addWidget(m_btnResetPos);
     petLayout->addWidget(m_descLabel);
 
@@ -177,6 +232,104 @@ void SettingsPetTab::setupUi() {
     petScrollArea->setAutoFillBackground(true);
 
     tabLayout->addWidget(petScrollArea);
+
+    // 构建已导入的自定义宠物缩略图（空列表时只有添加按钮与提示）
+    refreshCustomList();
+}
+
+// ============================================================
+// 自定义宠物
+// ============================================================
+
+void SettingsPetTab::refreshCustomList() {
+    // 先移除旧按钮，避免重复导入后出现遗留项
+    for (QToolButton *btn : m_customButtons) {
+        m_styleGroup->removeButton(btn);
+        m_customFlow->removeWidget(btn);
+        btn->deleteLater();
+    }
+    m_customButtons.clear();
+
+    const int iconSize = PetUi::scaled(48);
+    const QVector<CustomPet> pets = DesktopPetManager::instance()->customPets();
+    for (const CustomPet &pet : pets) {
+        auto *btn = new QToolButton(m_petGroup);
+        btn->setCheckable(true);
+        btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+        const QPixmap preview = PetWindow::renderCustomPreview(
+            CustomPetStore::instance()->filePath(pet), iconSize * 2);
+        if (!preview.isNull()) {
+            btn->setIcon(QIcon(preview));
+        }
+        btn->setIconSize(QSize(iconSize, iconSize));
+        btn->setText(pet.name);
+        btn->setToolTip(pet.isGif ? pet.name + QStringLiteral(" (GIF)") : pet.name);
+        btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
+        btn->setProperty("customPetId", pet.id);
+        m_customButtons.append(btn);
+        m_customFlow->addWidget(btn);
+        m_styleGroup->addButton(btn, kCustomIdBase + m_customButtons.size() - 1);
+    }
+
+    syncSelection();
+    m_customGroup->updateGeometry();
+}
+
+void SettingsPetTab::syncSelection() {
+    const QString sel = DesktopPetManager::instance()->selection();
+    const bool isCustom = CustomPetStore::isCustomSelection(sel);
+    if (isCustom) {
+        const QString id = CustomPetStore::customIdFromSelection(sel);
+        for (QToolButton *btn : m_customButtons) {
+            if (btn->property("customPetId").toString() == id) {
+                btn->setChecked(true);
+                break;
+            }
+        }
+    } else if (QAbstractButton *btn = m_styleGroup->button(
+                   int(DesktopPetManager::instance()->petStyle()))) {
+        btn->setChecked(true);
+    }
+    // 删除按钮仅对自定义选择可用
+    if (m_btnRemoveCustom) {
+        m_btnRemoveCustom->setEnabled(isCustom);
+    }
+}
+
+void SettingsPetTab::addCustomPetFromFile() {
+    TranslationManager *tm = TranslationManager::instance();
+    const QString path = QFileDialog::getOpenFileName(
+        this, tm->get("pet.addCustomTitle", "Choose Pet Image"), QString(),
+        tm->get("pet.customFilter", "Images (*.png *.jpg *.jpeg *.webp *.gif)"));
+    if (path.isEmpty()) {
+        return;
+    }
+
+    QString error;
+    const CustomPet pet = DesktopPetManager::instance()->addCustomPet(path, &error);
+    if (!pet.isValid()) {
+        MessageBox::warning(
+            this, tm->get("pet.addFailedTitle", "Add Failed"),
+            tm->get("pet.addFailed", "Could not add this image: %1").arg(error));
+        return;
+    }
+    refreshCustomList();
+}
+
+void SettingsPetTab::removeSelectedCustomPet() {
+    const QString sel = DesktopPetManager::instance()->selection();
+    if (!CustomPetStore::isCustomSelection(sel)) {
+        return;
+    }
+    TranslationManager *tm = TranslationManager::instance();
+    if (!MessageBox::question(
+            this, tm->get("pet.removeCustomTitle", "Delete Custom Pet"),
+            tm->get("pet.removeCustomConfirm",
+                    "Delete this custom pet? The imported image will also be removed."))) {
+        return;
+    }
+    DesktopPetManager::instance()->removeCustomPet(CustomPetStore::customIdFromSelection(sel));
+    refreshCustomList();
 }
 
 // ============================================================
@@ -195,6 +348,12 @@ void SettingsPetTab::retranslateUi() {
         m_styleButtons[i]->setToolTip(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
     }
     if (m_btnResetPos) m_btnResetPos->setText(tm->get("pet.resetPosition", "Reset Pet Position"));
+    if (m_customGroup) m_customGroup->setTitle(tm->get("pet.customGroup", "Custom Pets"));
+    if (m_btnAddCustom) m_btnAddCustom->setText(tm->get("pet.addCustom", "Add Image/GIF"));
+    if (m_btnRemoveCustom) m_btnRemoveCustom->setText(tm->get("pet.removeCustom", "Delete Selected"));
+    if (m_customHint) m_customHint->setText(
+        tm->get("pet.customHint",
+                "Transparent PNG or GIF works best; non-square images are scaled to fit."));
     if (m_descLabel) m_descLabel->setText(tm->get("pet.description",
         "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet or move the mouse to the top edge of the screen to open or close the clothesline and view recent screenshots and copied text."));
 }
@@ -210,6 +369,12 @@ void SettingsPetTab::refreshStyles() {
         btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
     }
     if (m_btnResetPos) m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    if (m_customGroup) m_customGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    if (m_btnAddCustom) m_btnAddCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    if (m_btnRemoveCustom) m_btnRemoveCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    for (QToolButton *btn : m_customButtons) {
+        btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
+    }
 }
 
 void SettingsPetTab::applyTabBackground(const QColor &color) {

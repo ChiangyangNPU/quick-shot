@@ -1,9 +1,12 @@
 #include "PetWindow.h"
 #include "../utils/Utils.h"
+#include "../log/Logger.h"
 
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
+#include <QMovie>
+#include <QImageReader>
 #include <QPropertyAnimation>
 #include <QSequentialAnimationGroup>
 #include <QParallelAnimationGroup>
@@ -336,6 +339,36 @@ const PetSpec &specFor(PetWindow::PetStyle style) {
 }
 
 /**
+ * @brief 绘制奖励星星（内置造型画在左眼处，自定义素材画在形象左上）
+ *
+ * 星星随进度从 0 长到最大再缩回 0，同时旋转 120°。
+ * @param p 画笔（96 基准坐标系）
+ * @param center 星星中心
+ * @param progress 闪烁进度 [0,1]，0 时不可见
+ * @author chiangyang
+ */
+void drawStarSparkle(QPainter &p, const QPointF &center, qreal progress) {
+    const qreal scale = qSin(progress * M_PI);
+    p.save();
+    p.translate(center);
+    p.rotate(progress * 120.0);
+    p.scale(scale, scale);
+    QPainterPath star;
+    constexpr qreal kOuter = 9.0, kInner = 2.8;
+    for (int i = 0; i < 8; ++i) {
+        const qreal radius = (i % 2 == 0) ? kOuter : kInner;
+        const qreal angle = M_PI / 4 * i - M_PI / 2;
+        const QPointF pt(radius * qCos(angle), radius * qSin(angle));
+        if (i == 0) star.moveTo(pt); else star.lineTo(pt);
+    }
+    star.closeSubpath();
+    p.setPen(Qt::NoPen);
+    p.setBrush(QColor(255, 215, 64));
+    p.drawPath(star);
+    p.restore();
+}
+
+/**
  * @brief 在 96 基准坐标系中绘制宠物本体（窗口 paintEvent 与样式预览共用）
  * @param p 画笔（调用方已完成 Antialiasing 与坐标缩放）
  * @param style 外观样式
@@ -619,26 +652,7 @@ void paintPetBody(QPainter &p, PetWindow::PetStyle style,
     } else {
         // 左眼：星星闪烁期间替换为金色四角星
         if (starProgress > 0.0) {
-            const qreal t = starProgress;
-            // 随进度从 0 长到最大再缩回 0，并旋转 120°
-            const qreal scale = qSin(t * M_PI);
-            p.save();
-            p.translate(34, 46);
-            p.rotate(t * 120.0);
-            p.scale(scale, scale);
-            QPainterPath star;
-            constexpr qreal kOuter = 9.0, kInner = 2.8;
-            for (int i = 0; i < 8; ++i) {
-                const qreal radius = (i % 2 == 0) ? kOuter : kInner;
-                const qreal angle = M_PI / 4 * i - M_PI / 2;
-                const QPointF pt(radius * qCos(angle), radius * qSin(angle));
-                if (i == 0) star.moveTo(pt); else star.lineTo(pt);
-            }
-            star.closeSubpath();
-            p.setPen(Qt::NoPen);
-            p.setBrush(QColor(255, 215, 64));
-            p.drawPath(star);
-            p.restore();
+            drawStarSparkle(p, QPointF(34, 46), starProgress);
         } else {
             p.drawEllipse(QPointF(34, 46), 5, 5);
         }
@@ -764,6 +778,145 @@ QPixmap PetWindow::renderStylePreview(PetStyle style, int size) {
     p.scale(s, s);
     paintPetBody(p, style, 0.0, 1.0, false, 0.0);
     return pix;
+}
+
+/**
+ * @brief 渲染自定义宠物素材的预览图（设置页缩略图用）
+ * @author chiangyang
+ */
+QPixmap PetWindow::renderCustomPreview(const QString &sourcePath, int size) {
+    QImage frame;
+    if (sourcePath.endsWith(QStringLiteral(".gif"), Qt::CaseInsensitive)) {
+        // GIF 取首帧做静态缩略图，避免设置页同时跑多个 QMovie
+        QImageReader reader(sourcePath);
+        frame = reader.read();
+    } else {
+        frame = QImage(sourcePath);
+    }
+    if (frame.isNull()) {
+        return QPixmap();
+    }
+
+    QPixmap pix(size, size);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+
+    // 等比 contain 到预览区内并居中（与运行时的 customTargetRect 规则一致）
+    const QRectF box(0, 0, size, size);
+    QSizeF scaled = frame.size();
+    scaled.scale(box.size(), Qt::KeepAspectRatio);
+    const QRectF target(QPointF((size - scaled.width()) / 2.0, (size - scaled.height()) / 2.0),
+                        scaled);
+    p.drawImage(target, frame);
+    return pix;
+}
+
+/**
+ * @brief 切换为自定义宠物素材（替代内置造型绘制）
+ * @author chiangyang
+ */
+void PetWindow::setCustomPet(const QString &sourcePath) {
+    if (m_customPath == sourcePath) {
+        return;
+    }
+
+    // 释放旧的 GIF 播放器
+    if (m_movie) {
+        m_movie->stop();
+        delete m_movie;
+        m_movie = nullptr;
+    }
+    m_customImage = QPixmap();
+    m_customPath = sourcePath;
+
+    if (!sourcePath.isEmpty()) {
+        if (sourcePath.endsWith(QStringLiteral(".gif"), Qt::CaseInsensitive)) {
+            m_movie = new QMovie(sourcePath, QByteArray(), this);
+            if (m_movie->isValid()) {
+                // 缓存全部帧：宠物窗口小、帧数有限，避免每次循环重新解码
+                m_movie->setCacheMode(QMovie::CacheAll);
+                connect(m_movie, &QMovie::frameChanged, this, [this]() { update(); });
+                if (isVisible()) {
+                    m_movie->start();
+                }
+            } else {
+                LOG_WARNING(QString("Custom pet GIF invalid: %1").arg(sourcePath));
+                delete m_movie;
+                m_movie = nullptr;
+                m_customPath.clear();
+            }
+        } else {
+            m_customImage = QPixmap(sourcePath);
+            if (m_customImage.isNull()) {
+                LOG_WARNING(QString("Custom pet image invalid: %1").arg(sourcePath));
+                m_customPath.clear();
+            }
+        }
+    }
+    update();
+}
+
+/**
+ * @brief 计算自定义素材在 96 基准坐标系中的绘制矩形
+ * @author chiangyang
+ */
+QRectF PetWindow::customTargetRect() const {
+    QSizeF frameSize;
+    if (m_movie && m_movie->isValid()) {
+        frameSize = m_movie->currentImage().size();
+    } else {
+        frameSize = m_customImage.size();
+    }
+    if (frameSize.isEmpty()) {
+        return QRectF();
+    }
+
+    // 留出少量内边距，避免形象顶满窗口、也便于星星绘制
+    constexpr qreal kPadding = 4.0;
+    const QRectF box(kPadding, kPadding, 96.0 - kPadding * 2, 96.0 - kPadding * 2);
+    QSizeF scaled = frameSize;
+    scaled.scale(box.size(), Qt::KeepAspectRatio);
+    return QRectF(QPointF(box.center().x() - scaled.width() / 2.0,
+                          box.center().y() - scaled.height() / 2.0),
+                  scaled);
+}
+
+/**
+ * @brief 绘制自定义素材（静态图或 GIF 当前帧）
+ * @author chiangyang
+ */
+void PetWindow::paintCustomPet(QPainter &p) {
+    QPixmap frame;
+    if (m_movie && m_movie->isValid()) {
+        frame = m_movie->currentPixmap();
+    } else {
+        frame = m_customImage;
+    }
+    const QRectF target = customTargetRect();
+    if (frame.isNull() || target.isEmpty()) {
+        return;
+    }
+
+    p.save();
+    p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+    // 咀嚼挤压：与内置造型同一算法（绕中心垂直压缩、水平反向补偿）
+    p.translate(target.center());
+    const qreal sx = 1.0 + (1.0 - m_chewScale) * 0.6;
+    p.scale(sx, m_chewScale);
+    // 张嘴等待食物：整体轻微上浮并放大，替代部件级的张嘴动作
+    p.translate(0.0, -2.5 * m_mouthOpen);
+    const qreal biteScale = 1.0 + 0.05 * m_mouthOpen;
+    p.scale(biteScale, biteScale);
+    p.translate(-target.center());
+    p.drawPixmap(target, frame, QRectF(frame.rect()));
+    p.restore();
+
+    // 奖励星星：自定义形象没有固定眼部，画在绘制区左上角
+    if (m_starProgress > 0.0) {
+        drawStarSparkle(p, QPointF(target.left() + 12.0, target.top() + 12.0), m_starProgress);
+    }
 }
 
 /**
@@ -933,7 +1086,35 @@ void PetWindow::paintEvent(QPaintEvent *event) {
     const qreal s = width() / 96.0;
     p.scale(s, s);
 
+    // 自定义素材：直接绘制图片/GIF 当前帧，替代内置造型
+    if (isCustomActive()) {
+        paintCustomPet(p);
+        return;
+    }
+
     paintPetBody(p, m_style, m_mouthOpen, m_chewScale, m_eyesClosed, m_starProgress);
+}
+
+/**
+ * @brief 显示时启动 GIF 播放（隐藏期间暂停，避免无谓解码）
+ * @author chiangyang
+ */
+void PetWindow::showEvent(QShowEvent *event) {
+    QWidget::showEvent(event);
+    if (m_movie && m_movie->isValid()) {
+        m_movie->start();
+    }
+}
+
+/**
+ * @brief 隐藏时暂停 GIF 播放
+ * @author chiangyang
+ */
+void PetWindow::hideEvent(QHideEvent *event) {
+    QWidget::hideEvent(event);
+    if (m_movie) {
+        m_movie->stop();
+    }
 }
 
 /**

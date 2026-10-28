@@ -108,7 +108,8 @@ void DesktopPetManager::createPetWindow() {
     }
 
     m_petWindow = new PetWindow();
-    m_petWindow->setStyle(petStyle());
+    // 按持久化选择应用外观（内置造型或自定义素材）
+    applySelection();
 
     // 位置恢复：pet/posX/posY 均有效（>=0）则使用，否则落在默认右下角
     QSettings *settings = ConfigManager::instance()->getSettings();
@@ -299,11 +300,11 @@ PetWindow* DesktopPetManager::petWindow() const {
 }
 
 /**
- * @brief 获取当前宠物外观样式（持久化于 pet/style）
+ * @brief 获取当前宠物外观样式（由 pet/selection 解析，兼容旧 pet/style）
  * @author chiangyang
  */
 PetWindow::PetStyle DesktopPetManager::petStyle() const {
-    const int v = ConfigManager::instance()->value("pet/style", 0).toInt();
+    const int v = CustomPetStore::builtinStyleFromSelection(selection(), 0);
     return static_cast<PetWindow::PetStyle>(qBound(0, v, PetWindow::petStyleCount() - 1));
 }
 
@@ -312,11 +313,115 @@ PetWindow::PetStyle DesktopPetManager::petStyle() const {
  * @author chiangyang
  */
 void DesktopPetManager::setPetStyle(PetWindow::PetStyle style) {
-    ConfigManager::instance()->setValue("pet/style", int(style));
+    selectBuiltin(style);
+}
+
+/**
+ * @brief 获取当前选择标识
+ * @author chiangyang
+ */
+QString DesktopPetManager::selection() const {
+    return CustomPetStore::instance()->selection();
+}
+
+/**
+ * @brief 选择内置造型（切换后清除自定义素材）
+ * @author chiangyang
+ */
+void DesktopPetManager::selectBuiltin(PetWindow::PetStyle style) {
+    const QString sel = CustomPetStore::builtinSelection(int(style));
+    CustomPetStore::instance()->setSelection(sel);
     ConfigManager::instance()->sync();
 
     if (m_petWindow) {
+        m_petWindow->clearCustomPet();
         m_petWindow->setStyle(style);
     }
     LOG_INFO(QString("DesktopPetManager: pet style set to %1").arg(int(style)));
+    emit selectionChanged(sel);
+}
+
+/**
+ * @brief 选择自定义宠物（立即生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::selectCustom(const QString &customPetId) {
+    const CustomPet pet = CustomPetStore::instance()->find(customPetId);
+    if (!pet.isValid()) {
+        LOG_WARNING(QString("DesktopPetManager: custom pet not found: %1").arg(customPetId));
+        return;
+    }
+    const QString sel = CustomPetStore::customSelection(customPetId);
+    CustomPetStore::instance()->setSelection(sel);
+    ConfigManager::instance()->sync();
+
+    if (m_petWindow) {
+        m_petWindow->setCustomPet(CustomPetStore::instance()->filePath(pet));
+    }
+    LOG_INFO(QString("DesktopPetManager: custom pet selected: %1").arg(customPetId));
+    emit selectionChanged(sel);
+}
+
+/**
+ * @brief 获取已导入的自定义宠物列表
+ * @author chiangyang
+ */
+QVector<CustomPet> DesktopPetManager::customPets() const {
+    return CustomPetStore::instance()->list();
+}
+
+/**
+ * @brief 导入自定义宠物素材（成功后自动选中）
+ * @author chiangyang
+ */
+CustomPet DesktopPetManager::addCustomPet(const QString &sourcePath, QString *errorMessage) {
+    const CustomPet pet = CustomPetStore::instance()->add(sourcePath, errorMessage);
+    if (pet.isValid()) {
+        selectCustom(pet.id);
+    }
+    return pet;
+}
+
+/**
+ * @brief 删除自定义宠物素材（删除当前选中项时回落到默认造型）
+ * @author chiangyang
+ */
+bool DesktopPetManager::removeCustomPet(const QString &customPetId) {
+    const QString current = selection();
+    const bool wasCurrent = CustomPetStore::isCustomSelection(current)
+                            && CustomPetStore::customIdFromSelection(current) == customPetId;
+    if (!CustomPetStore::instance()->remove(customPetId)) {
+        return false;
+    }
+    // Store 已把选中项回落到默认内置造型，这里同步刷新窗口
+    if (wasCurrent) {
+        applySelection();
+    }
+    emit selectionChanged(selection());
+    return true;
+}
+
+/**
+ * @brief 按当前选择刷新宠物窗口外观
+ * @author chiangyang
+ */
+void DesktopPetManager::applySelection() {
+    if (!m_petWindow) {
+        return;
+    }
+    const QString sel = selection();
+    if (CustomPetStore::isCustomSelection(sel)) {
+        const CustomPet pet = CustomPetStore::instance()->find(
+            CustomPetStore::customIdFromSelection(sel));
+        if (pet.isValid()) {
+            m_petWindow->setCustomPet(CustomPetStore::instance()->filePath(pet));
+            return;
+        }
+        // 素材文件丢失：回落到默认内置造型，避免宠物窗口空白
+        LOG_WARNING(QString("DesktopPetManager: custom pet missing, fallback to builtin: %1").arg(sel));
+        CustomPetStore::instance()->setSelection(
+            CustomPetStore::builtinSelection(int(PetWindow::PetStyle::Cat)));
+    }
+    m_petWindow->clearCustomPet();
+    m_petWindow->setStyle(petStyle());
 }

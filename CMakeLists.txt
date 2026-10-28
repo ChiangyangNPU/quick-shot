@@ -257,6 +257,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/settings/SettingsPetTab.h
 
         # 桌面宠物
+        src/pet/CustomPetStore.cpp
+        src/pet/CustomPetStore.h
         src/pet/DesktopPetManager.cpp
         src/pet/DesktopPetManager.h
         src/pet/PetWindow.cpp

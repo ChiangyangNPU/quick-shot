@@ -9,6 +9,9 @@
 #include <QToolButton>
 #include <QButtonGroup>
 #include <QScrollArea>
+#include <QVector>
+
+class FlowLayout;
 
 /**
  * @brief 设置窗口「桌面宠物」选项卡
@@ -52,6 +55,33 @@ public:
 private:
     void setupUi();
 
+    /**
+     * @brief 重建自定义宠物缩略图按钮（列表变更后调用）
+     *
+     * 自定义按钮与内置样式共用 m_styleGroup，id 从 kCustomIdBase 起偏移，
+     * 保证两组选择互斥。
+     * @author chiangyang
+     */
+    void refreshCustomList();
+
+    /**
+     * @brief 按当前选择同步按钮选中态与删除按钮可用性
+     * @author chiangyang
+     */
+    void syncSelection();
+
+    /**
+     * @brief 选择本地图片/GIF 并导入为自定义宠物
+     * @author chiangyang
+     */
+    void addCustomPetFromFile();
+
+    /**
+     * @brief 删除当前选中的自定义宠物（二次确认）
+     * @author chiangyang
+     */
+    void removeSelectedCustomPet();
+
     QScrollArea *petScrollArea = nullptr;   ///< 滚动区域（16 种样式按钮较高）
     QWidget *m_petScrollContent = nullptr;  ///< 滚动内容容器（palette 背景）
     QGroupBox *m_petGroup;              ///< 桌面宠物分组
@@ -60,9 +90,16 @@ private:
     QLabel *m_classicLabel;             ///< 经典样式分组标签（第一行）
     QLabel *m_zodiacLabel;              ///< 十二生肖分组标签（第二行起，FlowLayout 自动换行）
     QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
-    QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标）
+    QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标；自定义项从 1000 起）
     QPushButton *m_btnResetPos;         ///< 重置宠物位置按钮
     QLabel *m_descLabel;                ///< 功能说明标签
+
+    QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组
+    FlowLayout *m_customFlow = nullptr;     ///< 自定义宠物缩略图流式布局（自动换行）
+    QPushButton *m_btnAddCustom = nullptr;  ///< 添加自定义宠物按钮
+    QPushButton *m_btnRemoveCustom = nullptr; ///< 删除当前自定义宠物按钮
+    QLabel *m_customHint = nullptr;         ///< 自定义宠物使用提示
+    QVector<QToolButton*> m_customButtons;  ///< 自定义宠物缩略图按钮
 };
 
 #endif // SETTINGSPETTAB_H
