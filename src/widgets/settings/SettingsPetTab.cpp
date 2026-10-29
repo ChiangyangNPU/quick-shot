@@ -200,8 +200,8 @@ void SettingsPetTab::setupUi() {
     m_behaviorGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *behaviorLayout = new QVBoxLayout(m_behaviorGroup);
 
-    // 晾衣绳打开方式：上边界 / 点击宠物 / 两者，userData 对应 ClotheslineTrigger 位标志
-    m_triggerLabel = new QLabel(tm->get("pet.clotheslineTrigger", "Open Clothesline") + ":", m_behaviorGroup);
+    // 晾衣绳显示和消失方式：上边界 / 点击宠物 / 两者，userData 对应 ClotheslineTrigger 位标志
+    m_triggerLabel = new QLabel(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":", m_behaviorGroup);
     m_triggerCombo = new QComboBox(m_behaviorGroup);
     StyleManager::useHighlightOnlyPopup(m_triggerCombo);
     m_triggerCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
@@ -383,7 +383,7 @@ void SettingsPetTab::retranslateUi() {
     }
     if (m_btnResetPos) m_btnResetPos->setText(tm->get("pet.resetPosition", "Reset Pet Position"));
     // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
-    if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Open Clothesline") + ":");
+    if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":");
     if (m_triggerCombo) {
         const int cur = m_triggerCombo->currentData().toInt();
         QSignalBlocker blocker(m_triggerCombo);

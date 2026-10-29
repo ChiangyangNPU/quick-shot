@@ -176,7 +176,7 @@
   "pet.group": "デスクトップペット",
   "pet.enable": "デスクトップペットを有効にする",
   "pet.resetPosition": "ペットの位置をリセット",
-  "pet.clotheslineTrigger": "物干しロープの開き方",
+  "pet.clotheslineTrigger": "物干しロープの表示/非表示",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "動作",
   "pet.trigger.hotEdge": "マウスを画面の上端に移動",

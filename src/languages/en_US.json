@@ -176,7 +176,7 @@
   "pet.group": "Desktop Pet",
   "pet.enable": "Enable Desktop Pet",
   "pet.resetPosition": "Reset Pet Position",
-  "pet.clotheslineTrigger": "Open Clothesline",
+  "pet.clotheslineTrigger": "Show/Hide Clothesline",
   "pet.basicGroup": "Basic",
   "pet.behaviorGroup": "Behavior",
   "pet.trigger.hotEdge": "Move mouse to top edge of screen",

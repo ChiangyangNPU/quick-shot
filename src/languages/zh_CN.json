@@ -176,7 +176,7 @@
   "pet.group": "桌面宠物",
   "pet.enable": "打开桌面宠物",
   "pet.resetPosition": "重置宠物位置",
-  "pet.clotheslineTrigger": "晾衣绳打开方式",
+  "pet.clotheslineTrigger": "晾衣绳显示和消失方式",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "行为",
   "pet.trigger.hotEdge": "鼠标移到屏幕上边界",

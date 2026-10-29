@@ -143,11 +143,15 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "history/thumbnailSize", 200 },
 
         // Desktop Pet（posX/posY 为宠物窗口位置，-1 表示未拖动过、使用默认位置；
-        // style 为宠物外观样式下标，对应 PetWindow::PetStyle 枚举）
+        // style 为宠物外观样式下标，对应 PetWindow::PetStyle 枚举；
+        // clotheslineTrigger 为晾衣绳显示/消失方式位标志：1=上边界热区、2=点击宠物、3=两者。
+        // 注意：pet/selection 不能进本表——首次补默认值会抢先写入，使 CustomPetStore
+        // 对旧版 pet/style 的迁移逻辑失效）
         { "pet/enabled", false },
         { "pet/posX", -1 },
         { "pet/posY", -1 },
         { "pet/style", 0 },
+        { "pet/clotheslineTrigger", 3 },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },
