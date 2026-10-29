@@ -282,6 +282,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/PetBadgeWidget.h
         src/pet/PomodoroCard.cpp
         src/pet/PomodoroCard.h
+        src/pet/PetStateMachine.cpp
+        src/pet/PetStateMachine.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp

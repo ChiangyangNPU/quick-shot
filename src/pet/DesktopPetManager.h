@@ -14,6 +14,7 @@ class TodoWindow;
 class PetReminder;
 class PetBadgeWidget;
 class PomodoroCard;
+class PetStateMachine;
 class QTimer;
 
 /**
@@ -226,6 +227,34 @@ public:
     void setPomodoroBreakMinutes(int minutes);
 
     /**
+     * @brief 获取待机打盹是否开启（持久化于 pet/idleSleepEnabled，默认开）
+     * @return 是否开启
+     * @author chiangyang
+     */
+    bool idleSleepEnabled() const;
+
+    /**
+     * @brief 设置待机打盹开关（即时生效并持久化，关闭时立即唤醒）
+     * @param enabled 是否开启
+     * @author chiangyang
+     */
+    void setIdleSleepEnabled(bool enabled);
+
+    /**
+     * @brief 获取无互动进入打盹的分钟数（pet/idleSleepMin，默认 5）
+     * @return 分钟数
+     * @author chiangyang
+     */
+    int idleSleepMinutes() const;
+
+    /**
+     * @brief 设置无互动进入打盹的分钟数（即时生效并持久化）
+     * @param minutes 分钟数
+     * @author chiangyang
+     */
+    void setIdleSleepMinutes(int minutes);
+
+    /**
      * @brief 晾衣绳触发方式（位标志，持久化于 pet/clotheslineTrigger）
      * @author chiangyang
      */
@@ -368,6 +397,7 @@ private:
     QPointer<PetBadgeWidget> m_todoBadge;   ///< 待办提醒角标（无提醒或未开启时为 nullptr/隐藏）
     PetReminder *m_reminder = nullptr;      ///< 提醒源（待办轮询 + 番茄钟计时，宠物开启期间运行）
     QPointer<PomodoroCard> m_pomodoroCard;  ///< 番茄钟提示卡（未弹出时为 nullptr）
+    PetStateMachine *m_stateMachine = nullptr; ///< 状态机（待机打盹调度，宠物开启期间运行）
     QTimer *m_hotEdgeTimer = nullptr;       ///< 主屏顶边热区轮询定时器（宠物开启期间运行）
     bool m_hotEdgeArmed = true;             ///< 光标离开热区后重新武装（边沿触发防反复弹收）
 };

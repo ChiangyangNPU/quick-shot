@@ -158,6 +158,9 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "pet/pomodoroEnabled", false },
         { "pet/pomodoroWorkMin", 25 },
         { "pet/pomodoroBreakMin", 5 },
+        // 待机打盹：开关 + 无互动进入打盹的分钟数
+        { "pet/idleSleepEnabled", true },
+        { "pet/idleSleepMin", 5 },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },

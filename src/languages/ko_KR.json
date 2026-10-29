@@ -187,6 +187,8 @@
   "pet.pomodoro.skip": "건너뛰기",
   "pet.pomodoro.workDue": "휴식 종료, 계속 진행하세요",
   "pet.pomodoro.resume": "작업 재개",
+  "pet.idleSleep": "졸기",
+  "pet.idleSleep.after": "조작 없음",
   "pet.basicGroup": "기본",
   "pet.behaviorGroup": "동작",
   "pet.trigger.hotEdge": "마우스를 화면 상단 가장자리로 이동",

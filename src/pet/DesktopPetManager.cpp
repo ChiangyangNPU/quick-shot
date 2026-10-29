@@ -4,6 +4,7 @@
 #include "PetReminder.h"
 #include "PetBadgeWidget.h"
 #include "PomodoroCard.h"
+#include "PetStateMachine.h"
 #include "FlyAnimationWidget.h"
 #include "ClotheslineWindow.h"
 #include "PetUiScale.h"
@@ -114,6 +115,10 @@ void DesktopPetManager::setEnabled(bool enabled) {
         if (m_pomodoroCard) {
             m_pomodoroCard->hide();
         }
+        // 待机打盹检测随宠物一起停止（stop 会先唤醒打盹中的宠物）
+        if (m_stateMachine) {
+            m_stateMachine->stop();
+        }
     }
     LOG_INFO(QString("DesktopPetManager: pet %1").arg(enabled ? "enabled" : "disabled"));
     emit enabledChanged(enabled);
@@ -187,6 +192,30 @@ void DesktopPetManager::createPetWindow() {
         m_reminder->startPomodoro();
     }
 
+    // 趣味陪伴：待机打盹状态机。点击/双击/拖动/右击/悬停均视为互动（唤醒并重置计时）
+    if (!m_stateMachine) {
+        m_stateMachine = new PetStateMachine(this);
+    }
+    m_stateMachine->setPet(m_petWindow);
+    m_stateMachine->setIdleEnabled(idleSleepEnabled());
+    m_stateMachine->setIdleMinutes(idleSleepMinutes());
+    connect(m_petWindow, &PetWindow::clicked,
+            m_stateMachine, &PetStateMachine::noteInteraction);
+    connect(m_petWindow, &PetWindow::dragFinished,
+            m_stateMachine, [this](const QPoint &) { m_stateMachine->noteInteraction(); });
+    connect(m_petWindow, &PetWindow::contextMenuRequested,
+            m_stateMachine, &PetStateMachine::noteInteraction);
+    connect(m_petWindow, &PetWindow::hoverEntered,
+            m_stateMachine, &PetStateMachine::noteInteraction);
+    // 双击摸头：唤醒并原地跳一下
+    connect(m_petWindow, &PetWindow::doubleClicked, this, [this]() {
+        m_stateMachine->noteInteraction();
+        if (m_petWindow) {
+            m_petWindow->playJump();
+        }
+    });
+    m_stateMachine->start();
+
     m_petWindow->show();
     m_petWindow->raise();
 }
@@ -211,6 +240,11 @@ QPoint DesktopPetManager::defaultPetPosition() const {
 void DesktopPetManager::feed(const QPixmap &pixmap, const QRect &sourceGlobalRect) {
     if (!m_enabled || !m_petWindow || pixmap.isNull()) {
         return;
+    }
+
+    // 投喂也是互动：唤醒打盹中的宠物并重置待机计时
+    if (m_stateMachine) {
+        m_stateMachine->noteInteraction();
     }
 
     // 宠物提前张嘴等待食物
@@ -715,6 +749,51 @@ void DesktopPetManager::setPomodoroBreakMinutes(int minutes) {
 }
 
 /**
+ * @brief 获取待机打盹是否开启
+ * @author chiangyang
+ */
+bool DesktopPetManager::idleSleepEnabled() const {
+    return ConfigManager::instance()->value("pet/idleSleepEnabled", true).toBool();
+}
+
+/**
+ * @brief 设置待机打盹开关（即时生效并持久化，关闭时立即唤醒）
+ * @author chiangyang
+ */
+void DesktopPetManager::setIdleSleepEnabled(bool enabled) {
+    if (idleSleepEnabled() == enabled) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/idleSleepEnabled", enabled);
+    ConfigManager::instance()->sync();
+    if (m_stateMachine) {
+        m_stateMachine->setIdleEnabled(enabled);
+    }
+    LOG_INFO(QString("DesktopPetManager: idle sleep %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+/**
+ * @brief 获取无互动进入打盹的分钟数
+ * @author chiangyang
+ */
+int DesktopPetManager::idleSleepMinutes() const {
+    return qBound(1, ConfigManager::instance()->value("pet/idleSleepMin", 5).toInt(), 120);
+}
+
+/**
+ * @brief 设置无互动进入打盹的分钟数（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setIdleSleepMinutes(int minutes) {
+    const int clamped = qBound(1, minutes, 120);
+    ConfigManager::instance()->setValue("pet/idleSleepMin", clamped);
+    ConfigManager::instance()->sync();
+    if (m_stateMachine) {
+        m_stateMachine->setIdleMinutes(clamped);
+    }
+}
+
+/**
  * @brief 弹出番茄钟提示卡（宠物跳跃 + 卡片贴合宠物上方）
  * @author chiangyang
  */
@@ -742,6 +821,10 @@ void DesktopPetManager::showPomodoroCard(bool breakDue) {
                 m_reminder->resumePomodoroWork();
             }
         });
+    }
+    // 到点提醒先唤醒打盹中的宠物，保证跳跃可见
+    if (m_stateMachine) {
+        m_stateMachine->noteInteraction();
     }
     m_petWindow->playJump();
     if (breakDue) {

@@ -105,6 +105,9 @@ private:
     QSpinBox *m_pomodoroWorkSpin;       ///< 番茄钟工作时长（分钟）
     QLabel *m_pomodoroBreakLabel;       ///< 番茄钟"休息"标签
     QSpinBox *m_pomodoroBreakSpin;      ///< 番茄钟休息时长（分钟）
+    QCheckBox *m_idleSleepCheck;        ///< 待机打盹复选框（无互动时宠物呼吸浮动）
+    QLabel *m_idleSleepAfterLabel;      ///< 待机打盹"无互动"标签
+    QSpinBox *m_idleSleepSpin;          ///< 无互动进入打盹的分钟数
     QLabel *m_descLabel;                ///< 功能说明标签
 
     QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组

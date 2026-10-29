@@ -225,6 +225,7 @@ void SettingsPetTab::setupUi() {
 
     // 待办提醒：有待办逾期/今天到期时宠物头顶显示红点角标
     m_todoReminderCheck = new QCheckBox(tm->get("pet.todoReminder", "Todo Reminder"), m_behaviorGroup);
+    m_todoReminderCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     m_todoReminderCheck->setChecked(DesktopPetManager::instance()->todoReminderEnabled());
     connect(m_todoReminderCheck, &QCheckBox::toggled, this, [](bool checked) {
         DesktopPetManager::instance()->setTodoReminderEnabled(checked);
@@ -232,6 +233,7 @@ void SettingsPetTab::setupUi() {
 
     // 番茄钟：开关 + 工作/休息时长（分钟），时长下一轮生效
     m_pomodoroCheck = new QCheckBox(tm->get("pet.pomodoro", "Pomodoro Timer"), m_behaviorGroup);
+    m_pomodoroCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     m_pomodoroCheck->setChecked(DesktopPetManager::instance()->pomodoroEnabled());
     m_pomodoroWorkLabel = new QLabel(tm->get("pet.pomodoro.work", "Work"), m_behaviorGroup);
     m_pomodoroWorkSpin = new QSpinBox(m_behaviorGroup);
@@ -244,6 +246,9 @@ void SettingsPetTab::setupUi() {
     const QString minuteSuffix = QStringLiteral(" ") + tm->get("pet.pomodoro.minute", "min");
     m_pomodoroWorkSpin->setSuffix(minuteSuffix);
     m_pomodoroBreakSpin->setSuffix(minuteSuffix);
+    // SpinBox 样式与样式选项卡一致：复用输入框（ComboBox）主题样式
+    m_pomodoroWorkSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    m_pomodoroBreakSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     const bool pomodoroOn = m_pomodoroCheck->isChecked();
     m_pomodoroWorkSpin->setEnabled(pomodoroOn);
     m_pomodoroBreakSpin->setEnabled(pomodoroOn);
@@ -268,6 +273,31 @@ void SettingsPetTab::setupUi() {
     pomodoroRow->addWidget(m_pomodoroBreakSpin);
     pomodoroRow->addStretch();
 
+    // 待机打盹：开关 + 无互动分钟数（复用分钟后缀），关闭时立即唤醒
+    m_idleSleepCheck = new QCheckBox(tm->get("pet.idleSleep", "Idle Doze"), m_behaviorGroup);
+    m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    m_idleSleepCheck->setChecked(DesktopPetManager::instance()->idleSleepEnabled());
+    m_idleSleepAfterLabel = new QLabel(tm->get("pet.idleSleep.after", "After"), m_behaviorGroup);
+    m_idleSleepSpin = new QSpinBox(m_behaviorGroup);
+    m_idleSleepSpin->setRange(1, 120);
+    m_idleSleepSpin->setValue(DesktopPetManager::instance()->idleSleepMinutes());
+    m_idleSleepSpin->setSuffix(minuteSuffix);
+    m_idleSleepSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    m_idleSleepSpin->setEnabled(m_idleSleepCheck->isChecked());
+    connect(m_idleSleepCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        DesktopPetManager::instance()->setIdleSleepEnabled(checked);
+        m_idleSleepSpin->setEnabled(checked);
+    });
+    connect(m_idleSleepSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) {
+        DesktopPetManager::instance()->setIdleSleepMinutes(v);
+    });
+    QHBoxLayout *idleSleepRow = new QHBoxLayout();
+    idleSleepRow->addWidget(m_idleSleepCheck);
+    idleSleepRow->addSpacing(PetUi::scaled(12));
+    idleSleepRow->addWidget(m_idleSleepAfterLabel);
+    idleSleepRow->addWidget(m_idleSleepSpin);
+    idleSleepRow->addStretch();
+
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_behaviorGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
     m_btnResetPos->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
@@ -286,6 +316,7 @@ void SettingsPetTab::setupUi() {
     behaviorLayout->addLayout(triggerRow);
     behaviorLayout->addWidget(m_todoReminderCheck);
     behaviorLayout->addLayout(pomodoroRow);
+    behaviorLayout->addLayout(idleSleepRow);
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
 
@@ -437,6 +468,9 @@ void SettingsPetTab::retranslateUi() {
     const QString minuteSuffix = QStringLiteral(" ") + tm->get("pet.pomodoro.minute", "min");
     if (m_pomodoroWorkSpin) m_pomodoroWorkSpin->setSuffix(minuteSuffix);
     if (m_pomodoroBreakSpin) m_pomodoroBreakSpin->setSuffix(minuteSuffix);
+    if (m_idleSleepCheck) m_idleSleepCheck->setText(tm->get("pet.idleSleep", "Idle Doze"));
+    if (m_idleSleepAfterLabel) m_idleSleepAfterLabel->setText(tm->get("pet.idleSleep.after", "After"));
+    if (m_idleSleepSpin) m_idleSleepSpin->setSuffix(minuteSuffix);
     // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
     if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":");
     if (m_triggerCombo) {
@@ -470,6 +504,13 @@ void SettingsPetTab::refreshStyles() {
     if (m_styleGroupBox) m_styleGroupBox->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_behaviorGroup) m_behaviorGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_enablePetCheck) m_enablePetCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_todoReminderCheck) m_todoReminderCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_pomodoroCheck) m_pomodoroCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_idleSleepCheck) m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    // SpinBox 样式与样式选项卡一致：复用输入框（ComboBox）主题样式
+    if (m_pomodoroWorkSpin) m_pomodoroWorkSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    if (m_pomodoroBreakSpin) m_pomodoroBreakSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    if (m_idleSleepSpin) m_idleSleepSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     for (QToolButton *btn : m_styleButtons) {
         btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
     }

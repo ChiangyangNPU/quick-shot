@@ -965,6 +965,45 @@ void PetWindow::playJump() {
 }
 
 /**
+ * @brief 进入/退出待机打盹状态
+ * @author chiangyang
+ */
+void PetWindow::setSleeping(bool on) {
+    if (m_sleeping == on) {
+        return;
+    }
+    m_sleeping = on;
+    if (on) {
+        m_sleepOrigin = pos();
+        // 呼吸：挤压系数慢速循环（与咀嚼共用 chewScale 绘制通道）
+        auto *breath = new QPropertyAnimation(this, "chewScale");
+        breath->setDuration(2400);
+        breath->setStartValue(1.0);
+        breath->setKeyValueAt(0.5, 0.96);
+        breath->setEndValue(1.0);
+        breath->setLoopCount(-1);
+        // 浮动：位置与呼吸同步缓慢上下
+        auto *floatAnim = new QPropertyAnimation(this, "pos");
+        floatAnim->setDuration(2400);
+        floatAnim->setStartValue(m_sleepOrigin);
+        floatAnim->setKeyValueAt(0.5, m_sleepOrigin + QPoint(0, PetUi::scaled(3)));
+        floatAnim->setEndValue(m_sleepOrigin);
+        floatAnim->setLoopCount(-1);
+        auto *group = new QParallelAnimationGroup(this);
+        group->addAnimation(breath);
+        group->addAnimation(floatAnim);
+        m_sleepAnim = group;
+        group->start(QAbstractAnimation::DeleteWhenStopped);
+    } else {
+        if (m_sleepAnim) {
+            m_sleepAnim->stop(); // DeleteWhenStopped 销毁，QPointer 自动清空
+        }
+        setChewScale(1.0);
+        // 不回跳进入打盹时的位置：打盹浮动仅 ±3px，且用户可能在打盹中拖动了宠物
+    }
+}
+
+/**
  * @brief 设置嘴张开程度
  * @author chiangyang
  */
@@ -1159,6 +1198,17 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
         m_dragging = false;
         m_dragOffset = event->pos();
         m_pressGlobalPos = event->globalPosition().toPoint();
+        // 按压反馈：轻微挤压（"被抓住"的手感），松手时回弹
+        if (!m_sleeping) {
+            if (m_grabAnim) {
+                m_grabAnim->stop();
+            }
+            auto *press = new QPropertyAnimation(this, "chewScale");
+            press->setDuration(120);
+            press->setEndValue(0.94);
+            m_grabAnim = press;
+            press->start(QAbstractAnimation::DeleteWhenStopped);
+        }
     }
     QWidget::mousePressEvent(event);
 }
@@ -1195,11 +1245,36 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
         } else {
             emit clicked();
         }
+        // 松手回弹：弹性曲线恢复常态挤压系数
+        if (!m_sleeping && m_pressing) {
+            if (m_grabAnim) {
+                m_grabAnim->stop();
+            }
+            auto *release = new QPropertyAnimation(this, "chewScale");
+            release->setDuration(260);
+            release->setEndValue(1.0);
+            release->setEasingCurve(QEasingCurve::OutBack);
+            m_grabAnim = release;
+            release->start(QAbstractAnimation::DeleteWhenStopped);
+        }
     }
     m_pressing = false;
     m_dragging = false;
     setCursor(Qt::OpenHandCursor);
     QWidget::mouseReleaseEvent(event);
+}
+
+/**
+ * @brief 双击：发出互动信号（摸头弹跳由管理器触发 playJump）
+ * @author chiangyang
+ */
+void PetWindow::mouseDoubleClickEvent(QMouseEvent *event) {
+    if (event->button() == Qt::LeftButton) {
+        emit doubleClicked();
+        event->accept();
+        return;
+    }
+    QWidget::mouseDoubleClickEvent(event);
 }
 
 /**
@@ -1217,6 +1292,7 @@ void PetWindow::contextMenuEvent(QContextMenuEvent *event) {
  */
 void PetWindow::enterEvent(QEnterEvent *event) {
     setCursor(Qt::OpenHandCursor);
+    emit hoverEntered();
     QWidget::enterEvent(event);
 }
 

@@ -187,6 +187,8 @@
   "pet.pomodoro.skip": "跳過本次",
   "pet.pomodoro.workDue": "休息結束，繼續加油",
   "pet.pomodoro.resume": "繼續工作",
+  "pet.idleSleep": "待機打盹",
+  "pet.idleSleep.after": "無互動",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "行為",
   "pet.trigger.hotEdge": "滑鼠移到螢幕上邊界",

@@ -187,6 +187,8 @@
   "pet.pomodoro.skip": "Skip",
   "pet.pomodoro.workDue": "Break over, keep going",
   "pet.pomodoro.resume": "Resume work",
+  "pet.idleSleep": "Idle Doze",
+  "pet.idleSleep.after": "After",
   "pet.basicGroup": "Basic",
   "pet.behaviorGroup": "Behavior",
   "pet.trigger.hotEdge": "Move mouse to top edge of screen",

@@ -88,6 +88,7 @@ DesktopPetManager（单例，已有）
 | `pet/pomodoroEnabled` | bool | false | 番茄钟开关（阶段一） |
 | `pet/pomodoroWorkMin` | int | 25 | 番茄钟工作时长（分钟） |
 | `pet/pomodoroBreakMin` | int | 5 | 番茄钟休息时长（分钟） |
+| `pet/idleSleepEnabled` | bool | true | 待机打盹开关（阶段二） |
 | `pet/idleSleepMin` | int | 5 | 无互动进入待机的分钟数（阶段二） |
 | `pet/sysMonitorEnabled` | bool | false | 系统状态表情开关（阶段三） |
 

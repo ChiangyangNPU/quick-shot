@@ -164,6 +164,23 @@ public:
      */
     void playJump();
 
+    /**
+     * @brief 进入/退出待机打盹状态
+     *
+     * 打盹时缓慢呼吸（轻微挤压）并上下浮动，循环播放；
+     * 退出时停止循环并回到进入时的位置与常态挤压系数。
+     * @param on true 进入打盹，false 唤醒
+     * @author chiangyang
+     */
+    void setSleeping(bool on);
+
+    /**
+     * @brief 当前是否处于待机打盹状态
+     * @return 是否打盹中
+     * @author chiangyang
+     */
+    bool isSleeping() const { return m_sleeping; }
+
     qreal mouthOpen() const { return m_mouthOpen; }
     void setMouthOpen(qreal v);
 
@@ -200,6 +217,18 @@ signals:
      */
     void moved(const QPoint &newPos);
 
+    /**
+     * @brief 双击信号（摸头弹跳等互动反馈用）
+     * @author chiangyang
+     */
+    void doubleClicked();
+
+    /**
+     * @brief 鼠标进入宠物区域信号（待机唤醒用）
+     * @author chiangyang
+     */
+    void hoverEntered();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void showEvent(QShowEvent *event) override;
@@ -208,6 +237,7 @@ protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
+    void mouseDoubleClickEvent(QMouseEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
     void enterEvent(QEnterEvent *event) override;
     void leaveEvent(QEvent *event) override;
@@ -251,6 +281,10 @@ private:
     PetStyle m_style = PetStyle::Cat; ///< 当前外观样式
     QPointer<QAbstractAnimation> m_mouthAnim; ///< 进行中的嘴部/咀嚼动画（新动画开始前 stop，避免叠加互相覆写）
     QPointer<QAbstractAnimation> m_jumpAnim;  ///< 进行中的跳跃动画（重复触发时忽略）
+    QPointer<QAbstractAnimation> m_sleepAnim; ///< 打盹循环动画（呼吸挤压 + 上下浮动）
+    QPointer<QAbstractAnimation> m_grabAnim;  ///< 按压/松手的挤压回弹动画
+    QPoint m_sleepOrigin;                     ///< 进入打盹时的窗口位置（唤醒后回位）
+    bool m_sleeping = false;                  ///< 是否处于待机打盹状态
 
     QString m_customPath;           ///< 自定义素材路径（空表示使用内置造型）
     QPixmap m_customImage;          ///< 自定义静态素材图像（GIF 模式为空）
