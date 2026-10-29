@@ -82,20 +82,23 @@ void SettingsPetTab::setupUi() {
     layout->setContentsMargins(10, 10, 10, 10);
     layout->setSpacing(10);
 
-    // ===== 桌面宠物组 =====
-    m_petGroup = new QGroupBox(tm->get("pet.group", "Desktop Pet"), scrollContent);
-    m_petGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
-    QVBoxLayout *petLayout = new QVBoxLayout(m_petGroup);
+    // ===== 基本组：宠物开关 =====
+    m_basicGroup = new QGroupBox(tm->get("pet.basicGroup", "Basic"), scrollContent);
+    m_basicGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    QVBoxLayout *basicLayout = new QVBoxLayout(m_basicGroup);
 
-    m_enablePetCheck = new QCheckBox(tm->get("pet.enable", "Enable Desktop Pet"), m_petGroup);
+    m_enablePetCheck = new QCheckBox(tm->get("pet.enable", "Enable Desktop Pet"), m_basicGroup);
     m_enablePetCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     m_enablePetCheck->setChecked(DesktopPetManager::instance()->isEnabled());
     connect(m_enablePetCheck, &QCheckBox::toggled, this, [](bool checked) {
         DesktopPetManager::instance()->setEnabled(checked);
     });
+    basicLayout->addWidget(m_enablePetCheck);
 
-    // ===== 外观样式：平铺图标按钮，点击即切换（图标为各样式预览图） =====
-    m_styleLabel = new QLabel(tm->get("pet.styleLabel", "Pet Style"), m_petGroup);
+    // ===== 宠物样式组：平铺图标按钮，点击即切换（图标为各样式预览图） =====
+    m_styleGroupBox = new QGroupBox(tm->get("pet.styleLabel", "Pet Style"), scrollContent);
+    m_styleGroupBox->setStyleSheet(StyleManager::getGroupBoxStyle());
+    QVBoxLayout *styleLayout = new QVBoxLayout(m_styleGroupBox);
 
     m_styleGroup = new QButtonGroup(this);
     m_styleGroup->setExclusive(true);
@@ -103,7 +106,7 @@ void SettingsPetTab::setupUi() {
     const int iconSize = PetUi::scaled(48);
     for (int i = 0; i < PetWindow::petStyleCount(); ++i) {
         const auto style = static_cast<PetWindow::PetStyle>(i);
-        auto *btn = new QToolButton(m_petGroup);
+        auto *btn = new QToolButton(m_styleGroupBox);
         btn->setCheckable(true);
         btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         btn->setIcon(QIcon(PetWindow::renderStylePreview(style, iconSize * 2)));
@@ -129,7 +132,7 @@ void SettingsPetTab::setupUi() {
     });
 
     // 第一行：经典样式
-    m_classicLabel = new QLabel(tm->get("pet.classicGroup", "Classic"), m_petGroup);
+    m_classicLabel = new QLabel(tm->get("pet.classicGroup", "Classic"), m_styleGroupBox);
     QHBoxLayout *styleRow = new QHBoxLayout();
     styleRow->setSpacing(PetUi::scaled(6));
     for (int idx : kClassicStyles) {
@@ -138,18 +141,23 @@ void SettingsPetTab::setupUi() {
     styleRow->addStretch();
 
     // 第二行起：十二生肖（12 个按传统顺序；FlowLayout 自动换行）
-    // 注意：FlowLayout 不能以 m_petGroup 为父构造——QLayout 构造函数会设置
+    // 注意：FlowLayout 不能以 m_styleGroupBox 为父构造——QLayout 构造函数会设置
     // QObject 父子关系，导致 addLayout 拒绝挂载（布局成孤儿，按钮不显示），
     // 必须无父创建后交由 addLayout 收养
-    m_zodiacLabel = new QLabel(tm->get("pet.zodiacGroup", "Zodiac"), m_petGroup);
+    m_zodiacLabel = new QLabel(tm->get("pet.zodiacGroup", "Zodiac"), m_styleGroupBox);
     auto *zodiacRow = new FlowLayout(nullptr, PetUi::scaled(6), PetUi::scaled(6));
     for (int idx : kZodiacStyles) {
         if (idx < m_styleButtons.size()) zodiacRow->addWidget(m_styleButtons[idx]);
     }
 
+    styleLayout->addWidget(m_classicLabel);
+    styleLayout->addLayout(styleRow);
+    styleLayout->addWidget(m_zodiacLabel);
+    styleLayout->addLayout(zodiacRow);
+
     // ===== 自定义宠物：缩略图平铺 + 添加/删除 =====
     // 自定义项与内置样式共用 m_styleGroup 保证选择互斥，素材入库到应用数据目录
-    m_customGroup = new QGroupBox(tm->get("pet.customGroup", "Custom Pets"), m_petGroup);
+    m_customGroup = new QGroupBox(tm->get("pet.customGroup", "Custom Pets"), scrollContent);
     m_customGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     QVBoxLayout *customLayout = new QVBoxLayout(m_customGroup);
 
@@ -187,16 +195,14 @@ void SettingsPetTab::setupUi() {
     connect(DesktopPetManager::instance(), &DesktopPetManager::selectionChanged,
             this, [this](const QString &) { syncSelection(); });
 
-    m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_petGroup);
-    m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
-    m_btnResetPos->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
-    connect(m_btnResetPos, &QPushButton::clicked, this, []() {
-        DesktopPetManager::instance()->resetPetPosition();
-    });
+    // ===== 行为组：晾衣绳打开方式 + 重置位置 + 功能说明 =====
+    m_behaviorGroup = new QGroupBox(tm->get("pet.behaviorGroup", "Behavior"), scrollContent);
+    m_behaviorGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    QVBoxLayout *behaviorLayout = new QVBoxLayout(m_behaviorGroup);
 
-    // ===== 晾衣绳打开方式：上边界 / 点击宠物 / 两者，userData 对应 ClotheslineTrigger 位标志 =====
-    m_triggerLabel = new QLabel(tm->get("pet.clotheslineTrigger", "Open Clothesline") + ":", m_petGroup);
-    m_triggerCombo = new QComboBox(m_petGroup);
+    // 晾衣绳打开方式：上边界 / 点击宠物 / 两者，userData 对应 ClotheslineTrigger 位标志
+    m_triggerLabel = new QLabel(tm->get("pet.clotheslineTrigger", "Open Clothesline") + ":", m_behaviorGroup);
+    m_triggerCombo = new QComboBox(m_behaviorGroup);
     StyleManager::useHighlightOnlyPopup(m_triggerCombo);
     m_triggerCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     m_triggerCombo->addItem(tm->get("pet.trigger.hotEdge", "Mouse to top edge of screen"),
@@ -216,26 +222,30 @@ void SettingsPetTab::setupUi() {
     triggerRow->addWidget(m_triggerCombo);
     triggerRow->addStretch();
 
+    m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_behaviorGroup);
+    m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    m_btnResetPos->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    connect(m_btnResetPos, &QPushButton::clicked, this, []() {
+        DesktopPetManager::instance()->resetPetPosition();
+    });
+
     m_descLabel = new QLabel(tm->get("pet.description",
-        "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet or move the mouse to the top edge of the screen to open or close the clothesline and view recent screenshots and copied text."), m_petGroup);
+        "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet or move the mouse to the top edge of the screen to open or close the clothesline and view recent screenshots and copied text."), m_behaviorGroup);
     // 自动换行：各语言文案长度不一（英/日/韩首行远超可用宽度），关闭换行
     // 会横向截断。此前换行导致窗口底部空白，根因是 applyTabHeight 在窄
     // 宽度下估算 hfw（已修复：测量前按选项卡栈宽归位），换行后窗口高度
     // 会随行数正确适配
     m_descLabel->setWordWrap(true);
 
-    petLayout->addWidget(m_enablePetCheck);
-    petLayout->addWidget(m_styleLabel);
-    petLayout->addWidget(m_classicLabel);
-    petLayout->addLayout(styleRow);
-    petLayout->addWidget(m_zodiacLabel);
-    petLayout->addLayout(zodiacRow);
-    petLayout->addWidget(m_customGroup);
-    petLayout->addWidget(m_btnResetPos);
-    petLayout->addLayout(triggerRow);
-    petLayout->addWidget(m_descLabel);
+    behaviorLayout->addLayout(triggerRow);
+    behaviorLayout->addWidget(m_btnResetPos);
+    behaviorLayout->addWidget(m_descLabel);
 
-    layout->addWidget(m_petGroup);
+    // 四个分组纵向排列：基本 / 宠物样式 / 自定义宠物 / 行为
+    layout->addWidget(m_basicGroup);
+    layout->addWidget(m_styleGroupBox);
+    layout->addWidget(m_customGroup);
+    layout->addWidget(m_behaviorGroup);
     layout->addStretch();
 
     // 创建滚动区域
@@ -276,7 +286,7 @@ void SettingsPetTab::refreshCustomList() {
     const int iconSize = PetUi::scaled(48);
     const QVector<CustomPet> pets = DesktopPetManager::instance()->customPets();
     for (const CustomPet &pet : pets) {
-        auto *btn = new QToolButton(m_petGroup);
+        auto *btn = new QToolButton(m_customGroup);
         btn->setCheckable(true);
         btn->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
         const QPixmap preview = PetWindow::renderCustomPreview(
@@ -361,9 +371,10 @@ void SettingsPetTab::removeSelectedCustomPet() {
 
 void SettingsPetTab::retranslateUi() {
     TranslationManager *tm = TranslationManager::instance();
-    if (m_petGroup) m_petGroup->setTitle(tm->get("pet.group", "Desktop Pet"));
+    if (m_basicGroup) m_basicGroup->setTitle(tm->get("pet.basicGroup", "Basic"));
     if (m_enablePetCheck) m_enablePetCheck->setText(tm->get("pet.enable", "Enable Desktop Pet"));
-    if (m_styleLabel) m_styleLabel->setText(tm->get("pet.styleLabel", "Pet Style"));
+    if (m_styleGroupBox) m_styleGroupBox->setTitle(tm->get("pet.styleLabel", "Pet Style"));
+    if (m_behaviorGroup) m_behaviorGroup->setTitle(tm->get("pet.behaviorGroup", "Behavior"));
     if (m_classicLabel) m_classicLabel->setText(tm->get("pet.classicGroup", "Classic"));
     if (m_zodiacLabel) m_zodiacLabel->setText(tm->get("pet.zodiacGroup", "Zodiac"));
     for (int i = 0; i < m_styleButtons.size() && i < PetWindow::petStyleCount(); ++i) {
@@ -400,7 +411,9 @@ void SettingsPetTab::retranslateUi() {
 // ============================================================
 
 void SettingsPetTab::refreshStyles() {
-    if (m_petGroup) m_petGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    if (m_basicGroup) m_basicGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    if (m_styleGroupBox) m_styleGroupBox->setStyleSheet(StyleManager::getGroupBoxStyle());
+    if (m_behaviorGroup) m_behaviorGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_enablePetCheck) m_enablePetCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     for (QToolButton *btn : m_styleButtons) {
         btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());

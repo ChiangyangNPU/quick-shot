@@ -177,6 +177,8 @@
   "pet.enable": "開啟桌面寵物",
   "pet.resetPosition": "重設寵物位置",
   "pet.clotheslineTrigger": "晾衣繩開啟方式",
+  "pet.basicGroup": "基本",
+  "pet.behaviorGroup": "行為",
   "pet.trigger.hotEdge": "滑鼠移到螢幕上邊界",
   "pet.trigger.click": "點擊寵物",
   "pet.trigger.both": "兩者皆可",

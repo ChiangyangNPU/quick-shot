@@ -17,8 +17,10 @@ class FlowLayout;
 /**
  * @brief 设置窗口「桌面宠物」选项卡
  *
- * 包含桌面宠物开关、平铺图标式的外观样式选择、重置位置按钮与功能说明。
- * 开关与样式由 DesktopPetManager 持久化（pet/enabled、pet/style）并即时生效。
+ * 内容分为四个分组框：基本（宠物开关）、宠物样式（经典样式 + 十二生肖
+ * 平铺图标按钮）、自定义宠物（缩略图 + 添加/删除）、行为（晾衣绳打开方式、
+ * 重置位置、功能说明）。开关与样式由 DesktopPetManager 持久化并即时生效；
+ * 内容超高时由外层 QScrollArea 滚动（窗口高度由 SettingsWindow 封顶）。
  * @author chiangyang
  */
 class SettingsPetTab : public QWidget {
@@ -85,13 +87,14 @@ private:
 
     QScrollArea *petScrollArea = nullptr;   ///< 滚动区域（16 种样式按钮较高）
     QWidget *m_petScrollContent = nullptr;  ///< 滚动内容容器（palette 背景）
-    QGroupBox *m_petGroup;              ///< 桌面宠物分组
+    QGroupBox *m_basicGroup;            ///< 基本分组（宠物开关）
     QCheckBox *m_enablePetCheck;        ///< 打开桌面宠物复选框
-    QLabel *m_styleLabel;               ///< 外观样式标签
+    QGroupBox *m_styleGroupBox;         ///< 宠物样式分组（经典样式 + 十二生肖）
     QLabel *m_classicLabel;             ///< 经典样式分组标签（第一行）
     QLabel *m_zodiacLabel;              ///< 十二生肖分组标签（第二行起，FlowLayout 自动换行）
     QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
     QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标；自定义项从 1000 起）
+    QGroupBox *m_behaviorGroup;         ///< 行为分组（晾衣绳打开方式、重置位置、功能说明）
     QPushButton *m_btnResetPos;         ///< 重置宠物位置按钮
     QLabel *m_triggerLabel;             ///< 晾衣绳打开方式标签
     QComboBox *m_triggerCombo;          ///< 晾衣绳打开方式下拉框（上边界/点击宠物/两者）

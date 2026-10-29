@@ -572,6 +572,14 @@ void SettingsWindow::applyTabHeight(bool animated) {
     int tabBarExtra = 50;
     int targetHeight = tabHeight + tabBarExtra;
 
+    // 窗口高度封顶：基准 640px（96 DPI），随逻辑 DPI 按比例放大并限制在
+    // 640~1280。内容超过上限时选项卡内部的 QScrollArea 滚动（如宠物页
+    // 16 个样式按钮、快捷键页 42 行），避免窗口被拉得过长。
+    // 注意 macOS logicalDpi 恒为 72，qBound 下限保证封顶不小于基准值。
+    const int heightLogicalDpi = this->screen() ? this->screen()->logicalDotsPerInch() : 96;
+    const int maxWindowHeight = qBound(640, 640 * heightLogicalDpi / 96, 1280);
+    targetHeight = qMin(targetHeight, maxWindowHeight);
+
     int currentHeight = this->height();
 
     if (heightAnimation && heightAnimation->state() == QPropertyAnimation::Running) {

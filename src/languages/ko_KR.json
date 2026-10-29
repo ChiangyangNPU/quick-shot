@@ -177,6 +177,8 @@
   "pet.enable": "데스크탑 펫 사용",
   "pet.resetPosition": "펫 위치 초기화",
   "pet.clotheslineTrigger": "빨랫줄 열기 방식",
+  "pet.basicGroup": "기본",
+  "pet.behaviorGroup": "동작",
   "pet.trigger.hotEdge": "마우스를 화면 상단 가장자리로 이동",
   "pet.trigger.click": "펫 클릭",
   "pet.trigger.both": "둘 다",
