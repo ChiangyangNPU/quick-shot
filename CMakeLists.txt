@@ -276,6 +276,12 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/PetUiScale.h
         src/pet/PetTheme.cpp
         src/pet/PetTheme.h
+        src/pet/PetReminder.cpp
+        src/pet/PetReminder.h
+        src/pet/PetBadgeWidget.cpp
+        src/pet/PetBadgeWidget.h
+        src/pet/PomodoroCard.cpp
+        src/pet/PomodoroCard.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp

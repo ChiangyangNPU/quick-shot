@@ -10,6 +10,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
+#include <QSpinBox>
 #include <QFileDialog>
 
 namespace {
@@ -222,6 +223,51 @@ void SettingsPetTab::setupUi() {
     triggerRow->addWidget(m_triggerCombo);
     triggerRow->addStretch();
 
+    // 待办提醒：有待办逾期/今天到期时宠物头顶显示红点角标
+    m_todoReminderCheck = new QCheckBox(tm->get("pet.todoReminder", "Todo Reminder"), m_behaviorGroup);
+    m_todoReminderCheck->setChecked(DesktopPetManager::instance()->todoReminderEnabled());
+    connect(m_todoReminderCheck, &QCheckBox::toggled, this, [](bool checked) {
+        DesktopPetManager::instance()->setTodoReminderEnabled(checked);
+    });
+
+    // 番茄钟：开关 + 工作/休息时长（分钟），时长下一轮生效
+    m_pomodoroCheck = new QCheckBox(tm->get("pet.pomodoro", "Pomodoro Timer"), m_behaviorGroup);
+    m_pomodoroCheck->setChecked(DesktopPetManager::instance()->pomodoroEnabled());
+    m_pomodoroWorkLabel = new QLabel(tm->get("pet.pomodoro.work", "Work"), m_behaviorGroup);
+    m_pomodoroWorkSpin = new QSpinBox(m_behaviorGroup);
+    m_pomodoroWorkSpin->setRange(5, 180);
+    m_pomodoroWorkSpin->setValue(DesktopPetManager::instance()->pomodoroWorkMinutes());
+    m_pomodoroBreakLabel = new QLabel(tm->get("pet.pomodoro.break", "Break"), m_behaviorGroup);
+    m_pomodoroBreakSpin = new QSpinBox(m_behaviorGroup);
+    m_pomodoroBreakSpin->setRange(1, 120);
+    m_pomodoroBreakSpin->setValue(DesktopPetManager::instance()->pomodoroBreakMinutes());
+    const QString minuteSuffix = QStringLiteral(" ") + tm->get("pet.pomodoro.minute", "min");
+    m_pomodoroWorkSpin->setSuffix(minuteSuffix);
+    m_pomodoroBreakSpin->setSuffix(minuteSuffix);
+    const bool pomodoroOn = m_pomodoroCheck->isChecked();
+    m_pomodoroWorkSpin->setEnabled(pomodoroOn);
+    m_pomodoroBreakSpin->setEnabled(pomodoroOn);
+    connect(m_pomodoroCheck, &QCheckBox::toggled, this, [this](bool checked) {
+        DesktopPetManager::instance()->setPomodoroEnabled(checked);
+        m_pomodoroWorkSpin->setEnabled(checked);
+        m_pomodoroBreakSpin->setEnabled(checked);
+    });
+    connect(m_pomodoroWorkSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) {
+        DesktopPetManager::instance()->setPomodoroWorkMinutes(v);
+    });
+    connect(m_pomodoroBreakSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) {
+        DesktopPetManager::instance()->setPomodoroBreakMinutes(v);
+    });
+    QHBoxLayout *pomodoroRow = new QHBoxLayout();
+    pomodoroRow->addWidget(m_pomodoroCheck);
+    pomodoroRow->addSpacing(PetUi::scaled(12));
+    pomodoroRow->addWidget(m_pomodoroWorkLabel);
+    pomodoroRow->addWidget(m_pomodoroWorkSpin);
+    pomodoroRow->addSpacing(PetUi::scaled(8));
+    pomodoroRow->addWidget(m_pomodoroBreakLabel);
+    pomodoroRow->addWidget(m_pomodoroBreakSpin);
+    pomodoroRow->addStretch();
+
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_behaviorGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
     m_btnResetPos->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
@@ -238,6 +284,8 @@ void SettingsPetTab::setupUi() {
     m_descLabel->setWordWrap(true);
 
     behaviorLayout->addLayout(triggerRow);
+    behaviorLayout->addWidget(m_todoReminderCheck);
+    behaviorLayout->addLayout(pomodoroRow);
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
 
@@ -382,6 +430,13 @@ void SettingsPetTab::retranslateUi() {
         m_styleButtons[i]->setToolTip(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
     }
     if (m_btnResetPos) m_btnResetPos->setText(tm->get("pet.resetPosition", "Reset Pet Position"));
+    if (m_todoReminderCheck) m_todoReminderCheck->setText(tm->get("pet.todoReminder", "Todo Reminder"));
+    if (m_pomodoroCheck) m_pomodoroCheck->setText(tm->get("pet.pomodoro", "Pomodoro Timer"));
+    if (m_pomodoroWorkLabel) m_pomodoroWorkLabel->setText(tm->get("pet.pomodoro.work", "Work"));
+    if (m_pomodoroBreakLabel) m_pomodoroBreakLabel->setText(tm->get("pet.pomodoro.break", "Break"));
+    const QString minuteSuffix = QStringLiteral(" ") + tm->get("pet.pomodoro.minute", "min");
+    if (m_pomodoroWorkSpin) m_pomodoroWorkSpin->setSuffix(minuteSuffix);
+    if (m_pomodoroBreakSpin) m_pomodoroBreakSpin->setSuffix(minuteSuffix);
     // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
     if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":");
     if (m_triggerCombo) {

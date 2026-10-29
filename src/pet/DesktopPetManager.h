@@ -11,6 +11,9 @@
 
 class ClotheslineWindow;
 class TodoWindow;
+class PetReminder;
+class PetBadgeWidget;
+class PomodoroCard;
 class QTimer;
 
 /**
@@ -167,6 +170,62 @@ public:
     void refreshTodoWindowStyle();
 
     /**
+     * @brief 获取待办红点提醒是否开启（持久化于 pet/todoReminder，默认开）
+     * @return 是否开启
+     * @author chiangyang
+     */
+    bool todoReminderEnabled() const;
+
+    /**
+     * @brief 设置待办红点提醒开关（即时生效并持久化）
+     * @param enabled 是否开启
+     * @author chiangyang
+     */
+    void setTodoReminderEnabled(bool enabled);
+
+    /**
+     * @brief 获取番茄钟是否开启（持久化于 pet/pomodoroEnabled，默认关）
+     * @return 是否开启
+     * @author chiangyang
+     */
+    bool pomodoroEnabled() const;
+
+    /**
+     * @brief 设置番茄钟开关（即时生效并持久化）
+     * @param enabled 是否开启
+     * @author chiangyang
+     */
+    void setPomodoroEnabled(bool enabled);
+
+    /**
+     * @brief 获取番茄钟工作时长（分钟，pet/pomodoroWorkMin，默认 25）
+     * @return 工作时长（分钟）
+     * @author chiangyang
+     */
+    int pomodoroWorkMinutes() const;
+
+    /**
+     * @brief 设置番茄钟工作时长（即时生效并持久化，下一轮工作生效）
+     * @param minutes 工作时长（分钟）
+     * @author chiangyang
+     */
+    void setPomodoroWorkMinutes(int minutes);
+
+    /**
+     * @brief 获取番茄钟休息时长（分钟，pet/pomodoroBreakMin，默认 5）
+     * @return 休息时长（分钟）
+     * @author chiangyang
+     */
+    int pomodoroBreakMinutes() const;
+
+    /**
+     * @brief 设置番茄钟休息时长（即时生效并持久化，下一轮休息生效）
+     * @param minutes 休息时长（分钟）
+     * @author chiangyang
+     */
+    void setPomodoroBreakMinutes(int minutes);
+
+    /**
      * @brief 晾衣绳触发方式（位标志，持久化于 pet/clotheslineTrigger）
      * @author chiangyang
      */
@@ -276,11 +335,39 @@ private:
      */
     void positionTodoWindow();
 
+    /**
+     * @brief 按提醒数量与开关刷新头顶角标的显示（数量都为 0 或开关关闭时隐藏）
+     * @author chiangyang
+     */
+    void updateTodoBadge();
+
+    /**
+     * @brief 将提醒角标贴合到宠物右上角（宠物移动时跟随）
+     * @author chiangyang
+     */
+    void positionTodoBadge();
+
+    /**
+     * @brief 弹出番茄钟提示卡（宠物跳跃 + 卡片贴合宠物上方）
+     * @param breakDue true 为"工作结束该休息了"，false 为"休息结束继续工作"
+     * @author chiangyang
+     */
+    void showPomodoroCard(bool breakDue);
+
+    /**
+     * @brief 将番茄钟提示卡摆到宠物上方（空间不足时移到下方），小三角指向宠物
+     * @author chiangyang
+     */
+    void positionPomodoroCard();
+
     static DesktopPetManager* s_instance;   ///< 单例实例
     bool m_enabled = false;                 ///< 是否开启
     QPointer<PetWindow> m_petWindow;        ///< 宠物窗口（未开启时为 nullptr）
     QPointer<ClotheslineWindow> m_clothesline; ///< 晾衣绳窗口（未显示时为 nullptr）
     QPointer<TodoWindow> m_todoWindow;      ///< 待办清单窗口（未打开时为 nullptr）
+    QPointer<PetBadgeWidget> m_todoBadge;   ///< 待办提醒角标（无提醒或未开启时为 nullptr/隐藏）
+    PetReminder *m_reminder = nullptr;      ///< 提醒源（待办轮询 + 番茄钟计时，宠物开启期间运行）
+    QPointer<PomodoroCard> m_pomodoroCard;  ///< 番茄钟提示卡（未弹出时为 nullptr）
     QTimer *m_hotEdgeTimer = nullptr;       ///< 主屏顶边热区轮询定时器（宠物开启期间运行）
     bool m_hotEdgeArmed = true;             ///< 光标离开热区后重新武装（边沿触发防反复弹收）
 };

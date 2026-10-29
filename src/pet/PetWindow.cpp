@@ -5,10 +5,12 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
+#include <QMoveEvent>
 #include <QContextMenuEvent>
 #include <QMovie>
 #include <QImageReader>
 #include <QPropertyAnimation>
+#include <QEasingCurve>
 #include <QSequentialAnimationGroup>
 #include <QParallelAnimationGroup>
 #include <QTimer>
@@ -943,6 +945,26 @@ QPoint PetWindow::mouthCenterGlobal() const {
 }
 
 /**
+ * @brief 原地跳跃一下（提醒动作）：先上跳后落回原位
+ * @author chiangyang
+ */
+void PetWindow::playJump() {
+    // 跳跃动画进行中忽略重复触发；拖动中也不跳，避免与用户操作抢位置
+    if (m_jumpAnim || m_dragging) {
+        return;
+    }
+    const QPoint origin = pos();
+    auto *anim = new QPropertyAnimation(this, "pos", this);
+    anim->setDuration(420);
+    anim->setKeyValueAt(0.0, origin);
+    anim->setKeyValueAt(0.4, origin + QPoint(0, -PetUi::scaled(16)));
+    anim->setKeyValueAt(1.0, origin);
+    anim->setEasingCurve(QEasingCurve::OutQuad);
+    m_jumpAnim = anim;
+    anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+/**
  * @brief 设置嘴张开程度
  * @author chiangyang
  */
@@ -1116,6 +1138,15 @@ void PetWindow::hideEvent(QHideEvent *event) {
     if (m_movie) {
         m_movie->stop();
     }
+}
+
+/**
+ * @brief 位置变化：发射 moved 供提醒角标等跟随窗口定位
+ * @author chiangyang
+ */
+void PetWindow::moveEvent(QMoveEvent *event) {
+    QWidget::moveEvent(event);
+    emit moved(event->pos());
 }
 
 /**

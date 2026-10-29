@@ -158,6 +158,12 @@ public:
      */
     QPoint mouthCenterGlobal() const;
 
+    /**
+     * @brief 原地跳跃一下（番茄钟到点等提醒动作）：先上跳后落回原位
+     * @author chiangyang
+     */
+    void playJump();
+
     qreal mouthOpen() const { return m_mouthOpen; }
     void setMouthOpen(qreal v);
 
@@ -187,10 +193,18 @@ signals:
      */
     void contextMenuRequested();
 
+    /**
+     * @brief 窗口位置变化信号（提醒角标等跟随窗口定位用）
+     * @param newPos 新的窗口左上角全局坐标
+     * @author chiangyang
+     */
+    void moved(const QPoint &newPos);
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void showEvent(QShowEvent *event) override;
     void hideEvent(QHideEvent *event) override;
+    void moveEvent(QMoveEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
     void mouseReleaseEvent(QMouseEvent *event) override;
@@ -236,6 +250,7 @@ private:
     bool m_eyesClosed = false;      ///< 眨眼瞬间为 true
     PetStyle m_style = PetStyle::Cat; ///< 当前外观样式
     QPointer<QAbstractAnimation> m_mouthAnim; ///< 进行中的嘴部/咀嚼动画（新动画开始前 stop，避免叠加互相覆写）
+    QPointer<QAbstractAnimation> m_jumpAnim;  ///< 进行中的跳跃动画（重复触发时忽略）
 
     QString m_customPath;           ///< 自定义素材路径（空表示使用内置造型）
     QPixmap m_customImage;          ///< 自定义静态素材图像（GIF 模式为空）

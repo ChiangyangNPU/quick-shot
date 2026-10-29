@@ -74,6 +74,12 @@ signals:
      */
     void bubbleSizeChanged();
 
+    /**
+     * @brief 待办列表数据变化时发出（提醒角标立即重估用）
+     * @author chiangyang
+     */
+    void itemsChanged();
+
 protected:
     /**
      * @brief 绘制气泡背景：圆角面板、柔和投影与指向宠物的小三角

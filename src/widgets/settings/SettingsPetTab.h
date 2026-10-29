@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QGroupBox>
 #include <QCheckBox>
+#include <QSpinBox>
 #include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
@@ -94,10 +95,16 @@ private:
     QLabel *m_zodiacLabel;              ///< 十二生肖分组标签（第二行起，FlowLayout 自动换行）
     QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
     QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标；自定义项从 1000 起）
-    QGroupBox *m_behaviorGroup;         ///< 行为分组（晾衣绳打开方式、重置位置、功能说明）
+    QGroupBox *m_behaviorGroup;         ///< 行为分组（晾衣绳方式、待办提醒、番茄钟、重置位置、功能说明）
     QPushButton *m_btnResetPos;         ///< 重置宠物位置按钮
     QLabel *m_triggerLabel;             ///< 晾衣绳打开方式标签
     QComboBox *m_triggerCombo;          ///< 晾衣绳打开方式下拉框（上边界/点击宠物/两者）
+    QCheckBox *m_todoReminderCheck;     ///< 待办提醒复选框（逾期/今天到期时宠物头顶红点）
+    QCheckBox *m_pomodoroCheck;         ///< 番茄钟开关复选框
+    QLabel *m_pomodoroWorkLabel;        ///< 番茄钟"工作"标签
+    QSpinBox *m_pomodoroWorkSpin;       ///< 番茄钟工作时长（分钟）
+    QLabel *m_pomodoroBreakLabel;       ///< 番茄钟"休息"标签
+    QSpinBox *m_pomodoroBreakSpin;      ///< 番茄钟休息时长（分钟）
     QLabel *m_descLabel;                ///< 功能说明标签
 
     QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组

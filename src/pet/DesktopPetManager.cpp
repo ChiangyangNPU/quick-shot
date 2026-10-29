@@ -1,6 +1,9 @@
 #include "DesktopPetManager.h"
 #include "PetWindow.h"
 #include "TodoWindow.h"
+#include "PetReminder.h"
+#include "PetBadgeWidget.h"
+#include "PomodoroCard.h"
 #include "FlyAnimationWidget.h"
 #include "ClotheslineWindow.h"
 #include "PetUiScale.h"
@@ -98,6 +101,19 @@ void DesktopPetManager::setEnabled(bool enabled) {
             m_todoWindow->deleteLater();
             m_todoWindow = nullptr;
         }
+        // 提醒角标与轮询随宠物一起停止
+        if (m_reminder) {
+            m_reminder->stop();
+        }
+        if (m_todoBadge) {
+            m_todoBadge->close();
+            m_todoBadge->deleteLater();
+            m_todoBadge = nullptr;
+        }
+        // 番茄钟提示卡随宠物一起收起（计时已由 m_reminder->stop() 停止）
+        if (m_pomodoroCard) {
+            m_pomodoroCard->hide();
+        }
     }
     LOG_INFO(QString("DesktopPetManager: pet %1").arg(enabled ? "enabled" : "disabled"));
     emit enabledChanged(enabled);
@@ -146,6 +162,30 @@ void DesktopPetManager::createPetWindow() {
     // 右键打开待办清单
     connect(m_petWindow, &PetWindow::contextMenuRequested,
             this, &DesktopPetManager::showTodoWindow);
+
+    // 待办提醒：轮询逾期/今天到期数量，变化时刷新宠物头顶红点角标
+    if (!m_reminder) {
+        m_reminder = new PetReminder(this);
+        connect(m_reminder, &PetReminder::pomodoroBreakDue,
+                this, [this]() { showPomodoroCard(true); });
+        connect(m_reminder, &PetReminder::pomodoroBreakFinished,
+                this, [this]() { showPomodoroCard(false); });
+    }
+    if (!m_todoBadge) {
+        m_todoBadge = new PetBadgeWidget();
+        connect(m_todoBadge, &PetBadgeWidget::clicked,
+                this, &DesktopPetManager::showTodoWindow);
+        connect(m_reminder, &PetReminder::reminderChanged,
+                this, [this](int, int) { updateTodoBadge(); });
+        connect(m_petWindow, &PetWindow::moved,
+                this, [this](const QPoint &) { positionTodoBadge(); });
+    }
+    m_reminder->start();
+    updateTodoBadge();
+    // 番茄钟开关已开时恢复计时（宠物关闭期间停止，重新开启后从工作阶段开始）
+    if (pomodoroEnabled()) {
+        m_reminder->startPomodoro();
+    }
 
     m_petWindow->show();
     m_petWindow->raise();
@@ -466,6 +506,12 @@ void DesktopPetManager::showTodoWindow() {
                 positionTodoWindow();
             }
         });
+        // 待办增删改后立即重估提醒角标（不等下一轮轮询）
+        connect(m_todoWindow, &TodoWindow::itemsChanged, this, [this]() {
+            if (m_reminder) {
+                m_reminder->evaluate();
+            }
+        });
     }
     m_todoWindow->show();
     // 先显示（showEvent 会重算内容高度），再按最终尺寸定位
@@ -545,4 +591,197 @@ void DesktopPetManager::setClotheslineTrigger(int trigger) {
     ConfigManager::instance()->setValue("pet/clotheslineTrigger", clamped);
     ConfigManager::instance()->sync();
     LOG_INFO(QString("DesktopPetManager: clothesline trigger set to %1").arg(clamped));
+}
+
+/**
+ * @brief 获取待办红点提醒是否开启（持久化于 pet/todoReminder，默认开）
+ * @author chiangyang
+ */
+bool DesktopPetManager::todoReminderEnabled() const {
+    return ConfigManager::instance()->value("pet/todoReminder", true).toBool();
+}
+
+/**
+ * @brief 设置待办红点提醒开关（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setTodoReminderEnabled(bool enabled) {
+    if (todoReminderEnabled() == enabled) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/todoReminder", enabled);
+    ConfigManager::instance()->sync();
+    updateTodoBadge();
+    LOG_INFO(QString("DesktopPetManager: todo reminder %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+/**
+ * @brief 按提醒数量与开关刷新头顶角标的显示
+ * @author chiangyang
+ */
+void DesktopPetManager::updateTodoBadge() {
+    if (!m_todoBadge) {
+        return;
+    }
+    m_todoBadge->setReminder(m_reminder ? m_reminder->overdueCount() : 0,
+                             m_reminder ? m_reminder->dueTodayCount() : 0);
+    if (!m_enabled || !m_petWindow || !todoReminderEnabled()) {
+        m_todoBadge->hide();
+        return;
+    }
+    positionTodoBadge();
+}
+
+/**
+ * @brief 将提醒角标贴合到宠物右上角（宠物移动时跟随）
+ * @author chiangyang
+ */
+void DesktopPetManager::positionTodoBadge() {
+    if (!m_todoBadge || !m_todoBadge->isVisible() || !m_petWindow) {
+        return;
+    }
+    const QRect pet = m_petWindow->geometry();
+    const int d = m_todoBadge->width();
+    // 右上角并略微外探，圆形压住宠物轮廓边缘
+    m_todoBadge->move(pet.right() - d + PetUi::scaled(8),
+                      pet.top() - PetUi::scaled(6));
+}
+
+/**
+ * @brief 获取番茄钟是否开启
+ * @author chiangyang
+ */
+bool DesktopPetManager::pomodoroEnabled() const {
+    return ConfigManager::instance()->value("pet/pomodoroEnabled", false).toBool();
+}
+
+/**
+ * @brief 设置番茄钟开关（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setPomodoroEnabled(bool enabled) {
+    if (pomodoroEnabled() == enabled) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/pomodoroEnabled", enabled);
+    ConfigManager::instance()->sync();
+    if (m_reminder && m_enabled) {
+        if (enabled) {
+            m_reminder->startPomodoro();
+        } else {
+            m_reminder->stopPomodoro();
+            if (m_pomodoroCard) {
+                m_pomodoroCard->hide();
+            }
+        }
+    }
+    LOG_INFO(QString("DesktopPetManager: pomodoro %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+/**
+ * @brief 获取番茄钟工作时长（分钟）
+ * @author chiangyang
+ */
+int DesktopPetManager::pomodoroWorkMinutes() const {
+    return qBound(5, ConfigManager::instance()->value("pet/pomodoroWorkMin", 25).toInt(), 180);
+}
+
+/**
+ * @brief 设置番茄钟工作时长（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setPomodoroWorkMinutes(int minutes) {
+    const int clamped = qBound(5, minutes, 180);
+    ConfigManager::instance()->setValue("pet/pomodoroWorkMin", clamped);
+    ConfigManager::instance()->sync();
+}
+
+/**
+ * @brief 获取番茄钟休息时长（分钟）
+ * @author chiangyang
+ */
+int DesktopPetManager::pomodoroBreakMinutes() const {
+    return qBound(1, ConfigManager::instance()->value("pet/pomodoroBreakMin", 5).toInt(), 120);
+}
+
+/**
+ * @brief 设置番茄钟休息时长（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setPomodoroBreakMinutes(int minutes) {
+    const int clamped = qBound(1, minutes, 120);
+    ConfigManager::instance()->setValue("pet/pomodoroBreakMin", clamped);
+    ConfigManager::instance()->sync();
+}
+
+/**
+ * @brief 弹出番茄钟提示卡（宠物跳跃 + 卡片贴合宠物上方）
+ * @author chiangyang
+ */
+void DesktopPetManager::showPomodoroCard(bool breakDue) {
+    if (!m_enabled || !m_petWindow) {
+        return;
+    }
+    if (!m_pomodoroCard) {
+        m_pomodoroCard = new PomodoroCard();
+        connect(m_pomodoroCard, &PomodoroCard::breakTaken, this, [this]() {
+            m_pomodoroCard->hide();
+            if (m_reminder) {
+                m_reminder->takePomodoroBreak();
+            }
+        });
+        connect(m_pomodoroCard, &PomodoroCard::skipped, this, [this]() {
+            m_pomodoroCard->hide();
+            if (m_reminder) {
+                m_reminder->skipPomodoroBreak();
+            }
+        });
+        connect(m_pomodoroCard, &PomodoroCard::resumed, this, [this]() {
+            m_pomodoroCard->hide();
+            if (m_reminder) {
+                m_reminder->resumePomodoroWork();
+            }
+        });
+    }
+    m_petWindow->playJump();
+    if (breakDue) {
+        m_pomodoroCard->showBreakDue(pomodoroBreakMinutes());
+    } else {
+        m_pomodoroCard->showWorkDue();
+    }
+    positionPomodoroCard();
+}
+
+/**
+ * @brief 将番茄钟提示卡摆到宠物上方（空间不足时移到下方）
+ * @author chiangyang
+ */
+void DesktopPetManager::positionPomodoroCard() {
+    if (!m_pomodoroCard || !m_pomodoroCard->isVisible() || !m_petWindow) {
+        return;
+    }
+    QScreen *screen = m_petWindow->screen();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    const QRect available = screen ? screen->availableGeometry()
+                                   : QRect(0, 0, 1920, 1080);
+    const int margin = PetUi::scaled(8);
+    const int gap = PetUi::scaled(6);
+    const QSize size = m_pomodoroCard->size();
+    const QRect pet = m_petWindow->geometry();
+    const int petCenterX = pet.center().x();
+
+    int x = petCenterX - size.width() / 2;
+    int y = pet.top() - size.height() - gap;
+    bool arrowBelow = true;
+    if (y < available.top() + margin) {
+        // 上方放不下时翻到宠物下方，小三角朝上
+        y = pet.bottom() + gap;
+        arrowBelow = false;
+    }
+    x = qBound(available.left() + margin, x, available.right() - size.width() - margin);
+    y = qBound(available.top() + margin, y, available.bottom() - size.height() - margin);
+    m_pomodoroCard->setBubblePlacement(arrowBelow, petCenterX - x);
+    m_pomodoroCard->move(x, y);
 }

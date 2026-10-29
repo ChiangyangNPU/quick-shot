@@ -152,6 +152,12 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "pet/posY", -1 },
         { "pet/style", 0 },
         { "pet/clotheslineTrigger", 2 },
+        // 待办红点提醒开关（逾期/今天到期时宠物头顶显示角标）
+        { "pet/todoReminder", true },
+        // 番茄钟：开关 + 工作/休息时长（分钟）
+        { "pet/pomodoroEnabled", false },
+        { "pet/pomodoroWorkMin", 25 },
+        { "pet/pomodoroBreakMin", 5 },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },

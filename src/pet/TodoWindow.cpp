@@ -816,6 +816,7 @@ void TodoWindow::reloadItems() {
     updateBubbleHeight();
     // 布局在下一轮事件循环才完成尺寸计算，届时校准一次高度
     QTimer::singleShot(0, this, [this]() { updateBubbleHeight(); });
+    emit itemsChanged();
 }
 
 /**
