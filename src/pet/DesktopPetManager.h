@@ -166,6 +166,30 @@ public:
      */
     void refreshTodoWindowStyle();
 
+    /**
+     * @brief 晾衣绳触发方式（位标志，持久化于 pet/clotheslineTrigger）
+     * @author chiangyang
+     */
+    enum ClotheslineTrigger {
+        TriggerHotEdge = 1,  ///< 鼠标移到屏幕上边界
+        TriggerPetClick = 2, ///< 点击宠物
+        TriggerBoth = 3      ///< 两者皆可（默认）
+    };
+
+    /**
+     * @brief 获取晾衣绳触发方式
+     * @return Trigger* 位标志组合
+     * @author chiangyang
+     */
+    int clotheslineTrigger() const;
+
+    /**
+     * @brief 设置晾衣绳触发方式（即时生效并持久化）
+     * @param trigger Trigger* 位标志组合
+     * @author chiangyang
+     */
+    void setClotheslineTrigger(int trigger);
+
 signals:
     /**
      * @brief 开关状态变更信号

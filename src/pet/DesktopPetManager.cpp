@@ -136,8 +136,12 @@ void DesktopPetManager::createPetWindow() {
         ConfigManager::instance()->sync();
     });
 
-    // 点击切换晾衣绳
-    connect(m_petWindow, &PetWindow::clicked, this, &DesktopPetManager::toggleClothesline);
+    // 点击切换晾衣绳（设置里可关闭点击触发）
+    connect(m_petWindow, &PetWindow::clicked, this, [this]() {
+        if (clotheslineTrigger() & TriggerPetClick) {
+            toggleClothesline();
+        }
+    });
 
     // 右键打开待办清单
     connect(m_petWindow, &PetWindow::contextMenuRequested,
@@ -271,6 +275,10 @@ void DesktopPetManager::stopHotEdgeWatch() {
  * @author chiangyang
  */
 void DesktopPetManager::pollHotEdge() {
+    // 设置里未启用"上边界触发"时不响应热区
+    if (!(clotheslineTrigger() & TriggerHotEdge)) {
+        return;
+    }
     QScreen *screen = QGuiApplication::primaryScreen();
     if (!screen) {
         return;
@@ -514,4 +522,27 @@ void DesktopPetManager::refreshTodoWindowStyle() {
     if (m_todoWindow) {
         m_todoWindow->updateWindowColors();
     }
+}
+
+/**
+ * @brief 获取晾衣绳触发方式
+ * @author chiangyang
+ */
+int DesktopPetManager::clotheslineTrigger() const {
+    const int v = ConfigManager::instance()->value("pet/clotheslineTrigger", int(TriggerBoth)).toInt();
+    return qBound(int(TriggerHotEdge), v, int(TriggerBoth));
+}
+
+/**
+ * @brief 设置晾衣绳触发方式（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setClotheslineTrigger(int trigger) {
+    const int clamped = qBound(int(TriggerHotEdge), trigger, int(TriggerBoth));
+    if (clotheslineTrigger() == clamped) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/clotheslineTrigger", clamped);
+    ConfigManager::instance()->sync();
+    LOG_INFO(QString("DesktopPetManager: clothesline trigger set to %1").arg(clamped));
 }

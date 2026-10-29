@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QGroupBox>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
 #include <QToolButton>
@@ -92,6 +93,8 @@ private:
     QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
     QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标；自定义项从 1000 起）
     QPushButton *m_btnResetPos;         ///< 重置宠物位置按钮
+    QLabel *m_triggerLabel;             ///< 晾衣绳打开方式标签
+    QComboBox *m_triggerCombo;          ///< 晾衣绳打开方式下拉框（上边界/点击宠物/两者）
     QLabel *m_descLabel;                ///< 功能说明标签
 
     QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组

@@ -194,6 +194,28 @@ void SettingsPetTab::setupUi() {
         DesktopPetManager::instance()->resetPetPosition();
     });
 
+    // ===== 晾衣绳打开方式：上边界 / 点击宠物 / 两者，userData 对应 ClotheslineTrigger 位标志 =====
+    m_triggerLabel = new QLabel(tm->get("pet.clotheslineTrigger", "Open Clothesline") + ":", m_petGroup);
+    m_triggerCombo = new QComboBox(m_petGroup);
+    StyleManager::useHighlightOnlyPopup(m_triggerCombo);
+    m_triggerCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    m_triggerCombo->addItem(tm->get("pet.trigger.hotEdge", "Mouse to top edge of screen"),
+                            int(DesktopPetManager::TriggerHotEdge));
+    m_triggerCombo->addItem(tm->get("pet.trigger.click", "Click the pet"),
+                            int(DesktopPetManager::TriggerPetClick));
+    m_triggerCombo->addItem(tm->get("pet.trigger.both", "Both"),
+                            int(DesktopPetManager::TriggerBoth));
+    const int curTrigger = DesktopPetManager::instance()->clotheslineTrigger();
+    m_triggerCombo->setCurrentIndex(qMax(0, m_triggerCombo->findData(curTrigger)));
+    connect(m_triggerCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+        DesktopPetManager::instance()->setClotheslineTrigger(m_triggerCombo->itemData(index).toInt());
+    });
+    QHBoxLayout *triggerRow = new QHBoxLayout();
+    triggerRow->addWidget(m_triggerLabel);
+    triggerRow->addWidget(m_triggerCombo);
+    triggerRow->addStretch();
+
     m_descLabel = new QLabel(tm->get("pet.description",
         "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet or move the mouse to the top edge of the screen to open or close the clothesline and view recent screenshots and copied text."), m_petGroup);
     // 自动换行：各语言文案长度不一（英/日/韩首行远超可用宽度），关闭换行
@@ -210,6 +232,7 @@ void SettingsPetTab::setupUi() {
     petLayout->addLayout(zodiacRow);
     petLayout->addWidget(m_customGroup);
     petLayout->addWidget(m_btnResetPos);
+    petLayout->addLayout(triggerRow);
     petLayout->addWidget(m_descLabel);
 
     layout->addWidget(m_petGroup);
@@ -348,6 +371,20 @@ void SettingsPetTab::retranslateUi() {
         m_styleButtons[i]->setToolTip(tm->get(kStyleKeys[i], kStyleFallbacks[i]));
     }
     if (m_btnResetPos) m_btnResetPos->setText(tm->get("pet.resetPosition", "Reset Pet Position"));
+    // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
+    if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Open Clothesline") + ":");
+    if (m_triggerCombo) {
+        const int cur = m_triggerCombo->currentData().toInt();
+        QSignalBlocker blocker(m_triggerCombo);
+        m_triggerCombo->clear();
+        m_triggerCombo->addItem(tm->get("pet.trigger.hotEdge", "Mouse to top edge of screen"),
+                                int(DesktopPetManager::TriggerHotEdge));
+        m_triggerCombo->addItem(tm->get("pet.trigger.click", "Click the pet"),
+                                int(DesktopPetManager::TriggerPetClick));
+        m_triggerCombo->addItem(tm->get("pet.trigger.both", "Both"),
+                                int(DesktopPetManager::TriggerBoth));
+        m_triggerCombo->setCurrentIndex(qMax(0, m_triggerCombo->findData(cur)));
+    }
     if (m_customGroup) m_customGroup->setTitle(tm->get("pet.customGroup", "Custom Pets"));
     if (m_btnAddCustom) m_btnAddCustom->setText(tm->get("pet.addCustom", "Add Image/GIF"));
     if (m_btnRemoveCustom) m_btnRemoveCustom->setText(tm->get("pet.removeCustom", "Delete Selected"));
@@ -369,6 +406,7 @@ void SettingsPetTab::refreshStyles() {
         btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
     }
     if (m_btnResetPos) m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    if (m_triggerCombo) m_triggerCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_customGroup) m_customGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_btnAddCustom) m_btnAddCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
     if (m_btnRemoveCustom) m_btnRemoveCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
