@@ -151,7 +151,7 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "pet/posX", -1 },
         { "pet/posY", -1 },
         { "pet/style", 0 },
-        { "pet/clotheslineTrigger", 3 },
+        { "pet/clotheslineTrigger", 2 },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },

@@ -172,8 +172,8 @@ public:
      */
     enum ClotheslineTrigger {
         TriggerHotEdge = 1,  ///< 鼠标移到屏幕上边界
-        TriggerPetClick = 2, ///< 点击宠物
-        TriggerBoth = 3      ///< 两者皆可（默认）
+        TriggerPetClick = 2, ///< 点击宠物（默认）
+        TriggerBoth = 3      ///< 两者皆可
     };
 
     /**

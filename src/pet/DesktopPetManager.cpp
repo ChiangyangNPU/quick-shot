@@ -529,7 +529,7 @@ void DesktopPetManager::refreshTodoWindowStyle() {
  * @author chiangyang
  */
 int DesktopPetManager::clotheslineTrigger() const {
-    const int v = ConfigManager::instance()->value("pet/clotheslineTrigger", int(TriggerBoth)).toInt();
+    const int v = ConfigManager::instance()->value("pet/clotheslineTrigger", int(TriggerPetClick)).toInt();
     return qBound(int(TriggerHotEdge), v, int(TriggerBoth));
 }
 
