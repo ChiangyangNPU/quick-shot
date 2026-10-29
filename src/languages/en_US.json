@@ -190,6 +190,7 @@
   "pet.idleSleep": "Idle Doze",
   "pet.idleSleep.after": "After",
   "pet.sysMonitor": "System Status",
+  "pet.sysMonitorHint": "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low.",
   "pet.basicGroup": "Basic",
   "pet.behaviorGroup": "Behavior",
   "pet.trigger.hotEdge": "Move mouse to top edge of screen",

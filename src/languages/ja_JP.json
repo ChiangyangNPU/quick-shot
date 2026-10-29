@@ -190,6 +190,7 @@
   "pet.idleSleep": "居眠り",
   "pet.idleSleep.after": "操作なし",
   "pet.sysMonitor": "システム状態",
+  "pet.sysMonitorHint": "CPU/メモリ使用率が高い時にペットが汗をかき、バッテリー低下時にバッテリーアイコンを表示します",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "動作",
   "pet.trigger.hotEdge": "マウスを画面の上端に移動",

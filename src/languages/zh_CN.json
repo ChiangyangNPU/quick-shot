@@ -190,6 +190,7 @@
   "pet.idleSleep": "待机打盹",
   "pet.idleSleep.after": "无互动",
   "pet.sysMonitor": "系统状态",
+  "pet.sysMonitorHint": "CPU/内存占用过高时宠物冒汗，电量过低时显示电池图标",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "行为",
   "pet.trigger.hotEdge": "鼠标移到屏幕上边界",

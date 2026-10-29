@@ -3,6 +3,7 @@
 #include "../../core/StyleManager.h"
 #include "../../pet/DesktopPetManager.h"
 #include "../../pet/PetWindow.h"
+#include "../../pet/PetTheme.h"
 #include "../../pet/PetUiScale.h"
 #include "../FlowLayout.h"
 #include "../MessageBox.h"
@@ -305,6 +306,16 @@ void SettingsPetTab::setupUi() {
     connect(m_sysMonitorCheck, &QCheckBox::toggled, this, [](bool checked) {
         DesktopPetManager::instance()->setSysMonitorEnabled(checked);
     });
+    // 行为说明：小号灰字，缩进与复选框文字对齐（颜色在 refreshStyles 随主题刷新，
+    // 全局 QSS 的 QLabel 颜色优先级高于 palette，只能 setStyleSheet 覆盖）
+    m_sysMonitorHint = new QLabel(
+        tm->get("pet.sysMonitorHint",
+                "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low."),
+        m_behaviorGroup);
+    m_sysMonitorHint->setWordWrap(true);
+    m_sysMonitorHint->setContentsMargins(PetUi::scaled(24), 0, 0, 0);
+    m_sysMonitorHint->setStyleSheet(
+        QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));
 
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_behaviorGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
@@ -326,6 +337,7 @@ void SettingsPetTab::setupUi() {
     behaviorLayout->addLayout(pomodoroRow);
     behaviorLayout->addLayout(idleSleepRow);
     behaviorLayout->addWidget(m_sysMonitorCheck);
+    behaviorLayout->addWidget(m_sysMonitorHint);
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
 
@@ -481,6 +493,9 @@ void SettingsPetTab::retranslateUi() {
     if (m_idleSleepAfterLabel) m_idleSleepAfterLabel->setText(tm->get("pet.idleSleep.after", "After"));
     if (m_idleSleepSpin) m_idleSleepSpin->setSuffix(minuteSuffix);
     if (m_sysMonitorCheck) m_sysMonitorCheck->setText(tm->get("pet.sysMonitor", "System Status"));
+    if (m_sysMonitorHint) m_sysMonitorHint->setText(
+        tm->get("pet.sysMonitorHint",
+                "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low."));
     // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
     if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":");
     if (m_triggerCombo) {
@@ -518,6 +533,9 @@ void SettingsPetTab::refreshStyles() {
     if (m_pomodoroCheck) m_pomodoroCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_idleSleepCheck) m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_sysMonitorCheck) m_sysMonitorCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    // 说明标签：次要文字色（全局 QSS 的 QLabel 颜色需用 setStyleSheet 覆盖）
+    if (m_sysMonitorHint) m_sysMonitorHint->setStyleSheet(
+        QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));
     // SpinBox 样式与样式选项卡一致：复用输入框（ComboBox）主题样式
     if (m_pomodoroWorkSpin) m_pomodoroWorkSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_pomodoroBreakSpin) m_pomodoroBreakSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());

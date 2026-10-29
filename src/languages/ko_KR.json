@@ -190,6 +190,7 @@
   "pet.idleSleep": "졸기",
   "pet.idleSleep.after": "조작 없음",
   "pet.sysMonitor": "시스템 상태",
+  "pet.sysMonitorHint": "CPU/메모리 사용량이 높으면 펫이 땀을 흘리고, 배터리가 부족하면 배터리 아이콘을 표시합니다",
   "pet.basicGroup": "기본",
   "pet.behaviorGroup": "동작",
   "pet.trigger.hotEdge": "마우스를 화면 상단 가장자리로 이동",
