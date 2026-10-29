@@ -298,6 +298,14 @@ void SettingsPetTab::setupUi() {
     idleSleepRow->addWidget(m_idleSleepSpin);
     idleSleepRow->addStretch();
 
+    // 系统状态：CPU/内存过载时宠物冒汗、低电量时显示电池角标（5s 轮询）
+    m_sysMonitorCheck = new QCheckBox(tm->get("pet.sysMonitor", "System Status"), m_behaviorGroup);
+    m_sysMonitorCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    m_sysMonitorCheck->setChecked(DesktopPetManager::instance()->sysMonitorEnabled());
+    connect(m_sysMonitorCheck, &QCheckBox::toggled, this, [](bool checked) {
+        DesktopPetManager::instance()->setSysMonitorEnabled(checked);
+    });
+
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_behaviorGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
     m_btnResetPos->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
@@ -317,6 +325,7 @@ void SettingsPetTab::setupUi() {
     behaviorLayout->addWidget(m_todoReminderCheck);
     behaviorLayout->addLayout(pomodoroRow);
     behaviorLayout->addLayout(idleSleepRow);
+    behaviorLayout->addWidget(m_sysMonitorCheck);
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
 
@@ -471,6 +480,7 @@ void SettingsPetTab::retranslateUi() {
     if (m_idleSleepCheck) m_idleSleepCheck->setText(tm->get("pet.idleSleep", "Idle Doze"));
     if (m_idleSleepAfterLabel) m_idleSleepAfterLabel->setText(tm->get("pet.idleSleep.after", "After"));
     if (m_idleSleepSpin) m_idleSleepSpin->setSuffix(minuteSuffix);
+    if (m_sysMonitorCheck) m_sysMonitorCheck->setText(tm->get("pet.sysMonitor", "System Status"));
     // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
     if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":");
     if (m_triggerCombo) {
@@ -507,6 +517,7 @@ void SettingsPetTab::refreshStyles() {
     if (m_todoReminderCheck) m_todoReminderCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_pomodoroCheck) m_pomodoroCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_idleSleepCheck) m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_sysMonitorCheck) m_sysMonitorCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     // SpinBox 样式与样式选项卡一致：复用输入框（ComboBox）主题样式
     if (m_pomodoroWorkSpin) m_pomodoroWorkSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_pomodoroBreakSpin) m_pomodoroBreakSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());

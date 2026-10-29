@@ -161,6 +161,8 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         // 待机打盹：开关 + 无互动进入打盹的分钟数
         { "pet/idleSleepEnabled", true },
         { "pet/idleSleepMin", 5 },
+        // 系统状态：CPU/内存过载冒汗、低电量提醒开关
+        { "pet/sysMonitorEnabled", false },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },

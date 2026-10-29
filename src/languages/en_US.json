@@ -189,6 +189,7 @@
   "pet.pomodoro.resume": "Resume work",
   "pet.idleSleep": "Idle Doze",
   "pet.idleSleep.after": "After",
+  "pet.sysMonitor": "System Status",
   "pet.basicGroup": "Basic",
   "pet.behaviorGroup": "Behavior",
   "pet.trigger.hotEdge": "Move mouse to top edge of screen",

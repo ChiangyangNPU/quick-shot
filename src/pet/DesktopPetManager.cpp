@@ -5,6 +5,7 @@
 #include "PetBadgeWidget.h"
 #include "PomodoroCard.h"
 #include "PetStateMachine.h"
+#include "PetSystemMonitor.h"
 #include "FlyAnimationWidget.h"
 #include "ClotheslineWindow.h"
 #include "PetUiScale.h"
@@ -119,6 +120,10 @@ void DesktopPetManager::setEnabled(bool enabled) {
         if (m_stateMachine) {
             m_stateMachine->stop();
         }
+        // 系统状态采集随宠物一起停止
+        if (m_sysMonitor) {
+            m_sysMonitor->stop();
+        }
     }
     LOG_INFO(QString("DesktopPetManager: pet %1").arg(enabled ? "enabled" : "disabled"));
     emit enabledChanged(enabled);
@@ -215,6 +220,31 @@ void DesktopPetManager::createPetWindow() {
         }
     });
     m_stateMachine->start();
+
+    // 系统状态：CPU/内存过载时宠物冒汗、低电量时显示电池角标（5s 轮询）
+    if (!m_sysMonitor) {
+        m_sysMonitor = new PetSystemMonitor(this);
+        connect(m_sysMonitor, &PetSystemMonitor::alertChanged, this,
+                [this](PetSystemMonitor::Alert alert) {
+            if (!m_petWindow) {
+                return;
+            }
+            switch (alert) {
+            case PetSystemMonitor::Alert::Overload:
+                m_petWindow->setSysAlert(PetWindow::SysAlert::Overload);
+                break;
+            case PetSystemMonitor::Alert::LowBattery:
+                m_petWindow->setSysAlert(PetWindow::SysAlert::LowBattery);
+                break;
+            default:
+                m_petWindow->setSysAlert(PetWindow::SysAlert::None);
+                break;
+            }
+        });
+    }
+    if (sysMonitorEnabled()) {
+        m_sysMonitor->start();
+    }
 
     m_petWindow->show();
     m_petWindow->raise();
@@ -791,6 +821,35 @@ void DesktopPetManager::setIdleSleepMinutes(int minutes) {
     if (m_stateMachine) {
         m_stateMachine->setIdleMinutes(clamped);
     }
+}
+
+/**
+ * @brief 获取系统状态提醒是否开启
+ * @author chiangyang
+ */
+bool DesktopPetManager::sysMonitorEnabled() const {
+    return ConfigManager::instance()->value("pet/sysMonitorEnabled", false).toBool();
+}
+
+/**
+ * @brief 设置系统状态提醒开关（即时生效并持久化，关闭时清除宠物角标）
+ * @author chiangyang
+ */
+void DesktopPetManager::setSysMonitorEnabled(bool enabled) {
+    if (sysMonitorEnabled() == enabled) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/sysMonitorEnabled", enabled);
+    ConfigManager::instance()->sync();
+    // stop 会在告警中先发出 None 让角标清除；无需单独处理
+    if (m_sysMonitor) {
+        if (enabled && m_enabled) {
+            m_sysMonitor->start();
+        } else {
+            m_sysMonitor->stop();
+        }
+    }
+    LOG_INFO(QString("DesktopPetManager: sys monitor %1").arg(enabled ? "enabled" : "disabled"));
 }
 
 /**

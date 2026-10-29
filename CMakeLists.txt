@@ -284,6 +284,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/PomodoroCard.h
         src/pet/PetStateMachine.cpp
         src/pet/PetStateMachine.h
+        src/pet/PetSystemMonitor.cpp
+        src/pet/PetSystemMonitor.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp
@@ -420,7 +422,8 @@ if (APPLE)
     find_library(CORE_VIDEO CoreVideo)
     find_library(CORE_MEDIA CoreMedia)
     find_library(QUARTZ_CORE QuartzCore)
-    target_link_libraries(QuickShot ${SCREEN_CAPTURE_KIT} ${APP_KIT} ${CORE_FOUNDATION} ${CORE_GRAPHICS} ${CARBON} ${AV_FOUNDATION} ${CORE_VIDEO} ${CORE_MEDIA} ${QUARTZ_CORE} ${SECURITY_KIT})
+    find_library(IO_KIT IOKit)
+    target_link_libraries(QuickShot ${SCREEN_CAPTURE_KIT} ${APP_KIT} ${CORE_FOUNDATION} ${CORE_GRAPHICS} ${CARBON} ${AV_FOUNDATION} ${CORE_VIDEO} ${CORE_MEDIA} ${QUARTZ_CORE} ${SECURITY_KIT} ${IO_KIT})
 endif()
 
 # 拷贝 models 目录到构建输出目录

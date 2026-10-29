@@ -70,6 +70,16 @@ public:
     static constexpr int petStyleCount() { return 16; }
 
     /**
+     * @brief 系统状态角标（阶段三）：叠加在宠物左侧的小图标
+     * @author chiangyang
+     */
+    enum class SysAlert {
+        None,      ///< 无
+        Overload,  ///< CPU/内存过载（冒汗）
+        LowBattery ///< 低电量（电池图标）
+    };
+
+    /**
      * @brief 构造函数
      * @param parent 父对象（顶层窗口传 nullptr）
      * @author chiangyang
@@ -181,6 +191,20 @@ public:
      */
     bool isSleeping() const { return m_sleeping; }
 
+    /**
+     * @brief 设置系统状态角标（None 清除；内置造型与自定义素材通用叠加）
+     * @param alert 角标类型
+     * @author chiangyang
+     */
+    void setSysAlert(SysAlert alert);
+
+    /**
+     * @brief 当前系统状态角标
+     * @return 角标类型
+     * @author chiangyang
+     */
+    SysAlert sysAlert() const { return m_sysAlert; }
+
     qreal mouthOpen() const { return m_mouthOpen; }
     void setMouthOpen(qreal v);
 
@@ -263,6 +287,13 @@ private:
     QRectF customTargetRect() const;
 
     /**
+     * @brief 绘制系统状态角标（宠物左侧：过载冒汗 / 低电量电池）
+     * @param p 画笔（已按 96 基准坐标系缩放）
+     * @author chiangyang
+     */
+    void paintSysAlert(QPainter &p);
+
+    /**
      * @brief 调度下一次眨眼（随机 2.4~5 秒；星星闪烁期间自动跳过）
      * @author chiangyang
      */
@@ -285,6 +316,7 @@ private:
     QPointer<QAbstractAnimation> m_grabAnim;  ///< 按压/松手的挤压回弹动画
     QPoint m_sleepOrigin;                     ///< 进入打盹时的窗口位置（唤醒后回位）
     bool m_sleeping = false;                  ///< 是否处于待机打盹状态
+    SysAlert m_sysAlert = SysAlert::None;     ///< 系统状态角标（过载冒汗 / 低电量电池）
 
     QString m_customPath;           ///< 自定义素材路径（空表示使用内置造型）
     QPixmap m_customImage;          ///< 自定义静态素材图像（GIF 模式为空）

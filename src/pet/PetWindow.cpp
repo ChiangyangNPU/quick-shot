@@ -1,4 +1,5 @@
 #include "PetWindow.h"
+#include "PetTheme.h"
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
 
@@ -1004,6 +1005,64 @@ void PetWindow::setSleeping(bool on) {
 }
 
 /**
+ * @brief 设置系统状态角标
+ * @author chiangyang
+ */
+void PetWindow::setSysAlert(SysAlert alert) {
+    if (m_sysAlert == alert) {
+        return;
+    }
+    m_sysAlert = alert;
+    update();
+}
+
+/**
+ * @brief 绘制系统状态角标（96 基准坐标系；宠物左侧、耳朵下方，避开尾巴与角）
+ * @author chiangyang
+ */
+void PetWindow::paintSysAlert(QPainter &p) {
+    if (m_sysAlert == SysAlert::None) {
+        return;
+    }
+    const bool dark = PetTheme::isDark();
+    p.save();
+    if (m_sysAlert == SysAlert::Overload) {
+        // 汗滴：底部圆 + 顶部尖角，填充走主题强调色
+        const QColor fill = PetTheme::accentColor(dark);
+        const QColor outline = dark ? fill.lighter(140) : fill.darker(125);
+        QPainterPath drop;
+        drop.addEllipse(QRectF(6.0, 32.0, 10.0, 10.0));
+        QPainterPath tip;
+        tip.moveTo(11.0, 23.0);
+        tip.lineTo(15.4, 35.0);
+        tip.lineTo(6.6, 35.0);
+        tip.closeSubpath();
+        drop = drop.united(tip);
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(fill);
+        p.drawPath(drop);
+        // 高光
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 255, 255, dark ? 90 : 170));
+        p.drawEllipse(QRectF(8.2, 34.6, 2.6, 3.6));
+    } else {
+        // 低电量：圆角电池框 + 正极头 + 红色低量填充
+        const QColor outline = PetTheme::textColor(dark);
+        const QRectF body(3.0, 30.0, 16.0, 9.0);
+        p.setPen(QPen(outline, 1.4));
+        p.setBrush(Qt::NoBrush);
+        p.drawRoundedRect(body, 2.2, 2.2);
+        p.setPen(Qt::NoPen);
+        p.setBrush(outline);
+        p.drawRoundedRect(QRectF(body.right() + 0.8, body.center().y() - 1.7, 2.2, 3.4), 0.9, 0.9);
+        p.setBrush(PetTheme::overdueColor(dark));
+        p.drawRoundedRect(QRectF(body.left() + 1.8, body.top() + 1.8, 3.4, body.height() - 3.6),
+                          1.0, 1.0);
+    }
+    p.restore();
+}
+
+/**
  * @brief 设置嘴张开程度
  * @author chiangyang
  */
@@ -1151,10 +1210,11 @@ void PetWindow::paintEvent(QPaintEvent *event) {
     // 自定义素材：直接绘制图片/GIF 当前帧，替代内置造型
     if (isCustomActive()) {
         paintCustomPet(p);
-        return;
+    } else {
+        paintPetBody(p, m_style, m_mouthOpen, m_chewScale, m_eyesClosed, m_starProgress);
     }
-
-    paintPetBody(p, m_style, m_mouthOpen, m_chewScale, m_eyesClosed, m_starProgress);
+    // 系统状态角标：内置造型与自定义素材通用叠加
+    paintSysAlert(p);
 }
 
 /**

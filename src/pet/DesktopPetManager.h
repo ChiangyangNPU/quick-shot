@@ -15,6 +15,7 @@ class PetReminder;
 class PetBadgeWidget;
 class PomodoroCard;
 class PetStateMachine;
+class PetSystemMonitor;
 class QTimer;
 
 /**
@@ -255,6 +256,20 @@ public:
     void setIdleSleepMinutes(int minutes);
 
     /**
+     * @brief 获取系统状态提醒是否开启（持久化于 pet/sysMonitorEnabled，默认关）
+     * @return 是否开启
+     * @author chiangyang
+     */
+    bool sysMonitorEnabled() const;
+
+    /**
+     * @brief 设置系统状态提醒开关（即时生效并持久化，关闭时清除宠物角标）
+     * @param enabled 是否开启
+     * @author chiangyang
+     */
+    void setSysMonitorEnabled(bool enabled);
+
+    /**
      * @brief 晾衣绳触发方式（位标志，持久化于 pet/clotheslineTrigger）
      * @author chiangyang
      */
@@ -398,6 +413,7 @@ private:
     PetReminder *m_reminder = nullptr;      ///< 提醒源（待办轮询 + 番茄钟计时，宠物开启期间运行）
     QPointer<PomodoroCard> m_pomodoroCard;  ///< 番茄钟提示卡（未弹出时为 nullptr）
     PetStateMachine *m_stateMachine = nullptr; ///< 状态机（待机打盹调度，宠物开启期间运行）
+    PetSystemMonitor *m_sysMonitor = nullptr;  ///< 系统状态采集（过载/低电量提醒，开关开启且宠物开启期间运行）
     QTimer *m_hotEdgeTimer = nullptr;       ///< 主屏顶边热区轮询定时器（宠物开启期间运行）
     bool m_hotEdgeArmed = true;             ///< 光标离开热区后重新武装（边沿触发防反复弹收）
 };

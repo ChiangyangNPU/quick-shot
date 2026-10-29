@@ -46,7 +46,7 @@ DesktopPetManager（单例，已有）
 
 ## 四、阶段拆解
 
-### 阶段一：提醒与效率
+### 阶段一：提醒与效率（已完成）
 
 #### 4.1.1 待办提醒红点
 
@@ -64,7 +64,7 @@ DesktopPetManager（单例，已有）
 - 设置项：行为分组新增「番茄钟」开关（`pet/pomodoroEnabled`，默认关）、
   工作时长（`pet/pomodoroWorkMin`，默认 25）、休息时长（`pet/pomodoroBreakMin`，默认 5）。
 
-### 阶段二：趣味陪伴（变换动画，无新素材）
+### 阶段二：趣味陪伴（变换动画，无新素材）（已完成）
 
 - `PetWindow` 增加 `playJump()` / `playWobble()` / `playBreathing()` 等变换动画方法，
   内部用 `QPropertyAnimation` 驱动 `pos`/`geometry` 或自定义 transform 属性。
@@ -72,13 +72,17 @@ DesktopPetManager（单例，已有）
   （`pet/idleSleepMin`，默认 5）进入 Sleep；鼠标进入宠物区域退出 Sleep。
 - 互动映射：双击 → 弹跳；拖动中 → 周期性轻摇；投喂到达 → 满足抖动（复用 chew 时机）。
 
-### 阶段三：系统状态
+### 阶段三：系统状态（已完成）
 
-- 新增 `PetSystemMonitor`：`#ifdef Q_OS_MAC` 用 `host_statistics` / IOKit，
-  `Q_OS_WIN` 用 `GetSystemTimes` / `GetSystemPowerStatus`，对外只暴露
-  `cpuUsage()` / `memoryUsage()` / `batteryPercent()` 与 `thresholdExceeded` 信号。
-- 轮询间隔 ≥ 5s，避免自身成为性能负担；阈值与开关入设置（`pet/sysMonitorEnabled` 等）。
-- 视觉表现：叠加小图标（汗滴/Zzz）于宠物角落，走 `PetTheme` 配色。
+- 新增 `PetSystemMonitor`：5s 轮询；macOS 用 `host_statistics`（CPU 差分 /
+  活跃+联动+压缩页内存占比）与 IOKit `IOPSCopyPowerSourcesInfo`（内置电池），
+  Windows 用 `GetSystemTimes` / `GlobalMemoryStatusEx` / `GetSystemPowerStatus`。
+- 阈值内置为常量：CPU 或内存 > 85% → 过载；电量 < 20% 且未充电 → 低电量
+  （低电量优先于过载，且一次会话只提示一次）。设置页仅一个开关
+  （`pet/sysMonitorEnabled`，默认关）。
+- 视觉表现：`PetWindow` 左侧叠加角标（过载冒汗 / 低电量电池，96 基准坐标系自绘，
+  内置造型与自定义素材通用），配色取 `PetTheme`（汗滴走强调色，电池描边走文字色、
+  低量填充走逾期色，深浅色自适应）。
 
 ## 五、持久化键一览（ConfigManager/QSettings）
 

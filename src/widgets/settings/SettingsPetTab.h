@@ -108,6 +108,7 @@ private:
     QCheckBox *m_idleSleepCheck;        ///< 待机打盹复选框（无互动时宠物呼吸浮动）
     QLabel *m_idleSleepAfterLabel;      ///< 待机打盹"无互动"标签
     QSpinBox *m_idleSleepSpin;          ///< 无互动进入打盹的分钟数
+    QCheckBox *m_sysMonitorCheck;       ///< 系统状态复选框（过载冒汗/低电量电池角标）
     QLabel *m_descLabel;                ///< 功能说明标签
 
     QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组

@@ -189,6 +189,7 @@
   "pet.pomodoro.resume": "作業を再開",
   "pet.idleSleep": "居眠り",
   "pet.idleSleep.after": "操作なし",
+  "pet.sysMonitor": "システム状態",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "動作",
   "pet.trigger.hotEdge": "マウスを画面の上端に移動",

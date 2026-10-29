@@ -189,6 +189,7 @@
   "pet.pomodoro.resume": "繼續工作",
   "pet.idleSleep": "待機打盹",
   "pet.idleSleep.after": "無互動",
+  "pet.sysMonitor": "系統狀態",
   "pet.basicGroup": "基本",
   "pet.behaviorGroup": "行為",
   "pet.trigger.hotEdge": "滑鼠移到螢幕上邊界",
