@@ -56,6 +56,9 @@ void PetSystemMonitor::stop() {
         m_alert = Alert::None;
         emit alertChanged(m_alert);
     }
+    // 重新武装低电量提示：stop/start 对应"关闭再打开系统状态监控"或宠物
+    // 开关循环，用户预期是重新开始监控后低电量能再次提醒
+    m_batteryNotified = false;
 }
 
 /**

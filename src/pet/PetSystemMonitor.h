@@ -117,7 +117,7 @@ private:
     int m_battery = -1;             ///< 最近电量百分比，-1 为无电池/未知
     bool m_charging = false;        ///< 最近充电状态
     Alert m_alert = Alert::None;    ///< 当前告警状态
-    bool m_batteryNotified = false; ///< 低电量是否已提示过（一次会话只提示一次）
+    bool m_batteryNotified = false; ///< 低电量是否已提示过（单次监控会话内只提示一次，stop 时复位）
     quint64 m_prevCpuIdle = 0;      ///< 上次 CPU 空闲 tick（差分采样）
     quint64 m_prevCpuTotal = 0;     ///< 上次 CPU 总 tick（差分采样）
     bool m_hasPrevCpu = false;      ///< 是否已有上次 CPU 快照
