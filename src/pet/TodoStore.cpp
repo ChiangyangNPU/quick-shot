@@ -59,17 +59,25 @@ QString TodoStore::filePath() const {
  * @brief 从磁盘读取并解析待办列表
  * @author chiangyang
  */
-QVector<TodoItem> TodoStore::load() const {
+QVector<TodoItem> TodoStore::load(bool *ok) const {
+    if (ok) *ok = false;
     QVector<TodoItem> items;
     QFile file(filePath());
-    if (!file.open(QFile::ReadOnly)) {
+    if (!file.exists()) {
         // 首次使用尚无数据文件，属于正常情况
+        if (ok) *ok = true;
+        return items;
+    }
+    if (!file.open(QFile::ReadOnly)) {
+        // 文件存在但不可读（权限/占用等）：磁盘状态未知，ok 保持 false
+        LOG_WARNING(QString("TodoStore: cannot open file for reading: %1").arg(filePath()));
         return items;
     }
 
     QJsonParseError error{};
     const QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &error);
     if (error.error != QJsonParseError::NoError || !doc.isObject()) {
+        // JSON 损坏：数据可能仍可手工恢复，禁止后续覆盖写
         LOG_WARNING(QString("TodoStore: invalid json, %1").arg(error.errorString()));
         return items;
     }
@@ -95,6 +103,7 @@ QVector<TodoItem> TodoStore::load() const {
             items.append(item);
         }
     }
+    if (ok) *ok = true;
     return items;
 }
 
@@ -167,7 +176,14 @@ TodoItem TodoStore::add(const QString &title, TodoPriority priority, const QDate
     item.priority = priority;
     item.createdAt = QDateTime::currentDateTime();
 
-    QVector<TodoItem> items = load();
+    bool ok = false;
+    QVector<TodoItem> items = load(&ok);
+    if (!ok) {
+        // 读失败时磁盘状态未知：基于空列表覆盖写回会清空全部存量待办，
+        // 拒绝本次操作（返回无效项，UI 随后的重读不会显示它）
+        LOG_ERROR(QString("TodoStore: add aborted, disk state unknown (load failed)"));
+        return TodoItem();
+    }
     items.append(item);
     save(items);
     LOG_INFO(QString("TodoStore: added todo %1").arg(item.id));
@@ -179,7 +195,13 @@ TodoItem TodoStore::add(const QString &title, TodoPriority priority, const QDate
  * @author chiangyang
  */
 bool TodoStore::update(const TodoItem &item) {
-    QVector<TodoItem> items = load();
+    bool ok = false;
+    QVector<TodoItem> items = load(&ok);
+    if (!ok) {
+        // 磁盘状态未知时拒绝写回（含全部存量），与 add() 同一防护
+        LOG_ERROR(QString("TodoStore: update aborted, disk state unknown (load failed)"));
+        return false;
+    }
     for (TodoItem &existing : items) {
         if (existing.id == item.id) {
             existing = item;
@@ -196,7 +218,9 @@ bool TodoStore::update(const TodoItem &item) {
  * @author chiangyang
  */
 bool TodoStore::setDone(const QString &id, bool done) {
-    QVector<TodoItem> items = load();
+    bool ok = false;
+    QVector<TodoItem> items = load(&ok);
+    if (!ok) return false;
     for (TodoItem &item : items) {
         if (item.id == id) {
             item.done = done;
@@ -212,7 +236,9 @@ bool TodoStore::setDone(const QString &id, bool done) {
  * @author chiangyang
  */
 bool TodoStore::remove(const QString &id) {
-    QVector<TodoItem> items = load();
+    bool ok = false;
+    QVector<TodoItem> items = load(&ok);
+    if (!ok) return false;
     for (int i = 0; i < items.size(); ++i) {
         if (items[i].id == id) {
             items.removeAt(i);

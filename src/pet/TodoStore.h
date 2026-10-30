@@ -115,10 +115,13 @@ private:
 
     /**
      * @brief 从磁盘读取并解析待办列表
-     * @return 待办项列表；文件不存在或格式损坏时返回空列表
+     * @param ok 出参（可为空）：true 表示磁盘状态可信——文件不存在（正常空列表）
+     *           或读取解析成功；false 表示文件存在但不可读或 JSON 损坏，
+     *           此时返回的空列表不代表真实数据，调用方禁止基于它覆盖写回
+     * @return 待办项列表
      * @author chiangyang
      */
-    QVector<TodoItem> load() const;
+    QVector<TodoItem> load(bool *ok = nullptr) const;
 
     /**
      * @brief 将待办列表写入磁盘
