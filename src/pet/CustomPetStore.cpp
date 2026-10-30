@@ -13,6 +13,7 @@
 
 #include "ConfigManager.h"
 #include "Logger.h"
+#include "TranslationManager.h"
 
 namespace {
 
@@ -180,16 +181,19 @@ QString CustomPetStore::filePath(const CustomPet &pet) const {
  * @author chiangyang
  */
 CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) {
-    auto fail = [errorMessage](const QString &message) {
+    // 失败原因直出用户可见文案（拼进设置页已本地化的 MessageBox 模板），
+    // 走 i18n 键 + 英文兜底，避免硬编码英文混进中文弹框
+    auto fail = [errorMessage](const char *key, const char *fallback) {
         if (errorMessage) {
-            *errorMessage = message;
+            *errorMessage = TranslationManager::instance()->get(
+                QString::fromLatin1(key), QString::fromLatin1(fallback));
         }
         return CustomPet();
     };
 
     const QFileInfo source(sourcePath);
     if (!source.exists() || !source.isFile()) {
-        return fail(QStringLiteral("source file not found"));
+        return fail("pet.custom.errNotFound", "Source file not found");
     }
 
     const QString suffix = source.suffix().toLower();
@@ -197,7 +201,7 @@ CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) 
     const bool isStatic = (suffix == QStringLiteral("png") || suffix == QStringLiteral("jpg")
                            || suffix == QStringLiteral("jpeg") || suffix == QStringLiteral("webp"));
     if (!isGif && !isStatic) {
-        return fail(QStringLiteral("unsupported format"));
+        return fail("pet.custom.errFormat", "Unsupported format");
     }
 
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -210,18 +214,18 @@ CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) 
 
     if (isGif) {
         if (source.size() > kMaxGifBytes) {
-            return fail(QStringLiteral("gif too large"));
+            return fail("pet.custom.errGifTooLarge", "GIF file too large");
         }
         // 文件体积不等于帧内存占用：QMovie 全帧缓存下高分辨率帧同样打爆内存，
         // 解码前用文件头核对帧尺寸（size() 只读头不解码像素）
         QImageReader gifReader(source.absoluteFilePath());
         const QSize frame = gifReader.size();
         if (frame.isValid() && qMax(frame.width(), frame.height()) > kMaxGifEdge) {
-            return fail(QStringLiteral("gif frame too large"));
+            return fail("pet.custom.errGifFrameTooLarge", "GIF frame too large");
         }
         pet.fileName = id + QStringLiteral(".gif");
         if (!QFile::copy(source.absoluteFilePath(), QDir(dir).filePath(pet.fileName))) {
-            return fail(QStringLiteral("copy failed"));
+            return fail("pet.custom.errCopy", "Failed to copy file");
         }
     } else {
         // 先读文件头判定尺寸，再决定解码方式：直接 QImage(path) 会把亿级像素
@@ -231,7 +235,7 @@ CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) 
         if (header.isValid()) {
             const int longest = qMax(header.width(), header.height());
             if (longest > kMaxDecodeEdge) {
-                return fail(QStringLiteral("image too large"));
+                return fail("pet.custom.errImageTooLarge", "Image too large");
             }
             if (longest > kMaxStaticEdge) {
                 // 解码前声明目标尺寸：JPEG 原生支持读取时降采样，避免整张解码
@@ -241,7 +245,7 @@ CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) 
         }
         QImage image = reader.read();
         if (image.isNull()) {
-            return fail(QStringLiteral("image decode failed"));
+            return fail("pet.custom.errDecode", "Image decode failed");
         }
         const int longest = qMax(image.width(), image.height());
         if (longest > kMaxStaticEdge) {
@@ -251,7 +255,7 @@ CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) 
         }
         pet.fileName = id + QStringLiteral(".png");
         if (!image.save(QDir(dir).filePath(pet.fileName), "PNG")) {
-            return fail(QStringLiteral("save failed"));
+            return fail("pet.custom.errSave", "Failed to save image");
         }
     }
 
