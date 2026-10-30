@@ -10,6 +10,8 @@ namespace {
 // 待办提醒轮询间隔：30s。待办窗口内增删改后调用方会触发 evaluate() 立即重估，
 // 轮询只兜底"跨天/外部改动 todos.json"等低频场景，无需高频
 constexpr int kReminderPollMs = 30 * 1000;
+// 番茄钟阶段检查 tick：到点判定精确到 5s 足够（结束才弹卡，无倒计时 UI）
+constexpr int kPomodoroTickMs = 5 * 1000;
 }
 
 /**
@@ -23,10 +25,17 @@ PetReminder::PetReminder(QObject *parent)
     m_timer->setInterval(kReminderPollMs);
     connect(m_timer, &QTimer::timeout, this, &PetReminder::evaluate);
 
-    // 番茄钟：单发计时器，按当前阶段（工作/休息）分别发出对应信号
+    // 番茄钟：周期 tick 对照墙钟截止点。不用单发 QTimer 计满时长——它在系统
+    // 休眠期间暂停，唤醒后剩余时长继续走，跨休眠的 25 分钟阶段会延迟数小时；
+    // 墙钟在休眠中照常推进，唤醒后首个 tick 即按截止点判定到点
     m_pomodoroTimer = new QTimer(this);
-    m_pomodoroTimer->setSingleShot(true);
+    m_pomodoroTimer->setInterval(kPomodoroTickMs);
     connect(m_pomodoroTimer, &QTimer::timeout, this, [this]() {
+        if (!m_phaseDeadline.isValid() || QDateTime::currentDateTime() < m_phaseDeadline) {
+            return; // 未到墙钟截止点（含休眠唤醒后的补偿检查）
+        }
+        m_pomodoroTimer->stop();
+        m_phaseDeadline = QDateTime();
         if (m_pomodoroOnBreak) {
             LOG_INFO("PetReminder: pomodoro break finished");
             emit pomodoroBreakFinished();
@@ -69,6 +78,7 @@ void PetReminder::startPomodoro() {
  */
 void PetReminder::stopPomodoro() {
     m_pomodoroTimer->stop();
+    m_phaseDeadline = QDateTime();
     m_pomodoroOnBreak = false;
 }
 
@@ -79,7 +89,7 @@ void PetReminder::stopPomodoro() {
 void PetReminder::takePomodoroBreak() {
     const int breakMin = ConfigManager::instance()->value("pet/pomodoroBreakMin", 5).toInt();
     m_pomodoroOnBreak = true;
-    m_pomodoroTimer->start(qBound(1, breakMin, 120) * 60 * 1000);
+    armPhase(qBound(1, breakMin, 120));
 }
 
 /**
@@ -105,7 +115,16 @@ void PetReminder::resumePomodoroWork() {
 void PetReminder::startWorkPhase() {
     const int workMin = ConfigManager::instance()->value("pet/pomodoroWorkMin", 25).toInt();
     m_pomodoroOnBreak = false;
-    m_pomodoroTimer->start(qBound(5, workMin, 180) * 60 * 1000);
+    armPhase(qBound(5, workMin, 180));
+}
+
+/**
+ * @brief 以墙钟锚定当前阶段：记录截止点并启动周期 tick
+ * @author chiangyang
+ */
+void PetReminder::armPhase(int minutes) {
+    m_phaseDeadline = QDateTime::currentDateTime().addSecs(minutes * 60);
+    m_pomodoroTimer->start();
 }
 
 /**

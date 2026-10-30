@@ -2,6 +2,7 @@
 #define PETREMINDER_H
 
 #include <QObject>
+#include <QDateTime>
 
 class QTimer;
 
@@ -117,12 +118,20 @@ private:
      */
     void startWorkPhase();
 
+    /**
+     * @brief 以墙钟锚定当前阶段：记录截止点并启动周期 tick
+     * @param minutes 阶段时长（分钟，调用方已 qBound）
+     * @author chiangyang
+     */
+    void armPhase(int minutes);
+
     QTimer *m_timer = nullptr; ///< 待办轮询定时器
     int m_overdue = 0;         ///< 最近一次统计的逾期数量
     int m_dueToday = 0;        ///< 最近一次统计的今天到期数量
 
-    QTimer *m_pomodoroTimer = nullptr; ///< 番茄钟单发计时器（工作/休息共用）
-    bool m_pomodoroOnBreak = false;    ///< 当前是否处于休息阶段
+    QTimer *m_pomodoroTimer = nullptr;   ///< 番茄钟周期 tick（5s），对照墙钟截止点判断阶段结束
+    QDateTime m_phaseDeadline;           ///< 当前阶段的墙钟截止点（休眠补偿：按墙钟而非定时器时长）
+    bool m_pomodoroOnBreak = false;      ///< 当前是否处于休息阶段
 };
 
 #endif // PETREMINDER_H
