@@ -90,12 +90,17 @@ void DesktopPetManager::setEnabled(bool enabled) {
         startHotEdgeWatch();
     } else {
         stopHotEdgeWatch();
+        // 三个窗口均为用时新建（createPetWindow/showClothesline/番茄钟触发处），
+        // 关闭后统一 deleteLater 销毁：PetWindow 自带永不停止的眨眼定时器链与
+        // QMovie 全帧缓存，只 close 不销毁会在反复开关中累积泄漏
         if (m_clothesline) {
             m_clothesline->close();
+            m_clothesline->deleteLater();
             m_clothesline = nullptr;
         }
         if (m_petWindow) {
             m_petWindow->close();
+            m_petWindow->deleteLater();
             m_petWindow = nullptr;
         }
         // 待办清单随宠物一起关闭（宠物关闭后无法再次打开它）
@@ -113,9 +118,12 @@ void DesktopPetManager::setEnabled(bool enabled) {
             m_todoBadge->deleteLater();
             m_todoBadge = nullptr;
         }
-        // 番茄钟提示卡随宠物一起收起（计时已由 m_reminder->stop() 停止）
+        // 番茄钟提示卡随宠物一起收起（计时已由 m_reminder->stop() 停止）；
+        // hide 不发 close 信号、不打断 dismissing 流程，销毁走 deleteLater
         if (m_pomodoroCard) {
             m_pomodoroCard->hide();
+            m_pomodoroCard->deleteLater();
+            m_pomodoroCard = nullptr;
         }
         // 待机打盹检测随宠物一起停止（stop 会先唤醒打盹中的宠物）
         if (m_stateMachine) {
