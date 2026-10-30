@@ -172,6 +172,15 @@ public:
     void refreshTodoWindowStyle();
 
     /**
+     * @brief 主题切换后重绘宠物本体与待办角标（颜色在 paint 时按 PetTheme 求值）
+     *
+     * 两者不订阅任何主题信号，不显式 update 的话 PetWindow 要等眨眼定时器
+     * 顺带重绘、角标要等下一次 reminderChanged 才换色。
+     * @author chiangyang
+     */
+    void refreshTheme();
+
+    /**
      * @brief 获取待办红点提醒是否开启（持久化于 pet/todoReminder，默认开）
      * @return 是否开启
      * @author chiangyang

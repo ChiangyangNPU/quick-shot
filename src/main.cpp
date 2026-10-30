@@ -232,6 +232,10 @@ int main(int argc, char *argv[]) {
         QObject::connect(settingsWindow, &SettingsWindow::tabWidgetBgColorChanged,
                          DesktopPetManager::instance(),
                          &DesktopPetManager::refreshTodoWindowStyle);
+        // 主题切换时重绘宠物本体与待办角标（颜色在 paint 时按 PetTheme 求值）
+        QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
+                         DesktopPetManager::instance(),
+                         &DesktopPetManager::refreshTheme);
         // 托盘菜单样式在创建时一次性设置，主题切换后需重设
         QObject::connect(settingsWindow, &SettingsWindow::themeChanged,
                          trayMenu, [trayMenu]() {

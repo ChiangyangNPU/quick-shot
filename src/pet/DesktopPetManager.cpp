@@ -659,6 +659,19 @@ void DesktopPetManager::refreshTodoWindowStyle() {
 }
 
 /**
+ * @brief 主题切换后重绘宠物本体与待办角标
+ * @author chiangyang
+ */
+void DesktopPetManager::refreshTheme() {
+    if (m_petWindow) {
+        m_petWindow->update();
+    }
+    if (m_todoBadge) {
+        m_todoBadge->update();
+    }
+}
+
+/**
  * @brief 获取晾衣绳触发方式
  * @author chiangyang
  */
