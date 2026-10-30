@@ -4,6 +4,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QImage>
+#include <QImageReader>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -16,6 +17,8 @@
 namespace {
 
 constexpr int kMaxStaticEdge = 1024;                 ///< 静态图入库最长边上限
+constexpr int kMaxDecodeEdge = 8192;                 ///< 解码前文件头尺寸上限（超过直接拒绝）
+constexpr int kMaxGifEdge = 1024;                    ///< GIF 帧最长边上限
 constexpr qint64 kMaxGifBytes = 20 * 1024 * 1024;    ///< GIF 入库体积上限
 constexpr char kPetsConfigKey[] = "pet/customPets";  ///< 自定义列表配置键
 constexpr char kSelectionKey[] = "pet/selection";    ///< 当前选择配置键
@@ -209,17 +212,40 @@ CustomPet CustomPetStore::add(const QString &sourcePath, QString *errorMessage) 
         if (source.size() > kMaxGifBytes) {
             return fail(QStringLiteral("gif too large"));
         }
+        // 文件体积不等于帧内存占用：QMovie 全帧缓存下高分辨率帧同样打爆内存，
+        // 解码前用文件头核对帧尺寸（size() 只读头不解码像素）
+        QImageReader gifReader(source.absoluteFilePath());
+        const QSize frame = gifReader.size();
+        if (frame.isValid() && qMax(frame.width(), frame.height()) > kMaxGifEdge) {
+            return fail(QStringLiteral("gif frame too large"));
+        }
         pet.fileName = id + QStringLiteral(".gif");
         if (!QFile::copy(source.absoluteFilePath(), QDir(dir).filePath(pet.fileName))) {
             return fail(QStringLiteral("copy failed"));
         }
     } else {
-        QImage image(source.absoluteFilePath());
+        // 先读文件头判定尺寸，再决定解码方式：直接 QImage(path) 会把亿级像素
+        // 原图整张解码进内存才检查上限
+        QImageReader reader(source.absoluteFilePath());
+        const QSize header = reader.size();
+        if (header.isValid()) {
+            const int longest = qMax(header.width(), header.height());
+            if (longest > kMaxDecodeEdge) {
+                return fail(QStringLiteral("image too large"));
+            }
+            if (longest > kMaxStaticEdge) {
+                // 解码前声明目标尺寸：JPEG 原生支持读取时降采样，避免整张解码
+                reader.setScaledSize(header.scaled(kMaxStaticEdge, kMaxStaticEdge,
+                                                   Qt::KeepAspectRatio));
+            }
+        }
+        QImage image = reader.read();
         if (image.isNull()) {
             return fail(QStringLiteral("image decode failed"));
         }
         const int longest = qMax(image.width(), image.height());
         if (longest > kMaxStaticEdge) {
+            // 格式不支持读取时缩放的兜底（Qt 对不支持的 setScaledSize 会忽略）
             image = image.scaled(kMaxStaticEdge, kMaxStaticEdge, Qt::KeepAspectRatio,
                                  Qt::SmoothTransformation);
         }
