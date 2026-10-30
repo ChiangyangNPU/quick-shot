@@ -3,6 +3,7 @@
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
 
+#include <QApplication>
 #include <QPainter>
 #include <QPainterPath>
 #include <QMouseEvent>
@@ -756,6 +757,14 @@ PetWindow::PetWindow(QWidget *parent)
     setFixedSize(petSize(), petSize());
     setCursor(Qt::OpenHandCursor);
 
+    // 单击防抖：单击（切晾衣绳）与双击（摸头弹跳）共用左键，第一下 release
+    // 延后一个双击窗口期再发 clicked，期间来 doubleClicked 则取消——否则
+    // 双击摸头必然附带一次晾衣绳开关
+    m_clickDebounce = new QTimer(this);
+    m_clickDebounce->setSingleShot(true);
+    m_clickDebounce->setInterval(QApplication::doubleClickInterval());
+    connect(m_clickDebounce, &QTimer::timeout, this, [this]() { emit clicked(); });
+
     scheduleBlink();
 
 #ifdef Q_OS_MACOS
@@ -1428,6 +1437,8 @@ void PetWindow::moveEvent(QMoveEvent *event) {
  */
 void PetWindow::mousePressEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
+        // 新交互开始：取消上一发待判定的单击（可能跟着一次拖动）
+        m_clickDebounce->stop();
         m_pressing = true;
         m_dragging = false;
         m_dragOffset = event->pos();
@@ -1481,7 +1492,8 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
         if (m_dragging) {
             emit dragFinished(pos());
         } else {
-            emit clicked();
+            // 延后发 clicked：等双击窗口期结束，双击摸头时不附带切晾衣绳
+            m_clickDebounce->start();
         }
         // 松手回弹：弹性曲线恢复常态挤压系数
         if (!m_sleeping && m_pressing) {
@@ -1508,6 +1520,8 @@ void PetWindow::mouseReleaseEvent(QMouseEvent *event) {
  */
 void PetWindow::mouseDoubleClickEvent(QMouseEvent *event) {
     if (event->button() == Qt::LeftButton) {
+        // 双击确认：取消窗口期内待发的单击，摸头不再附带切晾衣绳
+        m_clickDebounce->stop();
         emit doubleClicked();
         event->accept();
         return;

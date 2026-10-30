@@ -380,6 +380,7 @@ private:
     bool m_dragging = false;        ///< 已判定为拖动（移动距离超阈值）
     QPoint m_dragOffset;            ///< 按下点相对窗口左上角的偏移
     QPoint m_pressGlobalPos;        ///< 按下时的全局坐标（拖动阈值判定用）
+    QTimer *m_clickDebounce = nullptr; ///< 单击防抖定时器：等待双击窗口期，期间来双击则取消
 };
 
 #endif // PETWINDOW_H
