@@ -104,3 +104,114 @@ QString PetTheme::downArrowIcon(bool dark) {
     return dark ? QStringLiteral(":/icons/spinner-down-dark.svg")
                 : QStringLiteral(":/icons/spinner-down.svg");
 }
+
+// ============ 晾衣绳专用色板 ============
+
+/**
+ * @brief 麻绳颜色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::ropeColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(214, 178, 128);
+}
+
+/**
+ * @brief 木衣夹颜色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::pinColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(120, 84, 52);
+}
+
+/**
+ * @brief 卡纸底色（浅纸色，深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::cardColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(250, 250, 250, 235);
+}
+
+/**
+ * @brief 卡纸描边色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::cardBorderColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(255, 255, 255, 60);
+}
+
+/**
+ * @brief 文本卡摘要文字色（浅纸上深字，深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::cardTextColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(60, 60, 66);
+}
+
+/**
+ * @brief 卡片柔和投影色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::cardShadowColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(0, 0, 0, 20);
+}
+
+/**
+ * @brief 最近预览/点击卡片的高亮描边基色（跟随应用强调色）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::cardHighlightColor(bool dark) {
+    return accentColor(dark);
+}
+
+/**
+ * @brief 空历史提示的深色圆角托底色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::tipPanelColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(30, 30, 34, 170);
+}
+
+/**
+ * @brief 空历史提示文字色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::tipTextColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(255, 255, 255, 220);
+}
+
+/**
+ * @brief 关闭按钮常态底色（深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::closeIdleColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(30, 30, 34, 130);
+}
+
+/**
+ * @brief 关闭按钮悬停底色（警示红，深浅主题一致）
+ * @param dark 是否深色主题
+ * @author chiangyang
+ */
+QColor PetTheme::closeHoverColor(bool dark) {
+    Q_UNUSED(dark);
+    return QColor(232, 17, 35, 200);
+}

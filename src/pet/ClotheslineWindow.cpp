@@ -2,6 +2,7 @@
 #include "PetWindow.h"
 #include "CardPreviewPopup.h"
 #include "DesktopPetManager.h"
+#include "PetTheme.h"
 #include "PetUiScale.h"
 #include "../history/HistoryManager.h"
 #include "../history/ClipboardMonitor.h"
@@ -323,6 +324,7 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
+    const bool dark = PetTheme::isDark();
 
     // 无整体底板：绳与卡片直接悬浮在桌面上。窗口仍是整块矩形接收鼠标，
     // 拖动/调整区命中不受绘制上的透明区域影响
@@ -335,9 +337,9 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
         QRect tipRect = p.fontMetrics().boundingRect(tip).adjusted(-sc(14), -sc(8), sc(14), sc(8));
         tipRect.moveCenter(rect().center());
         p.setPen(Qt::NoPen);
-        p.setBrush(QColor(30, 30, 34, 170));
+        p.setBrush(PetTheme::tipPanelColor(dark));
         p.drawRoundedRect(tipRect, 10, 10);
-        p.setPen(QPen(QColor(255, 255, 255, 220)));
+        p.setPen(QPen(PetTheme::tipTextColor(dark)));
         p.drawText(tipRect, Qt::AlignCenter, tip);
     } else {
         // 晾衣绳（悬垂曲线 + 两端木桩感端点）
@@ -347,7 +349,7 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
         QPainterPath rope;
         rope.moveTo(marginX, ropeY);
         rope.quadTo(width() / 2.0, ropeY + sag * 2.0, width() - marginX, ropeY);
-        p.setPen(QPen(QColor(214, 178, 128), 2.5 * m_dpiScale, Qt::SolidLine, Qt::RoundCap));
+        p.setPen(QPen(PetTheme::ropeColor(dark), 2.5 * m_dpiScale, Qt::SolidLine, Qt::RoundCap));
         p.setBrush(Qt::NoBrush);
         p.drawPath(rope);
 
@@ -389,22 +391,22 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
             // 三层由内到外扩散的低透明度圆角矩形叠出渐变边缘）
             p.setPen(Qt::NoPen);
             for (int spread = 3; spread >= 1; --spread) {
-                p.setBrush(QColor(0, 0, 0, 20));
+                p.setBrush(PetTheme::cardShadowColor(dark));
                 p.drawRoundedRect(QRectF(c.rect).adjusted(-spread, -spread + 2, spread, spread + 2),
                                   8 + spread, 8 + spread);
             }
 
             // 衣夹
             p.setPen(Qt::NoPen);
-            p.setBrush(QColor(120, 84, 52));
+            p.setBrush(PetTheme::pinColor(dark));
             p.drawRoundedRect(QRectF(c.anchor.x() - sc(3), c.anchor.y() - sc(2),
                                      sc(6), sc(kPinLen + 4)), 2, 2);
 
             // 卡纸
             QPainterPath cardPath;
             cardPath.addRoundedRect(c.rect, 8, 8);
-            p.setPen(QPen(QColor(255, 255, 255, 60), 1));
-            p.setBrush(QColor(250, 250, 250, 235));
+            p.setPen(QPen(PetTheme::cardBorderColor(dark), 1));
+            p.setBrush(PetTheme::cardColor(dark));
             p.drawPath(cardPath);
 
             const QRectF content = QRectF(c.rect).adjusted(sc(6), sc(6), -sc(6), -sc(6));
@@ -420,7 +422,7 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
                 }
             } else {
                 // 文本卡片：前 3 行摘要
-                p.setPen(QColor(60, 60, 66));
+                p.setPen(PetTheme::cardTextColor(dark));
                 QFont f = p.font();
                 f.setPointSize(8);
                 p.setFont(f);
@@ -435,8 +437,10 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
             // 直至预览/点击其他卡片或历史刷新
             if (i == m_highlightIndex) {
                 const qreal glow = 0.6 + 0.3 * qSin(m_phase * 2.0);
-                p.setPen(QPen(QColor(90, 190, 255, qRound(255 * glow)),
-                              2.5 * m_dpiScale));
+                // 描边基色跟随应用强调色，呼吸亮度由相位调制 alpha
+                QColor glowColor = PetTheme::cardHighlightColor(dark);
+                glowColor.setAlpha(qRound(255 * glow));
+                p.setPen(QPen(glowColor, 2.5 * m_dpiScale));
                 p.setBrush(Qt::NoBrush);
                 p.drawRoundedRect(QRectF(c.rect).adjusted(-2, -2, 2, 2), 10, 10);
             }
@@ -448,7 +452,8 @@ void ClotheslineWindow::paintEvent(QPaintEvent *event) {
     // 右上角关闭按钮（×）：无底板后用深色圆片托底，浅色桌面上也可辨
     const QRect btn = closeButtonRect();
     p.setPen(Qt::NoPen);
-    p.setBrush(m_closeHovered ? QColor(232, 17, 35, 200) : QColor(30, 30, 34, 130));
+    p.setBrush(m_closeHovered ? PetTheme::closeHoverColor(dark)
+                              : PetTheme::closeIdleColor(dark));
     p.drawEllipse(btn);
     p.setPen(QPen(Qt::white, 2 * m_dpiScale, Qt::SolidLine, Qt::RoundCap));
     const QPointF bc = btn.center();

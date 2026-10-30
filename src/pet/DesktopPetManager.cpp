@@ -669,6 +669,10 @@ void DesktopPetManager::refreshTheme() {
     if (m_todoBadge) {
         m_todoBadge->update();
     }
+    // 晾衣绳动画 tick 本就持续重绘，此处保证无卡片的静止帧也即时换色
+    if (m_clothesline) {
+        m_clothesline->update();
+    }
 }
 
 /**

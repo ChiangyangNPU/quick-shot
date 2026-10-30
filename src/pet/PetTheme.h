@@ -100,6 +100,88 @@ public:
      * @author chiangyang
      */
     static QString downArrowIcon(bool dark);
+
+    // ============ 晾衣绳专用色板 ============
+    // 纸卡/麻绳/木夹是物理隐喻：深浅主题下保持同一实物色（浅色纸卡在深色
+    // 桌面上同样成立），深浅分支仅保留在强调/HUD 类颜色上。
+
+    /**
+     * @brief 麻绳颜色（深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor ropeColor(bool dark);
+
+    /**
+     * @brief 木衣夹颜色（深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor pinColor(bool dark);
+
+    /**
+     * @brief 卡纸底色（浅纸色，深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor cardColor(bool dark);
+
+    /**
+     * @brief 卡纸描边色（深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor cardBorderColor(bool dark);
+
+    /**
+     * @brief 文本卡摘要文字色（浅纸上深字，深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor cardTextColor(bool dark);
+
+    /**
+     * @brief 卡片柔和投影色（深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor cardShadowColor(bool dark);
+
+    /**
+     * @brief 最近预览/点击卡片的高亮描边基色（跟随应用强调色；
+     *        呼吸亮度由绘制端按相位调 alpha）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor cardHighlightColor(bool dark);
+
+    /**
+     * @brief 空历史提示的深色圆角托底色（悬浮于任意桌面背景，深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor tipPanelColor(bool dark);
+
+    /**
+     * @brief 空历史提示文字色（深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor tipTextColor(bool dark);
+
+    /**
+     * @brief 关闭按钮常态底色（深色圆片，深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor closeIdleColor(bool dark);
+
+    /**
+     * @brief 关闭按钮悬停底色（警示红，深浅主题一致）
+     * @param dark 是否深色主题
+     * @author chiangyang
+     */
+    static QColor closeHoverColor(bool dark);
 };
 
 #endif // PETTHEME_H
