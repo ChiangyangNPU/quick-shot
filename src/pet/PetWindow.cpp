@@ -1432,17 +1432,21 @@ void PetWindow::mousePressEvent(QMouseEvent *event) {
         m_dragging = false;
         m_dragOffset = event->pos();
         m_pressGlobalPos = event->globalPosition().toPoint();
-        // 按压反馈：轻微挤压（"被抓住"的手感），松手时回弹
-        if (!m_sleeping) {
-            if (m_grabAnim) {
-                m_grabAnim->stop();
-            }
-            auto *press = new QPropertyAnimation(this, "chewScale");
-            press->setDuration(120);
-            press->setEndValue(0.94);
-            m_grabAnim = press;
-            press->start(QAbstractAnimation::DeleteWhenStopped);
+        // 打盹中按下立即唤醒：浮动动画（pos 循环）与拖动的 move() 互相覆写，
+        // 且拖动可能横跨待机重查——先停动画，再经 pressed() 通知状态机重置待机计时
+        if (m_sleeping) {
+            setSleeping(false);
         }
+        emit pressed();
+        // 按压反馈：轻微挤压（"被抓住"的手感），松手时回弹
+        if (m_grabAnim) {
+            m_grabAnim->stop();
+        }
+        auto *press = new QPropertyAnimation(this, "chewScale");
+        press->setDuration(120);
+        press->setEndValue(0.94);
+        m_grabAnim = press;
+        press->start(QAbstractAnimation::DeleteWhenStopped);
     }
     QWidget::mousePressEvent(event);
 }

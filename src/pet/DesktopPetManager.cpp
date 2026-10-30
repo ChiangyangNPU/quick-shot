@@ -213,13 +213,18 @@ void DesktopPetManager::createPetWindow() {
         m_reminder->startPomodoro();
     }
 
-    // 趣味陪伴：待机打盹状态机。点击/双击/拖动/右击/悬停均视为互动（唤醒并重置计时）
+    // 趣味陪伴：待机打盹状态机
     if (!m_stateMachine) {
         m_stateMachine = new PetStateMachine(this);
     }
     m_stateMachine->setPet(m_petWindow);
     m_stateMachine->setIdleEnabled(idleSleepEnabled());
     m_stateMachine->setIdleMinutes(idleSleepMinutes());
+    // 趣味陪伴：待机打盹状态机。按下/点击/双击/拖动/右击/悬停均视为互动（唤醒并重置计时）；
+    // pressed 必须接：悬停唤醒在 enterEvent 已消费时失效，按下是唯一可靠的拖动前唤醒点，
+    // 且要赶在下一个待机重查（15s）之前重置计时，防止拖动中被再次催眠
+    connect(m_petWindow, &PetWindow::pressed,
+            m_stateMachine, &PetStateMachine::noteInteraction);
     connect(m_petWindow, &PetWindow::clicked,
             m_stateMachine, &PetStateMachine::noteInteraction);
     connect(m_petWindow, &PetWindow::dragFinished,

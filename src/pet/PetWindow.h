@@ -291,6 +291,14 @@ signals:
      */
     void hoverEntered();
 
+    /**
+     * @brief 左键按下信号（待机唤醒用：enterEvent 已消费时悬停无法唤醒，
+     *        按下是拖动/点击的起点，必须立即唤醒并重置待机计时，
+     *        防止打盹浮动动画与拖动 move() 互相覆写位置）
+     * @author chiangyang
+     */
+    void pressed();
+
 protected:
     void paintEvent(QPaintEvent *event) override;
     void showEvent(QShowEvent *event) override;
