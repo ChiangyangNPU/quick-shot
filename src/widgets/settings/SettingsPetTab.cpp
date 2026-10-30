@@ -9,6 +9,7 @@
 #include "../MessageBox.h"
 
 #include <QVBoxLayout>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QSpinBox>
@@ -136,6 +137,9 @@ void SettingsPetTab::setupUi() {
     // 第一行：经典样式
     m_classicLabel = new QLabel(tm->get("pet.classicGroup", "Classic"), m_styleGroupBox);
     QHBoxLayout *styleRow = new QHBoxLayout();
+    // 行布局只是分组容器，不应自带额外内边距：清零后与 FlowLayout（显式 0 边距）
+    // 及同级控件的左基线一致
+    styleRow->setContentsMargins(0, 0, 0, 0);
     styleRow->setSpacing(PetUi::scaled(6));
     for (int idx : kClassicStyles) {
         if (idx < m_styleButtons.size()) styleRow->addWidget(m_styleButtons[idx]);
@@ -167,6 +171,7 @@ void SettingsPetTab::setupUi() {
     m_customFlow = new FlowLayout(nullptr, PetUi::scaled(6), PetUi::scaled(6));
 
     QHBoxLayout *customActions = new QHBoxLayout();
+    customActions->setContentsMargins(0, 0, 0, 0);
     customActions->setSpacing(PetUi::scaled(6));
     m_btnAddCustom = new QPushButton(tm->get("pet.addCustom", "Add Image/GIF"), m_customGroup);
     m_btnAddCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
@@ -220,6 +225,7 @@ void SettingsPetTab::setupUi() {
         DesktopPetManager::instance()->setClotheslineTrigger(m_triggerCombo->itemData(index).toInt());
     });
     QHBoxLayout *triggerRow = new QHBoxLayout();
+    triggerRow->setContentsMargins(0, 0, 0, 0);
     triggerRow->addWidget(m_triggerLabel);
     triggerRow->addWidget(m_triggerCombo);
     triggerRow->addStretch();
@@ -264,16 +270,6 @@ void SettingsPetTab::setupUi() {
     connect(m_pomodoroBreakSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) {
         DesktopPetManager::instance()->setPomodoroBreakMinutes(v);
     });
-    QHBoxLayout *pomodoroRow = new QHBoxLayout();
-    pomodoroRow->addWidget(m_pomodoroCheck);
-    pomodoroRow->addSpacing(PetUi::scaled(12));
-    pomodoroRow->addWidget(m_pomodoroWorkLabel);
-    pomodoroRow->addWidget(m_pomodoroWorkSpin);
-    pomodoroRow->addSpacing(PetUi::scaled(8));
-    pomodoroRow->addWidget(m_pomodoroBreakLabel);
-    pomodoroRow->addWidget(m_pomodoroBreakSpin);
-    pomodoroRow->addStretch();
-
     // 待机打盹：开关 + 无互动分钟数（复用分钟后缀），关闭时立即唤醒
     m_idleSleepCheck = new QCheckBox(tm->get("pet.idleSleep", "Idle Doze"), m_behaviorGroup);
     m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
@@ -292,13 +288,6 @@ void SettingsPetTab::setupUi() {
     connect(m_idleSleepSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, [](int v) {
         DesktopPetManager::instance()->setIdleSleepMinutes(v);
     });
-    QHBoxLayout *idleSleepRow = new QHBoxLayout();
-    idleSleepRow->addWidget(m_idleSleepCheck);
-    idleSleepRow->addSpacing(PetUi::scaled(12));
-    idleSleepRow->addWidget(m_idleSleepAfterLabel);
-    idleSleepRow->addWidget(m_idleSleepSpin);
-    idleSleepRow->addStretch();
-
     // 系统状态：CPU/内存过载时宠物冒汗、低电量时显示电池角标（5s 轮询）
     m_sysMonitorCheck = new QCheckBox(tm->get("pet.sysMonitor", "System Status"), m_behaviorGroup);
     m_sysMonitorCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
@@ -332,11 +321,26 @@ void SettingsPetTab::setupUi() {
     // 会随行数正确适配
     m_descLabel->setWordWrap(true);
 
+    // 四个开关行共用同一网格：直接加进 QVBoxLayout 的复选框在可用宽度
+    // 不足时会按 Qt 溢出规则被左移 2px，与行内控件错开；纳入同一网格后
+    // 所有复选框共用第 0 列左基线，横竖严格对齐
+    auto *statusGrid = new QGridLayout();
+    statusGrid->setContentsMargins(0, 0, 0, 0);
+    statusGrid->setHorizontalSpacing(PetUi::scaled(10));
+    statusGrid->addWidget(m_todoReminderCheck, 0, 0, 1, 6);
+    statusGrid->addWidget(m_pomodoroCheck, 1, 0);
+    statusGrid->addWidget(m_pomodoroWorkLabel, 1, 1);
+    statusGrid->addWidget(m_pomodoroWorkSpin, 1, 2);
+    statusGrid->addWidget(m_pomodoroBreakLabel, 1, 3);
+    statusGrid->addWidget(m_pomodoroBreakSpin, 1, 4);
+    statusGrid->addWidget(m_idleSleepCheck, 2, 0);
+    statusGrid->addWidget(m_idleSleepAfterLabel, 2, 1);
+    statusGrid->addWidget(m_idleSleepSpin, 2, 2);
+    statusGrid->addWidget(m_sysMonitorCheck, 3, 0, 1, 6);
+    statusGrid->setColumnStretch(5, 1);
+
     behaviorLayout->addLayout(triggerRow);
-    behaviorLayout->addWidget(m_todoReminderCheck);
-    behaviorLayout->addLayout(pomodoroRow);
-    behaviorLayout->addLayout(idleSleepRow);
-    behaviorLayout->addWidget(m_sysMonitorCheck);
+    behaviorLayout->addLayout(statusGrid);
     behaviorLayout->addWidget(m_sysMonitorHint);
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
