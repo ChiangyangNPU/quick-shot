@@ -82,3 +82,6 @@ update-test/server/*.zip
 update-test/server-mac/server-root/
 
 test/
+
+# 自定义宠物功能的本地调试素材（导入功能的手工测试用图，不入库）
+test-pets/
