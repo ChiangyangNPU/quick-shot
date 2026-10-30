@@ -185,7 +185,10 @@ TodoItem TodoStore::add(const QString &title, TodoPriority priority, const QDate
         return TodoItem();
     }
     items.append(item);
-    save(items);
+    if (!save(items)) {
+        // 写盘失败（磁盘满/目录被删）必须显式留痕，否则静默丢数据
+        LOG_ERROR(QString("TodoStore: save failed, added todo %1 may be lost").arg(item.id));
+    }
     LOG_INFO(QString("TodoStore: added todo %1").arg(item.id));
     return item;
 }
@@ -205,7 +208,10 @@ bool TodoStore::update(const TodoItem &item) {
     for (TodoItem &existing : items) {
         if (existing.id == item.id) {
             existing = item;
-            save(items);
+            if (!save(items)) {
+                // 写盘失败（磁盘满/目录被删）必须显式留痕，否则静默丢数据
+                LOG_ERROR(QString("TodoStore: save failed, change to %1 may be lost").arg(item.id));
+            }
             return true;
         }
     }
@@ -224,7 +230,10 @@ bool TodoStore::setDone(const QString &id, bool done) {
     for (TodoItem &item : items) {
         if (item.id == id) {
             item.done = done;
-            save(items);
+            if (!save(items)) {
+                // 写盘失败（磁盘满/目录被删）必须显式留痕，否则静默丢数据
+                LOG_ERROR(QString("TodoStore: save failed, change to %1 may be lost").arg(item.id));
+            }
             return true;
         }
     }
@@ -242,7 +251,10 @@ bool TodoStore::remove(const QString &id) {
     for (int i = 0; i < items.size(); ++i) {
         if (items[i].id == id) {
             items.removeAt(i);
-            save(items);
+            if (!save(items)) {
+                // 写盘失败（磁盘满/目录被删）必须显式留痕，否则静默丢数据
+                LOG_ERROR(QString("TodoStore: save failed, removal of %1 may be lost").arg(id));
+            }
             LOG_INFO(QString("TodoStore: removed todo %1").arg(id));
             return true;
         }
