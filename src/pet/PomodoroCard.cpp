@@ -19,7 +19,10 @@
 PomodoroCard::PomodoroCard(QWidget *parent)
     : QWidget(parent)
 {
-    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    // StaysOnTop：提醒卡的核心场景是用户在其他应用中工作时弹出，
+    // 不置顶会被前台窗口盖住（宠物本体置顶，卡被盖即"提醒不可见"）
+    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint
+                   | Qt::WindowStaysOnTopHint);
 #ifdef Q_OS_MACOS
     setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
 #endif

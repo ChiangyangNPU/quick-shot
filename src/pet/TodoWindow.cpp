@@ -365,8 +365,10 @@ TodoWindow::TodoWindow(QWidget *parent)
     setWindowTitle(TranslationManager::instance()->get("todo.windowTitle", "Todo List"));
     setWindowIcon(StyleManager::loadAppIcon());
 
-    // 气泡形态：无边框 + 半透明背景，自绘圆角面板与指向宠物的小三角
-    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    // 气泡形态：无边框 + 半透明背景，自绘圆角面板与指向宠物的小三角；
+    // StaysOnTop 与宿主宠物（置顶）保持同层，避免被前台应用窗口盖住
+    setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint
+                   | Qt::WindowStaysOnTopHint);
     setAttribute(Qt::WA_TranslucentBackground, true);
 
     // 尺寸按屏幕 DPI 缩放（与应用其余窗口一致：96 为逻辑基准）
