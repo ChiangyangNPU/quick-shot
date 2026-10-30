@@ -196,13 +196,16 @@ void DesktopPetManager::createPetWindow() {
                 this, [this]() { showPomodoroCard(true); });
         connect(m_reminder, &PetReminder::pomodoroBreakFinished,
                 this, [this]() { showPomodoroCard(false); });
+        // reminderChanged 必须挂在 m_reminder 守卫内（进程内仅创建一次）：
+        // 放在下方 todoBadge 守卫里会随角标销毁重建而重复 connect，
+        // N 次开关宠物后一次提醒触发 N 次角标刷新
+        connect(m_reminder, &PetReminder::reminderChanged,
+                this, [this](int, int) { updateTodoBadge(); });
     }
     if (!m_todoBadge) {
         m_todoBadge = new PetBadgeWidget();
         connect(m_todoBadge, &PetBadgeWidget::clicked,
                 this, &DesktopPetManager::showTodoWindow);
-        connect(m_reminder, &PetReminder::reminderChanged,
-                this, [this](int, int) { updateTodoBadge(); });
         connect(m_petWindow, &PetWindow::moved,
                 this, [this](const QPoint &) { positionTodoBadge(); });
     }
