@@ -80,6 +80,30 @@ public:
     };
 
     /**
+     * @brief 宠物装饰（阶段四）：叠加在宠物绘制层之上的装饰
+     *
+     * 枚举值稳定不变（pet/accessory 按数字持久化），全部用 QPainter 代码绘制，
+     * 内置造型与自定义素材通用。
+     * @author chiangyang
+     */
+    enum class Accessory {
+        None = 0,       ///< 无
+        Flower = 1,     ///< 小红花（头顶偏侧）
+        StrawHat = 2,   ///< 草帽
+        Sunglasses = 3, ///< 墨镜
+        Crown = 4,      ///< 皇冠
+        SantaHat = 5,   ///< 圣诞帽（12-24 ~ 12-25 自动）
+        PumpkinHat = 6, ///< 南瓜帽（10-31 ~ 11-01 自动）
+        PartyHat = 7    ///< 派对帽（元旦 / 生日自动）
+    };
+
+    /**
+     * @brief 装饰总数（设置页遍历用）
+     * @author chiangyang
+     */
+    static constexpr int accessoryCount() { return 8; }
+
+    /**
      * @brief 构造函数
      * @param parent 父对象（顶层窗口传 nullptr）
      * @author chiangyang
@@ -205,6 +229,20 @@ public:
      */
     SysAlert sysAlert() const { return m_sysAlert; }
 
+    /**
+     * @brief 设置宠物装饰（立即重绘；内置造型与自定义素材通用叠加）
+     * @param accessory 装饰类型
+     * @author chiangyang
+     */
+    void setAccessory(Accessory accessory);
+
+    /**
+     * @brief 当前宠物装饰
+     * @return 装饰类型
+     * @author chiangyang
+     */
+    Accessory accessory() const { return m_accessory; }
+
     qreal mouthOpen() const { return m_mouthOpen; }
     void setMouthOpen(qreal v);
 
@@ -294,6 +332,13 @@ private:
     void paintSysAlert(QPainter &p);
 
     /**
+     * @brief 绘制宠物装饰（头顶/眼部锚点叠加，内置造型与自定义素材通用）
+     * @param p 画笔（已按 96 基准坐标系缩放）
+     * @author chiangyang
+     */
+    void paintAccessory(QPainter &p);
+
+    /**
      * @brief 调度下一次眨眼（随机 2.4~5 秒；星星闪烁期间自动跳过）
      * @author chiangyang
      */
@@ -317,6 +362,7 @@ private:
     QPoint m_sleepOrigin;                     ///< 进入打盹时的窗口位置（唤醒后回位）
     bool m_sleeping = false;                  ///< 是否处于待机打盹状态
     SysAlert m_sysAlert = SysAlert::None;     ///< 系统状态角标（过载冒汗 / 低电量电池）
+    Accessory m_accessory = Accessory::None;  ///< 宠物装饰（阶段四）
 
     QString m_customPath;           ///< 自定义素材路径（空表示使用内置造型）
     QPixmap m_customImage;          ///< 自定义静态素材图像（GIF 模式为空）

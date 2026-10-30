@@ -14,6 +14,7 @@
 #include <QScrollArea>
 #include <QSpinBox>
 #include <QFileDialog>
+#include <QDate>
 
 namespace {
 // 自定义宠物按钮在互斥组中的 id 偏移（避免与 PetStyle 枚举值 0~15 冲突）
@@ -45,6 +46,17 @@ constexpr int kClassicStyles[] = {
 // 十二生肖按传统顺序：鼠牛虎兔龙蛇马羊猴鸡狗猪（兔=Bunny、狗=Shiba 复用造型）
 constexpr int kZodiacStyles[] = {
     6, 7, 8, 3, 9, 10, 11, 12, 13, 14, 1, 15
+};
+
+// 装饰名 i18n 键与英文兜底文案（下标对应 PetWindow::Accessory 枚举值）
+constexpr const char *kAccessoryKeys[] = {
+    "pet.accessory.none", "pet.accessory.flower", "pet.accessory.strawHat",
+    "pet.accessory.sunglasses", "pet.accessory.crown", "pet.accessory.santaHat",
+    "pet.accessory.pumpkinHat", "pet.accessory.partyHat"
+};
+constexpr const char *kAccessoryFallbacks[] = {
+    "None", "Red Flower", "Straw Hat", "Sunglasses",
+    "Crown", "Santa Hat", "Pumpkin Hat", "Party Hat"
 };
 }
 
@@ -160,6 +172,29 @@ void SettingsPetTab::setupUi() {
     styleLayout->addLayout(styleRow);
     styleLayout->addWidget(m_zodiacLabel);
     styleLayout->addLayout(zodiacRow);
+
+    // 装饰：手动选择（节日区间内由节日装饰自动覆盖，结束后回落到这里的选择）
+    m_accessoryLabel = new QLabel(tm->get("pet.accessory", "Accessory") + ":", m_styleGroupBox);
+    m_accessoryCombo = new QComboBox(m_styleGroupBox);
+    StyleManager::useHighlightOnlyPopup(m_accessoryCombo);
+    m_accessoryCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    for (int i = 0; i < PetWindow::accessoryCount(); ++i) {
+        m_accessoryCombo->addItem(tm->get(kAccessoryKeys[i], kAccessoryFallbacks[i]), i);
+    }
+    m_accessoryCombo->setCurrentIndex(qMax(
+        0, m_accessoryCombo->findData(int(DesktopPetManager::instance()->accessory()))));
+    connect(m_accessoryCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+        DesktopPetManager::instance()->setAccessory(static_cast<PetWindow::Accessory>(
+            m_accessoryCombo->itemData(index).toInt()));
+    });
+    QHBoxLayout *accessoryRow = new QHBoxLayout();
+    accessoryRow->setContentsMargins(0, 0, 0, 0);
+    accessoryRow->setSpacing(PetUi::scaled(8));
+    accessoryRow->addWidget(m_accessoryLabel);
+    accessoryRow->addWidget(m_accessoryCombo);
+    accessoryRow->addStretch();
+    styleLayout->addLayout(accessoryRow);
 
     // ===== 自定义宠物：缩略图平铺 + 添加/删除 =====
     // 自定义项与内置样式共用 m_styleGroup 保证选择互斥，素材入库到应用数据目录
@@ -295,16 +330,55 @@ void SettingsPetTab::setupUi() {
     connect(m_sysMonitorCheck, &QCheckBox::toggled, this, [](bool checked) {
         DesktopPetManager::instance()->setSysMonitorEnabled(checked);
     });
-    // 行为说明：小号灰字，缩进与复选框文字对齐（颜色在 refreshStyles 随主题刷新，
+    // 行为说明：紧跟「系统状态」复选框右侧的小号灰字（颜色在 refreshStyles 随主题刷新，
     // 全局 QSS 的 QLabel 颜色优先级高于 palette，只能 setStyleSheet 覆盖）
     m_sysMonitorHint = new QLabel(
         tm->get("pet.sysMonitorHint",
                 "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low."),
         m_behaviorGroup);
     m_sysMonitorHint->setWordWrap(true);
-    m_sysMonitorHint->setContentsMargins(PetUi::scaled(24), 0, 0, 0);
+    // 在网格水平间距之外再留一点空隙，避免文字紧贴复选框
+    m_sysMonitorHint->setContentsMargins(PetUi::scaled(6), 0, 0, 0);
+    // 顶部对齐：文案换行成多行时与复选框首行文字对齐，而不是整块垂直居中
+    m_sysMonitorHint->setAlignment(Qt::AlignLeft | Qt::AlignTop);
     m_sysMonitorHint->setStyleSheet(
         QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));
+
+    // 节日彩蛋：圣诞/万圣/元旦/生日当天自动戴对应帽子，区间结束后恢复手动装饰
+    m_festivalCheck = new QCheckBox(tm->get("pet.festival", "Festival Surprise"), m_behaviorGroup);
+    m_festivalCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    m_festivalCheck->setChecked(DesktopPetManager::instance()->festivalEnabled());
+    connect(m_festivalCheck, &QCheckBox::toggled, this, [](bool checked) {
+        DesktopPetManager::instance()->setFestivalEnabled(checked);
+    });
+
+    // 生日：月下拉（第 0 项"不设置"）+ 日 SpinBox，存为 MM-dd，日上限随月份收敛
+    m_birthdayLabel = new QLabel(tm->get("pet.birthday", "Birthday") + ":", m_behaviorGroup);
+    m_birthdayMonthCombo = new QComboBox(m_behaviorGroup);
+    StyleManager::useHighlightOnlyPopup(m_birthdayMonthCombo);
+    m_birthdayMonthCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    m_birthdayMonthCombo->addItem(tm->get("pet.birthday.none", "Not set"), 0);
+    for (int month = 1; month <= 12; ++month) {
+        m_birthdayMonthCombo->addItem(QString::number(month), month);
+    }
+    m_birthdayDaySpin = new QSpinBox(m_behaviorGroup);
+    m_birthdayDaySpin->setRange(1, 31);
+    m_birthdayDaySpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    {
+        // 按持久化值回填（"MM-dd"，空为未设置）
+        const QStringList parts = DesktopPetManager::instance()->birthday().split('-');
+        const int month = parts.size() == 2 ? parts.at(0).toInt() : 0;
+        const int day = parts.size() == 2 ? parts.at(1).toInt() : 1;
+        QSignalBlocker blockMonth(m_birthdayMonthCombo);
+        QSignalBlocker blockDay(m_birthdayDaySpin);
+        m_birthdayMonthCombo->setCurrentIndex(qMax(0, m_birthdayMonthCombo->findData(month)));
+        m_birthdayDaySpin->setValue(qBound(1, day, 31));
+        m_birthdayDaySpin->setEnabled(month > 0);
+    }
+    connect(m_birthdayMonthCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int) { saveBirthdayFromControls(); });
+    connect(m_birthdayDaySpin, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, [this](int) { saveBirthdayFromControls(); });
 
     m_btnResetPos = new QPushButton(tm->get("pet.resetPosition", "Reset Pet Position"), m_behaviorGroup);
     m_btnResetPos->setStyleSheet(StyleManager::getSettingsButtonStyle());
@@ -336,12 +410,24 @@ void SettingsPetTab::setupUi() {
     statusGrid->addWidget(m_idleSleepCheck, 2, 0);
     statusGrid->addWidget(m_idleSleepAfterLabel, 2, 1);
     statusGrid->addWidget(m_idleSleepSpin, 2, 2);
-    statusGrid->addWidget(m_sysMonitorCheck, 3, 0, 1, 6);
+    // 系统状态：说明文字紧随复选框右侧（跨列填满剩余宽度，过长时自动换行）
+    statusGrid->addWidget(m_sysMonitorCheck, 3, 0);
+    statusGrid->addWidget(m_sysMonitorHint, 3, 1, 1, 5);
+    statusGrid->addWidget(m_festivalCheck, 4, 0, 1, 6);
     statusGrid->setColumnStretch(5, 1);
+
+    // 生日行以标签开头（与复选框列同基线，独立一行避免挤占开关网格列宽）
+    QHBoxLayout *birthdayRow = new QHBoxLayout();
+    birthdayRow->setContentsMargins(0, 0, 0, 0);
+    birthdayRow->setSpacing(PetUi::scaled(8));
+    birthdayRow->addWidget(m_birthdayLabel);
+    birthdayRow->addWidget(m_birthdayMonthCombo);
+    birthdayRow->addWidget(m_birthdayDaySpin);
+    birthdayRow->addStretch();
 
     behaviorLayout->addLayout(triggerRow);
     behaviorLayout->addLayout(statusGrid);
-    behaviorLayout->addWidget(m_sysMonitorHint);
+    behaviorLayout->addLayout(birthdayRow);
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
 
@@ -372,6 +458,31 @@ void SettingsPetTab::setupUi() {
 
     // 构建已导入的自定义宠物缩略图（空列表时只有添加按钮与提示）
     refreshCustomList();
+}
+
+/**
+ * @brief 按生日控件当前值保存（月为 0 表示不设置，日随所选月份收敛）
+ * @author chiangyang
+ */
+void SettingsPetTab::saveBirthdayFromControls() {
+    const int month = m_birthdayMonthCombo->currentData().toInt();
+    m_birthdayDaySpin->setEnabled(month > 0);
+    if (month <= 0) {
+        DesktopPetManager::instance()->setBirthday(QString());
+        return;
+    }
+    // 日上限随月份收缩（如 2 月最多 29 天），避免存入不存在的日期
+    const int maxDay = QDate(2000, month, 1).daysInMonth();
+    if (m_birthdayDaySpin->maximum() != maxDay) {
+        QSignalBlocker blocker(m_birthdayDaySpin);
+        m_birthdayDaySpin->setMaximum(maxDay);
+        if (m_birthdayDaySpin->value() > maxDay) {
+            m_birthdayDaySpin->setValue(maxDay);
+        }
+    }
+    DesktopPetManager::instance()->setBirthday(
+        QString("%1-%2").arg(month, 2, 10, QChar('0'))
+            .arg(m_birthdayDaySpin->value(), 2, 10, QChar('0')));
 }
 
 // ============================================================
@@ -500,6 +611,30 @@ void SettingsPetTab::retranslateUi() {
     if (m_sysMonitorHint) m_sysMonitorHint->setText(
         tm->get("pet.sysMonitorHint",
                 "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low."));
+    // 装饰下拉：重建项文案并保持当前选择（userData 为 Accessory 枚举值）
+    if (m_accessoryLabel) m_accessoryLabel->setText(tm->get("pet.accessory", "Accessory") + ":");
+    if (m_accessoryCombo) {
+        const int cur = m_accessoryCombo->currentData().toInt();
+        QSignalBlocker blocker(m_accessoryCombo);
+        m_accessoryCombo->clear();
+        for (int i = 0; i < PetWindow::accessoryCount(); ++i) {
+            m_accessoryCombo->addItem(tm->get(kAccessoryKeys[i], kAccessoryFallbacks[i]), i);
+        }
+        m_accessoryCombo->setCurrentIndex(qMax(0, m_accessoryCombo->findData(cur)));
+    }
+    if (m_festivalCheck) m_festivalCheck->setText(tm->get("pet.festival", "Festival Surprise"));
+    if (m_birthdayLabel) m_birthdayLabel->setText(tm->get("pet.birthday", "Birthday") + ":");
+    // 生日月下拉：重建项文案（第 0 项"不设置"）并保持当前选择
+    if (m_birthdayMonthCombo) {
+        const int cur = m_birthdayMonthCombo->currentData().toInt();
+        QSignalBlocker blocker(m_birthdayMonthCombo);
+        m_birthdayMonthCombo->clear();
+        m_birthdayMonthCombo->addItem(tm->get("pet.birthday.none", "Not set"), 0);
+        for (int month = 1; month <= 12; ++month) {
+            m_birthdayMonthCombo->addItem(QString::number(month), month);
+        }
+        m_birthdayMonthCombo->setCurrentIndex(qMax(0, m_birthdayMonthCombo->findData(cur)));
+    }
     // 语言切换时重建下拉项文案并保持当前选择（userData 为触发方式位标志）
     if (m_triggerLabel) m_triggerLabel->setText(tm->get("pet.clotheslineTrigger", "Show/Hide Clothesline") + ":");
     if (m_triggerCombo) {
@@ -537,6 +672,10 @@ void SettingsPetTab::refreshStyles() {
     if (m_pomodoroCheck) m_pomodoroCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_idleSleepCheck) m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_sysMonitorCheck) m_sysMonitorCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_festivalCheck) m_festivalCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_accessoryCombo) m_accessoryCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    if (m_birthdayMonthCombo) m_birthdayMonthCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    if (m_birthdayDaySpin) m_birthdayDaySpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     // 说明标签：次要文字色（全局 QSS 的 QLabel 颜色需用 setStyleSheet 覆盖）
     if (m_sysMonitorHint) m_sysMonitorHint->setStyleSheet(
         QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));

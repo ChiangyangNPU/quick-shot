@@ -163,6 +163,10 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "pet/idleSleepMin", 5 },
         // 系统状态：CPU/内存过载冒汗、低电量提醒开关
         { "pet/sysMonitorEnabled", false },
+        // 装饰与节日彩蛋：手动装饰下标（PetWindow::Accessory）、节日自动装饰开关、生日（MM-dd）
+        { "pet/accessory", 0 },
+        { "pet/festivalEnabled", true },
+        { "pet/birthday", "" },
 
         // OCR（空串表示使用内置 models/ocr 目录）
         { "ocr/modelPath", "" },

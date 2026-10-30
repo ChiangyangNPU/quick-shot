@@ -1063,6 +1063,178 @@ void PetWindow::paintSysAlert(QPainter &p) {
 }
 
 /**
+ * @brief 设置宠物装饰（立即重绘）
+ * @author chiangyang
+ */
+void PetWindow::setAccessory(Accessory accessory) {
+    if (m_accessory == accessory) {
+        return;
+    }
+    m_accessory = accessory;
+    update();
+}
+
+/**
+ * @brief 绘制宠物装饰
+ *
+ * 形体骨架全样式共用（身体椭圆 10,16,76,72；双眼中心 y=46），
+ * 因此头顶/眼部锚点取统一定值；帽子在绘制层最上方，自然压住耳朵与角。
+ * 描边统一取文字色，保证浅色/深色主题下轮廓清晰。
+ * @param p 画笔（已按 96 基准坐标系缩放）
+ * @author chiangyang
+ */
+void PetWindow::paintAccessory(QPainter &p) {
+    if (m_accessory == Accessory::None) {
+        return;
+    }
+    const bool dark = PetTheme::isDark();
+    const QColor outline = PetTheme::textColor(dark);
+    // 头顶锚点：身体顶部中央（帽子底边贴在此处）
+    const QPointF hat(48.0, 16.0);
+    // 眼部锚点：双眼中心连线中点
+    const QPointF eyes(48.0, 46.0);
+
+    p.save();
+    switch (m_accessory) {
+    case Accessory::None:
+        break;
+    case Accessory::Flower: {
+        // 小红花：五瓣环绕 + 黄色花心，戴在头顶偏右
+        const QPointF c = hat + QPointF(12.0, -4.0);
+        p.setPen(QPen(outline, 1.0));
+        p.setBrush(PetTheme::overdueColor(dark));
+        for (int i = 0; i < 5; ++i) {
+            const qreal a = -M_PI / 2 + i * (2.0 * M_PI / 5.0);
+            p.drawEllipse(c + QPointF(3.0 * qCos(a), 3.0 * qSin(a)), 3.0, 3.0);
+        }
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 214, 74));
+        p.drawEllipse(c, 2.2, 2.2);
+        break;
+    }
+    case Accessory::StrawHat: {
+        // 草帽：宽帽檐 + 圆顶帽身 + 深色帽带（下压到额头，避免整体"飘"在头顶上方）
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(QColor(236, 205, 132));
+        p.drawEllipse(QRectF(hat.x() - 27.0, hat.y() + 8.0, 54.0, 10.0));
+        const QRectF body(hat.x() - 16.0, hat.y() - 8.0, 32.0, 20.0);
+        p.drawRoundedRect(body, 9.0, 9.0);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(150, 108, 66));
+        p.drawRect(QRectF(body.left() + 2.5, body.top() + 12.0, body.width() - 5.0, 3.6));
+        break;
+    }
+    case Accessory::Sunglasses: {
+        // 墨镜：两片深色圆角镜片 + 鼻梁 + 镜片高光
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(QColor(38, 38, 44, dark ? 210 : 230));
+        const QRectF left(eyes.x() - 22.0, eyes.y() - 6.0, 16.0, 12.0);
+        const QRectF right(eyes.x() + 6.0, eyes.y() - 6.0, 16.0, 12.0);
+        p.drawRoundedRect(left, 4.0, 4.0);
+        p.drawRoundedRect(right, 4.0, 4.0);
+        p.drawLine(QPointF(left.right(), eyes.y() - 1.0), QPointF(right.left(), eyes.y() - 1.0));
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 255, 255, 120));
+        p.drawRoundedRect(QRectF(left.left() + 2.5, left.top() + 2.0, 4.5, 2.4), 1.2, 1.2);
+        p.drawRoundedRect(QRectF(right.left() + 2.5, right.top() + 2.0, 4.5, 2.4), 1.2, 1.2);
+        break;
+    }
+    case Accessory::Crown: {
+        // 皇冠：锯齿形金冠 + 顶端三颗宝石（下压贴合头顶）
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(QColor(255, 206, 64));
+        QPainterPath crown;
+        crown.moveTo(31.0, 24.0);
+        crown.lineTo(31.0, 11.0);
+        crown.lineTo(39.0, 18.0);
+        crown.lineTo(48.0, 6.0);
+        crown.lineTo(57.0, 18.0);
+        crown.lineTo(65.0, 11.0);
+        crown.lineTo(65.0, 24.0);
+        crown.closeSubpath();
+        p.drawPath(crown);
+        p.setPen(Qt::NoPen);
+        p.setBrush(PetTheme::overdueColor(dark));
+        p.drawEllipse(QPointF(31.0, 10.5), 1.8, 1.8);
+        p.drawEllipse(QPointF(48.0, 5.5), 1.8, 1.8);
+        p.drawEllipse(QPointF(65.0, 10.5), 1.8, 1.8);
+        break;
+    }
+    case Accessory::SantaHat: {
+        // 圣诞帽：红色锥体右倾 + 白色帽檐 + 白绒球
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(QColor(214, 60, 62));
+        QPainterPath cone;
+        cone.moveTo(29.0, 21.0);
+        cone.quadTo(44.0, -1.0, 63.0, 10.0);
+        cone.lineTo(66.0, 21.0);
+        cone.closeSubpath();
+        p.drawPath(cone);
+        p.setPen(QPen(outline, 1.0));
+        p.setBrush(QColor(250, 250, 250));
+        p.drawEllipse(QRectF(28.0, 16.0, 40.0, 9.0));
+        p.setPen(Qt::NoPen);
+        p.drawEllipse(QPointF(64.5, 9.0), 3.6, 3.6);
+        break;
+    }
+    case Accessory::PumpkinHat: {
+        // 南瓜帽：橙色扁圆瓜身 + 绿柄 + 竖纹理 + 三角眼咧嘴
+        const QPointF c = hat + QPointF(0.0, 4.0);
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(QColor(246, 146, 46));
+        p.drawEllipse(QRectF(c.x() - 18.0, c.y() - 13.0, 36.0, 26.0));
+        p.setBrush(QColor(96, 150, 66));
+        p.drawRoundedRect(QRectF(c.x() - 3.0, c.y() - 19.0, 6.0, 7.0), 2.0, 2.0);
+        // 瓜身竖纹理
+        p.setPen(QPen(QColor(226, 122, 36), 1.0));
+        p.drawLine(QPointF(c.x() - 8.0, c.y() - 11.0), QPointF(c.x() - 8.0, c.y() + 11.0));
+        p.drawLine(QPointF(c.x() + 8.0, c.y() - 11.0), QPointF(c.x() + 8.0, c.y() + 11.0));
+        // 三角眼（两个子路径一次填充）
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(70, 38, 14));
+        QPainterPath face;
+        face.moveTo(c.x() - 10.0, c.y() - 6.0);
+        face.lineTo(c.x() - 4.0, c.y() - 6.0);
+        face.lineTo(c.x() - 7.0, c.y() - 0.5);
+        face.closeSubpath();
+        face.moveTo(c.x() + 4.0, c.y() - 6.0);
+        face.lineTo(c.x() + 10.0, c.y() - 6.0);
+        face.lineTo(c.x() + 7.0, c.y() - 0.5);
+        face.closeSubpath();
+        p.drawPath(face);
+        // 咧嘴：三段折线
+        p.setPen(QPen(QColor(70, 38, 14), 1.8));
+        QPainterPath grin;
+        grin.moveTo(c.x() - 7.0, c.y() + 5.0);
+        grin.lineTo(c.x() - 2.5, c.y() + 2.5);
+        grin.lineTo(c.x() + 2.5, c.y() + 5.0);
+        grin.lineTo(c.x() + 7.0, c.y() + 2.5);
+        p.drawPath(grin);
+        break;
+    }
+    case Accessory::PartyHat: {
+        // 派对帽：条纹圆锥 + 顶部绒球（条纹宽度随锥体收窄，两端不越界）
+        p.setPen(QPen(outline, 1.2));
+        p.setBrush(PetTheme::accentColor(dark));
+        QPainterPath cone;
+        cone.moveTo(32.0, 24.0);
+        cone.lineTo(48.0, 4.0);
+        cone.lineTo(64.0, 24.0);
+        cone.closeSubpath();
+        p.drawPath(cone);
+        p.setPen(QPen(QColor(250, 214, 88), 2.4));
+        p.drawLine(QPointF(38.0, 20.0), QPointF(58.0, 20.0));
+        p.drawLine(QPointF(41.5, 14.0), QPointF(54.5, 14.0));
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(250, 214, 88));
+        p.drawEllipse(QPointF(48.0, 4.0), 2.8, 2.8);
+        break;
+    }
+    }
+    p.restore();
+}
+
+/**
  * @brief 设置嘴张开程度
  * @author chiangyang
  */
@@ -1215,6 +1387,8 @@ void PetWindow::paintEvent(QPaintEvent *event) {
     }
     // 系统状态角标：内置造型与自定义素材通用叠加
     paintSysAlert(p);
+    // 装饰：绘制层最上层（帽子压在耳朵/角之上，墨镜覆盖眼睛）
+    paintAccessory(p);
 }
 
 /**

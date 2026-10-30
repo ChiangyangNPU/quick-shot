@@ -75,6 +75,12 @@ private:
     void syncSelection();
 
     /**
+     * @brief 按生日控件当前值保存（月为 0 表示不设置，日随所选月份收敛）
+     * @author chiangyang
+     */
+    void saveBirthdayFromControls();
+
+    /**
      * @brief 选择本地图片/GIF 并导入为自定义宠物
      * @author chiangyang
      */
@@ -110,6 +116,12 @@ private:
     QSpinBox *m_idleSleepSpin;          ///< 无互动进入打盹的分钟数
     QCheckBox *m_sysMonitorCheck;       ///< 系统状态复选框（过载冒汗/低电量电池角标）
     QLabel *m_sysMonitorHint;           ///< 系统状态行为说明（小号灰字）
+    QLabel *m_accessoryLabel;           ///< 装饰选择标签（外观分组）
+    QComboBox *m_accessoryCombo;        ///< 装饰下拉框（节日区间内自动装饰优先）
+    QCheckBox *m_festivalCheck;         ///< 节日彩蛋复选框（节日自动戴帽）
+    QLabel *m_birthdayLabel;            ///< 生日标签
+    QComboBox *m_birthdayMonthCombo;    ///< 生日月份下拉（第 0 项为"不设置"）
+    QSpinBox *m_birthdayDaySpin;        ///< 生日日期（上限随所选月份收敛）
     QLabel *m_descLabel;                ///< 功能说明标签
 
     QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组

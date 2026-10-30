@@ -1009,6 +1009,9 @@ QString StyleManager::getSettingsComboBoxStyle() {
         const QString text = dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000");
         const QString border = dark ? QStringLiteral("rgba(255,255,255,80)") : QStringLiteral("#848484");
         const QString hover = dark ? QStringLiteral("rgba(255,255,255,48)") : QStringLiteral("#d0d0d0");
+        // 禁用态文字色：QSS 覆写 color 后 Qt 不再自动降级调色板，需显式给出灰字，
+        // 否则禁用控件（如生日未设置时的"日"微调框）看起来仍可编辑
+        const QString disabledText = dark ? QStringLiteral("#8b8b90") : QStringLiteral("#9aa0a6");
         // QSS image: 引用的 SVG 无法动态染色，深色主题换用白色箭头资源
         const QString upArrow = dark ? QStringLiteral(":/icons/spinner-up-dark.svg")
                                      : QStringLiteral(":/icons/spinner-up.svg");
@@ -1028,7 +1031,9 @@ QString StyleManager::getSettingsComboBoxStyle() {
             "QAbstractSpinBox::down-button { subcontrol-origin: border; subcontrol-position: bottom right; }"
             "QAbstractSpinBox::up-arrow { image: url(%5); width: 0.5em; height: 0.5em; }"
             "QAbstractSpinBox::down-arrow { image: url(%6); width: 0.5em; height: 0.5em; }"
-        ).arg(bg).arg(text).arg(border).arg(hover).arg(upArrow).arg(downArrow);
+            "QComboBox:disabled, QAbstractSpinBox:disabled { color: %7; }"
+        ).arg(bg).arg(text).arg(border).arg(hover).arg(upArrow).arg(downArrow)
+         .arg(disabledText);
 }
 
 QString StyleManager::getMessageBoxStyle() {

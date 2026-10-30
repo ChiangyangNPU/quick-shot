@@ -17,6 +17,7 @@
 #include <QGuiApplication>
 #include <QScreen>
 #include <QCursor>
+#include <QDateTime>
 #include <QPainter>
 #include <QFontMetrics>
 #include <QTimer>
@@ -124,6 +125,10 @@ void DesktopPetManager::setEnabled(bool enabled) {
         if (m_sysMonitor) {
             m_sysMonitor->stop();
         }
+        // 节日装饰判定随宠物一起停止
+        if (m_festivalTimer) {
+            m_festivalTimer->stop();
+        }
     }
     LOG_INFO(QString("DesktopPetManager: pet %1").arg(enabled ? "enabled" : "disabled"));
     emit enabledChanged(enabled);
@@ -143,6 +148,9 @@ void DesktopPetManager::createPetWindow() {
     m_petWindow = new PetWindow();
     // 按持久化选择应用外观（内置造型或自定义素材）
     applySelection();
+    // 装饰：节日装饰优先于手动装饰，并排定下一次节日判定
+    applyAccessory();
+    scheduleFestivalCheck();
 
     // 位置恢复：pet/posX/posY 均有效（>=0）则使用，否则落在默认右下角
     QSettings *settings = ConfigManager::instance()->getSettings();
@@ -850,6 +858,142 @@ void DesktopPetManager::setSysMonitorEnabled(bool enabled) {
         }
     }
     LOG_INFO(QString("DesktopPetManager: sys monitor %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+/**
+ * @brief 获取手动选择的宠物装饰
+ * @author chiangyang
+ */
+PetWindow::Accessory DesktopPetManager::accessory() const {
+    const int v = ConfigManager::instance()->value("pet/accessory", 0).toInt();
+    return static_cast<PetWindow::Accessory>(qBound(0, v, PetWindow::accessoryCount() - 1));
+}
+
+/**
+ * @brief 设置宠物装饰（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setAccessory(PetWindow::Accessory accessory) {
+    ConfigManager::instance()->setValue("pet/accessory", int(accessory));
+    ConfigManager::instance()->sync();
+    applyAccessory();
+}
+
+/**
+ * @brief 获取节日彩蛋是否开启
+ * @author chiangyang
+ */
+bool DesktopPetManager::festivalEnabled() const {
+    return ConfigManager::instance()->value("pet/festivalEnabled", true).toBool();
+}
+
+/**
+ * @brief 设置节日彩蛋开关（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setFestivalEnabled(bool enabled) {
+    if (festivalEnabled() == enabled) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/festivalEnabled", enabled);
+    ConfigManager::instance()->sync();
+    applyAccessory();
+    scheduleFestivalCheck();
+    LOG_INFO(QString("DesktopPetManager: festival surprise %1")
+                 .arg(enabled ? "enabled" : "disabled"));
+}
+
+/**
+ * @brief 获取宠物生日（MM-dd）
+ * @author chiangyang
+ */
+QString DesktopPetManager::birthday() const {
+    return ConfigManager::instance()->value("pet/birthday", QString()).toString();
+}
+
+/**
+ * @brief 设置宠物生日（即时生效并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setBirthday(const QString &monthDay) {
+    if (birthday() == monthDay) {
+        return;
+    }
+    ConfigManager::instance()->setValue("pet/birthday", monthDay);
+    ConfigManager::instance()->sync();
+    applyAccessory();
+}
+
+/**
+ * @brief 将生效装饰应用到宠物窗口（节日装饰优先于手动装饰）
+ * @author chiangyang
+ */
+void DesktopPetManager::applyAccessory() {
+    if (!m_petWindow) {
+        return;
+    }
+    const PetWindow::Accessory festival = festivalAccessory();
+    m_petWindow->setAccessory(festival != PetWindow::Accessory::None ? festival : accessory());
+}
+
+/**
+ * @brief 按当前日期判定应自动佩戴的节日装饰
+ *
+ * 区间按公历固定：圣诞 12-24~12-25、万圣 10-31~11-01、元旦 12-31~01-01、
+ * 生日（pet/birthday 的 MM-dd）当天。命中即覆盖手动装饰，区间结束自然回落。
+ * @author chiangyang
+ */
+PetWindow::Accessory DesktopPetManager::festivalAccessory() const {
+    if (!festivalEnabled()) {
+        return PetWindow::Accessory::None;
+    }
+    const QDate today = QDate::currentDate();
+    const int month = today.month();
+    const int day = today.day();
+    if (month == 12 && (day == 24 || day == 25)) {
+        return PetWindow::Accessory::SantaHat;
+    }
+    if ((month == 10 && day == 31) || (month == 11 && day == 1)) {
+        return PetWindow::Accessory::PumpkinHat;
+    }
+    if ((month == 12 && day == 31) || (month == 1 && day == 1)) {
+        return PetWindow::Accessory::PartyHat;
+    }
+    const QString birth = birthday();
+    if (!birth.isEmpty()) {
+        const QString todayKey = QString("%1-%2")
+                                     .arg(month, 2, 10, QChar('0'))
+                                     .arg(day, 2, 10, QChar('0'));
+        if (birth == todayKey) {
+            return PetWindow::Accessory::PartyHat;
+        }
+    }
+    return PetWindow::Accessory::None;
+}
+
+/**
+ * @brief 排定下一次节日判定（单次定时器排到次日 0 点后重排）
+ * @author chiangyang
+ */
+void DesktopPetManager::scheduleFestivalCheck() {
+    if (!m_festivalTimer) {
+        m_festivalTimer = new QTimer(this);
+        m_festivalTimer->setSingleShot(true);
+        connect(m_festivalTimer, &QTimer::timeout, this, [this]() {
+            applyAccessory();
+            scheduleFestivalCheck();
+        });
+    }
+    if (!festivalEnabled()) {
+        m_festivalTimer->stop();
+        return;
+    }
+    // 排到次日 0 点后 1s，确保系统日期已完成切换
+    const QDateTime now = QDateTime::currentDateTime();
+    const QDateTime midnight(QDate::currentDate().addDays(1), QTime(0, 0));
+    const qint64 ms = qBound<qint64>(qint64(1000), now.msecsTo(midnight) + 1000,
+                                     qint64(24) * 3600 * 1000);
+    m_festivalTimer->start(int(ms));
 }
 
 /**

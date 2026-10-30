@@ -270,6 +270,48 @@ public:
     void setSysMonitorEnabled(bool enabled);
 
     /**
+     * @brief 获取手动选择的宠物装饰（持久化于 pet/accessory，默认无）
+     * @return 装饰类型
+     * @author chiangyang
+     */
+    PetWindow::Accessory accessory() const;
+
+    /**
+     * @brief 设置宠物装饰（即时生效并持久化；节日区间内仍以节日装饰为准）
+     * @param accessory 装饰类型
+     * @author chiangyang
+     */
+    void setAccessory(PetWindow::Accessory accessory);
+
+    /**
+     * @brief 获取节日彩蛋是否开启（持久化于 pet/festivalEnabled，默认开）
+     * @return 是否开启
+     * @author chiangyang
+     */
+    bool festivalEnabled() const;
+
+    /**
+     * @brief 设置节日彩蛋开关（即时生效并持久化）
+     * @param enabled 是否开启
+     * @author chiangyang
+     */
+    void setFestivalEnabled(bool enabled);
+
+    /**
+     * @brief 获取宠物生日（持久化于 pet/birthday，格式 MM-dd，空为未设置）
+     * @return 生日字符串
+     * @author chiangyang
+     */
+    QString birthday() const;
+
+    /**
+     * @brief 设置宠物生日（即时生效并持久化，空字符串表示不设置）
+     * @param monthDay 生日（格式 MM-dd）
+     * @author chiangyang
+     */
+    void setBirthday(const QString &monthDay);
+
+    /**
      * @brief 晾衣绳触发方式（位标志，持久化于 pet/clotheslineTrigger）
      * @author chiangyang
      */
@@ -392,6 +434,25 @@ private:
     void positionTodoBadge();
 
     /**
+     * @brief 将生效装饰应用到宠物窗口（节日装饰优先于手动装饰）
+     * @author chiangyang
+     */
+    void applyAccessory();
+
+    /**
+     * @brief 按当前日期判定应自动佩戴的节日装饰
+     * @return 节日装饰；不在任何节日区间或节日彩蛋关闭时返回 None
+     * @author chiangyang
+     */
+    PetWindow::Accessory festivalAccessory() const;
+
+    /**
+     * @brief 排定下一次节日判定（单次定时器排到次日 0 点后重排）
+     * @author chiangyang
+     */
+    void scheduleFestivalCheck();
+
+    /**
      * @brief 弹出番茄钟提示卡（宠物跳跃 + 卡片贴合宠物上方）
      * @param breakDue true 为"工作结束该休息了"，false 为"休息结束继续工作"
      * @author chiangyang
@@ -415,6 +476,7 @@ private:
     PetStateMachine *m_stateMachine = nullptr; ///< 状态机（待机打盹调度，宠物开启期间运行）
     PetSystemMonitor *m_sysMonitor = nullptr;  ///< 系统状态采集（过载/低电量提醒，开关开启且宠物开启期间运行）
     QTimer *m_hotEdgeTimer = nullptr;       ///< 主屏顶边热区轮询定时器（宠物开启期间运行）
+    QTimer *m_festivalTimer = nullptr;      ///< 节日装饰判定定时器（单次，排到次日 0 点）
     bool m_hotEdgeArmed = true;             ///< 光标离开热区后重新武装（边沿触发防反复弹收）
 };
 
