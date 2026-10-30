@@ -2,9 +2,9 @@
 
 QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基于 **Qt 6** 开发，支持 **Windows** 与 **macOS** 双平台（Linux 支持尚不完整，录屏暂不产出视频文件），旨在提供高效、流畅的截图体验。
 
-当前版本 **v0.1.3**，可从 [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases) 下载最新版本。
+当前版本 **v0.1.4**，可从 [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases) 下载最新版本。
 
-![Version](https://img.shields.io/badge/version-v0.1.3-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
+![Version](https://img.shields.io/badge/version-v0.1.4-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
 
 ## ⚠️ macOS 首次打开：未公证应用需手动放行
 

@@ -2,9 +2,9 @@
 
 QuickShot is a lightweight, powerful screen capture and recording tool developed with **Qt 6**. It runs on **Windows** and **macOS** (Linux support is still incomplete — recording does not yet produce video files), designed to provide an efficient and smooth screenshot experience.
 
-Current version: **v0.1.3** — download the latest release from [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases).
+Current version: **v0.1.4** — download the latest release from [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases).
 
-![Version](https://img.shields.io/badge/version-v0.1.3-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
+![Version](https://img.shields.io/badge/version-v0.1.4-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
 
 ## ⚠️ macOS First Open: Manually Allow the Un-notarized App
 
