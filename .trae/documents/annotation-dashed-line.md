@@ -1,5 +1,7 @@
 # 标注工具支持虚线绘制
 
+> 状态：**已实现**（随 v0.1.2 发布，见 docs/release-notes/release-notes-v0.1.2.md）。
+
 ## Context
 
 标注（矩形、椭圆、三角形、直线、箭头、画笔）原先在 [Annotation.cpp](file:///e:/develop/Code/github_new/quick-shot/src/capture/Annotation.cpp) 的 `Annotation::draw()` 中统一使用 `Qt::SolidLine`，无法绘制虚线。需求：这些几何标注工具在绘制时可切换为虚线，且每个工具独立记忆、重启后保持。

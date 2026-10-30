@@ -39,7 +39,7 @@ QuickShot 是一款跨平台的截图与录屏工具，基于 **Qt 6.10.2** 框�
 - **可配置全局热键**：9 个可自定义全局热键（截图/录屏/历史/贴图/全屏/活动窗口/录屏暂停/录屏停止/隐藏贴图），通过 ShortcutManager 集中管理
 - **标注快捷键统一**：SnipScreen 与 PinWindow 通过 AnnotationShortcutController + QShortcut 统一注册标注快捷键（数字键1-8切换工具、[/]调笔宽、Tab循环颜色等），文本编辑框获得焦点时自动禁用裸键避免输入冲突
 - **历史记录**：截图与剪贴板文本历史记录，支持多选、批量删除、搜索、自动清理
-- **桌面宠物**：16 种外观（经典 4 种：猫/熊猫/企鹅/青蛙 + 十二生肖 12 种：鼠牛虎兔龙蛇马羊猴鸡狗猪，兔/狗复用原兔子/柴犬造型）常驻桌宠，单击开关晾衣绳历史快捷面板（最近 12 条记录卡片、悬停放大预览、右键复制/标注/OCR/翻译），截图复制/贴图/快照与文本复制触发投喂飞入动画
+- **桌面宠物**：16 种外观（经典 4 种：猫/熊猫/企鹅/青蛙 + 十二生肖 12 种：鼠牛虎兔龙蛇马羊猴鸡狗猪，兔/狗复用原兔子/柴犬造型）常驻桌宠，支持自定义图片/GIF 外观与装饰（小花/草帽/墨镜/皇冠/节日帽）；晾衣绳历史快捷面板（最近 12 条记录卡片、悬停放大预览、右键复制/标注/OCR/翻译），触发方式可配置（点击宠物/主屏顶边热区/两者）；陪伴功能：右击宠物待办清单气泡 + 头顶红点角标、番茄钟工作/休息提醒卡（墙钟锚定）、待机打盹与双击摸头、CPU/内存/电量系统状态（过载冒汗、低电量角标）、节日彩蛋与生日；截图复制/贴图/快照与文本复制/剪贴触发投喂飞入动画
 - **多语言界面**：简体中文、繁体中文（台湾）、繁体中文（香港）、英文、日文、韩文
 - **单实例互斥**：QLockFile 锁（应用数据目录，按用户隔离）；第二实例弹本地化提示后立即退出，避免热键静默失效、剪贴板历史重复记录与配置/数据库双写；崩溃残留死锁按 PID 存活自动清理，锁文件不可写时降级为无防护继续运行
 - **跨平台**：Windows、macOS、Linux
@@ -62,7 +62,7 @@ graph TB
         E[RecordingControlWindow 录制控制]
         F2[HistoryWindow 历史记录窗口]
         TW[TranslateOverlayWindow 译文叠加窗口]
-        PET[PetWindow 宠物 / ClotheslineWindow 晾衣绳]
+        PET[PetWindow 宠物 / ClotheslineWindow 晾衣绳 / TodoWindow 待办气泡 / PomodoroCard 番茄钟卡]
     end
 
     subgraph 业务逻辑层
@@ -283,6 +283,15 @@ graph LR
         ClotheslineWindow
         CardPreviewPopup
         FlyAnimationWidget
+        PetStateMachine
+        PetSystemMonitor
+        PetReminder
+        TodoWindow
+        TodoStore
+        PomodoroCard
+        PetBadgeWidget
+        CustomPetStore
+        PetTheme
     end
 
     main.cpp --> SnipScreen
@@ -2025,7 +2034,7 @@ macOS（尤其是 Sidecar/AirPlay 副屏）不支持跨多屏的透明窗口，�
 - `OcrEngine`：唯一 OCR 引擎实例（全接口共用一把可重入互斥锁，`recognize()` 全程持锁串行化；main 启动时在主线程预热构造，避免单例在 QtConcurrent 工作线程首次创建导致线程亲和性错位）
 - `HistoryManager`：唯一历史记录管理器实例，管理 SQLite 数据库和自动清理
 - `TranslateService`：唯一文本翻译服务实例，管理多引擎切换与批量翻译状态机
-- `DesktopPetManager`：唯一桌面宠物管理器实例，管理宠物开关/位置/外观持久化、投喂与晾衣绳显隐
+- `DesktopPetManager`：唯一桌面宠物管理器实例，管理宠物开关/位置/外观/行为持久化、投喂与晾衣绳显隐，兼待办提醒/番茄钟/状态机/系统监控/节日定时器的调度中枢
 - `ClipboardMonitor`：唯一剪贴板监听器实例
 - `Logger`：全局日志记录器
 
@@ -2335,13 +2344,21 @@ UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`in
 
 ### 6.20 桌面宠物模块（src/pet）
 
-宠物模块由管理器单例 + 三个窗口 + 一个动画控件组成，全部按屏幕 DPI 缩放（PetUiScale，系数 = 主屏 logicalDotsPerInch/96，夹取 1.0–3.0）：
+宠物模块由管理器单例 + 5 个窗口/控件 + 5 个 QObject 服务 + 主题色板与持久化存储组成，全部按屏幕 DPI 缩放（PetUiScale，系数 = 主屏 logicalDotsPerInch/96，夹取 1.0–3.0）：
 
-- **DesktopPetManager（单例）**：管理 `pet/enabled`、`pet/posX`、`pet/posY`、`pet/style` 四个配置键的持久化与启动恢复；提供截图 `feed()`（复制/贴图/快照流程显式调用）与文本 `feedText()`（监听 `HistoryManager::itemAdded` 非截图记录自动触发，即"文字复制投喂"）两种投喂入口；管理晾衣绳窗口显隐切换（宠物点击 toggle）。
-- **PetWindow**：无边框透明置顶窗口，纯 QPainter 绘制 16 种外观样式（经典 4 种 + 十二生肖 12 种，`PetSpec` 数据驱动共享形体骨架，样式差异在配色/耳形/尾巴/特征部件）；共用闭嘴/张嘴/咀嚼三态动画 + 待机随机眨眼 + 咀嚼后左眼闪星星；拖动结束发射 `dragFinished` 持久化位置，单击（与拖动按移动距离区分）发射 `clicked` 驱动晾衣绳开关；`renderStylePreview()` 供设置页生成样式预览图。
-- **ClotheslineWindow**：点击宠物或鼠标移到主屏顶边热区弹出的历史快捷面板——铺满主屏宽度、顶部往下 1/10 高度处，显隐带整体滑动动画（下滑挂入/上滑滑出），悬链线（二次贝塞尔）绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；卡片悬停弹出 `CardPreviewPopup`，单击卡片复制到剪贴板（文本先 `markTextAsRecorded` 去重）；支持拖动与边缘/四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次点击宠物；经 `itemAdded`/`itemRemoved`/`cleared` 信号实时刷新。**应用内窗口点击不关闭**：全局事件过滤器只会在点击无法映射回 QWidget 的窗口（原生对话框等）时关闭——鼠标点击桌面/其他应用的事件不会进入本进程事件循环，"点窗外关闭"实际只能由本应用自己的顶层窗口触发，而这些交互（截图/录屏/设置/历史/贴图/标注/OCR/翻译）一律保持打开；注意顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow），需经 `QWidget::find` 映射回 widget 再判断。
+- **DesktopPetManager（单例）**：管理 `pet/enabled`、`pet/posX`、`pet/posY`、`pet/style`、`pet/clotheslineTrigger` 等 15 个 pet/* 配置键的持久化与启动恢复；提供截图 `feed()`（复制/贴图/快照流程显式调用）与文本 `feedText()`（监听 `HistoryManager::itemAdded` 非截图记录自动触发，即"文字复制投喂"）两种投喂入口；管理晾衣绳窗口显隐切换（触发方式由 `pet/clotheslineTrigger` 配置：宠物点击/主屏顶边热区/两者，热区经 `startHotEdgeWatch()` 以 60ms 轮询主屏上边界触发带）；同时是待办提醒、番茄钟、待机状态机、系统监控、节日定时器的装配与调度中枢。
+- **PetWindow**：无边框透明置顶窗口，纯 QPainter 绘制 16 种外观样式（经典 4 种 + 十二生肖 12 种，`PetSpec` 数据驱动共享形体骨架，样式差异在配色/耳形/尾巴/特征部件）；共用闭嘴/张嘴/咀嚼三态动画 + 待机随机眨眼 + 咀嚼后左眼闪星星；拖动结束发射 `dragFinished` 持久化位置，单击（与拖动按移动距离区分）经防抖定时器延迟发射 `clicked` 驱动晾衣绳开关（双击窗口期内来 `doubleClicked` 则取消，摸头不误触），`pressed` 信号在按下即唤醒打盹并重置待机计时；待机打盹 `setSleeping()`（呼吸挤压 + 上下浮动循环动画，PetStateMachine 驱动），双击摸头 `playJump()`；`paintSysAlert()` 绘制系统状态角标（CPU/内存过载冒汗、低电量电池图标），`Accessory` 装饰绘制（小红花/草帽/墨镜/皇冠/圣诞帽/南瓜帽/派对帽）与节日彩蛋帽；`renderStylePreview()` 供设置页生成样式预览图。
+- **ClotheslineWindow**：按 `pet/clotheslineTrigger` 配置的触发方式（宠物点击/主屏顶边热区/两者）弹出的历史快捷面板——铺满主屏宽度、顶部往下 1/10 高度处，显隐带整体滑动动画（下滑挂入/上滑滑出），悬链线（二次贝塞尔）绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；卡片悬停弹出 `CardPreviewPopup`，单击卡片复制到剪贴板（文本先 `markTextAsRecorded` 去重）；支持拖动与边缘/四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次按触发方式操作；经 `itemAdded`/`itemRemoved`/`cleared` 信号实时刷新。**应用内窗口点击不关闭**：全局事件过滤器只会在点击无法映射回 QWidget 的窗口（原生对话框等）时关闭——鼠标点击桌面/其他应用的事件不会进入本进程事件循环，"点窗外关闭"实际只能由本应用自己的顶层窗口触发，而这些交互（截图/录屏/设置/历史/贴图/标注/OCR/翻译）一律保持打开；注意顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow），需经 `QWidget::find` 映射回 widget 再判断。
 - **CardPreviewPopup**：悬停放大预览弹窗——图片加载原图（按 DPR 从原图出图保证清晰）并支持滚轮 0.2–10 倍缩放，文本自动换行；右键菜单接入复制 / 标注（创建 PinWindow 并直接进入标注模式）/ 文字识别 / 翻译。
 - **FlyAnimationWidget**：透明、鼠标穿透的置顶动画窗口，携带截图从来源区域沿曲线缩小飞到宠物嘴部坐标，到达后发射 `arrived()` 并自毁。
+- **PetStateMachine**：待机打盹状态机（Idle/Sleep 两态）——15s 周期检查，`noteInteraction()` 重置互动计时（按下/单击/双击/拖动/右击/悬停均算互动），无互动达 `pet/idleSleepMin` 分钟调 `PetWindow::setSleeping(true)` 入睡，任意互动即唤醒；`stop()` 停表并强制唤醒（宠物关闭时调用）。
+- **PetSystemMonitor**：系统状态采样——5s 轮询 CPU 占用（两次快照差分）/内存/电量，CPU 或内存 > 85% 报 Overload（宠物冒汗），电量 < 20% 且未充电报 LowBattery（电池角标，单次监控会话只提示一次、`stop()` 复位重武装）；Windows 走 GetSystemTimes/注册表电源状态，macOS 走 host_processor_info/IOPowerSources（需链接 IOKit 框架），其余平台采样函数恒返回 false（无告警）。
+- **PetReminder**：提醒源——30s 轮询 TodoStore 统计未完成且已逾期/今天到期的待办数（`reminderChanged` 驱动头顶红点角标）；番茄钟按工作/休息阶段计时（时长读 `pet/pomodoroWorkMin`/`pet/pomodoroBreakMin`，设置页修改下一轮生效），采用墙钟锚定：记录阶段截止点 + 5s tick 对照当前时间，系统休眠期间墙钟照常推进，唤醒后首个 tick 即判定到点（避免单发 QTimer 休眠暂停导致阶段延迟数小时）。
+- **TodoWindow / TodoStore**：右击宠物展开的待办清单气泡窗口（悬浮宠物上方、带指向小三角，红点计数 30s 轮询兜底）与待办持久化存储——todos.json 存于 AppDataLocation，QSaveFile 原子写（异常退出不留半截文件）；`load()` 以 ok 出参区分"文件不存在（正常空列表）"与"存在但不可读/JSON 损坏（磁盘状态未知）"，后者拒绝覆盖写回，防止一条新增清空全部存量；add/update/setDone/remove 四个写操作均检查 save 返回值并留痕日志。
+- **PomodoroCard**：番茄钟阶段提醒卡（无边框透明置顶气泡 + 指向宠物的小三角），工作到点提示休息（可接受/跳过）、休息到点提示继续工作；与宠物开关同生命周期（宠物关闭即销毁）。
+- **PetBadgeWidget**：宠物头顶红点角标（显示逾期/今日到期待办数），点击打开待办气泡，随宠物窗口 `moved` 信号跟随定位。
+- **CustomPetStore**：自定义宠物素材导入/删除/选择——PNG/JPG/JPEG/WEBP/GIF 复制入库到应用数据目录；静态图解码前文件头预检（最长边 > 8192 直接拒绝，1024–8192 经 `QImageReader::setScaledSize` 降采样解码防内存暴涨），GIF 限 20MB 且帧最长边 ≤ 1024（QMovie 全帧缓存防护）；列表存 `pet/customPets`、当前选择存 `pet/selection`（两键由 CustomPetStore 专管、不进 ConfigManager 播种表，旧 `pet/style` 值首次读取自动迁移），素材丢失时回落内置造型。
+- **PetTheme**：宠物模块主题色板（纯静态）——以 StyleManager 主题模式与用户配色派生文字/强调/提示色，TodoWindow/PomodoroCard/PetBadgeWidget/PetWindow 广泛使用，主题切换经 main.cpp 接线显式重绘；含晾衣绳专用段（纸卡/麻绳/木夹等物理隐喻色深浅主题同值，高亮描边跟随应用强调色）。
 
 ---
 
@@ -2477,6 +2494,19 @@ UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`in
 | `pet/posX` | Int | `-1` | 宠物窗口 X 坐标（-1 = 使用默认右下角位置） |
 | `pet/posY` | Int | `-1` | 宠物窗口 Y 坐标（-1 = 使用默认右下角位置） |
 | `pet/style` | Int | `0` | 宠物外观样式（PetStyle 枚举 0-15，枚举值稳定；UI 分组：经典组 猫/熊猫/企鹅/青蛙 + 十二生肖组 鼠牛虎兔龙蛇马羊猴鸡狗猪，兔/狗复用原造型） |
+| `pet/clotheslineTrigger` | Int | `2` | 晾衣绳显示/消失触发方式（1=主屏顶边热区，2=点击宠物，3=两者） |
+| `pet/todoReminder` | Bool | `true` | 待办红点提醒开关 |
+| `pet/pomodoroEnabled` | Bool | `false` | 番茄钟开关 |
+| `pet/pomodoroWorkMin` | Int | `25` | 番茄钟工作时长（分钟，5–180） |
+| `pet/pomodoroBreakMin` | Int | `5` | 番茄钟休息时长（分钟，1–120） |
+| `pet/idleSleepEnabled` | Bool | `true` | 待机打盹开关 |
+| `pet/idleSleepMin` | Int | `5` | 无互动进入打盹的分钟数（1–120） |
+| `pet/sysMonitorEnabled` | Bool | `false` | 系统状态监控开关 |
+| `pet/accessory` | Int | `0` | 装饰（Accessory 枚举 0-7：无/小红花/草帽/墨镜/皇冠/圣诞帽/南瓜帽/派对帽） |
+| `pet/festivalEnabled` | Bool | `true` | 节日彩蛋开关 |
+| `pet/birthday` | String | `""` | 生日（MM-dd，空为不设置） |
+
+> 另有两个键由 CustomPetStore 专管、不经播种表：`pet/customPets`（自定义素材列表 JSON）与 `pet/selection`（当前选择，内置样式 `builtin:N` / 自定义 `custom:<id>`；旧 `pet/style` 值首次读取时自动迁移）。
 
 ---
 
@@ -2600,7 +2630,7 @@ graph TB
         A5[HistoryWindow]
         A6[RecordingControlWindow]
         A7[TranslateOverlayWindow]
-        A8[PetWindow / ClotheslineWindow]
+        A8[PetWindow / ClotheslineWindow / TodoWindow / PomodoroCard]
     end
 
     subgraph 快捷键系统层
@@ -2734,7 +2764,7 @@ mindmap
 | OcrEngine | src/ocr/OcrEngine.h | ONNX Runtime OCR 引擎 |
 | ShortcutManager | src/shortcut/ShortcutManager.h | 全局热键管理器 |
 | TranslateService | src/translate/TranslateService.h | 文本翻译服务（多引擎、批量状态机） |
-| DesktopPetManager | src/pet/DesktopPetManager.h | 桌面宠物管理器（开关/位置/外观持久化、投喂、晾衣绳显隐） |
+| DesktopPetManager | src/pet/DesktopPetManager.h | 桌面宠物管理器（开关/位置/外观/行为持久化、投喂、晾衣绳显隐，待办/番茄钟/状态机/监控/节日调度中枢） |
 | ClipboardMonitor | src/history/ClipboardMonitor.h | 剪贴板监听器（文本记录 + markTextAsRecorded 去重） |
 
 **实现特点**：
@@ -3436,11 +3466,20 @@ src/
 │   ├── OcrRecPostprocess.h/cpp   # 识别后处理（CTC解码）
 │   └── OcrResultDialog.h/cpp     # 结果弹窗（拖拽、调整大小、翻译按钮、原文/译文/对照三态视图）
 ├── pet/                  # 桌面宠物模块
-│   ├── DesktopPetManager.h/cpp   # 宠物管理器（单例：开关/位置/外观持久化、投喂入口、晾衣绳显隐）
-│   ├── PetWindow.h/cpp           # 宠物窗口（QPainter 绘制 16 种外观、张嘴/咀嚼/眨眼动画、拖动/单击）
-│   ├── ClotheslineWindow.h/cpp   # 晾衣绳窗口（悬链绳挂历史卡片、摆动动画、点窗外关闭豁免）
+│   ├── DesktopPetManager.h/cpp   # 宠物管理器（单例：开关/位置/外观/行为持久化、投喂入口、晾衣绳显隐与热区 watch、陪伴功能调度中枢）
+│   ├── PetWindow.h/cpp           # 宠物窗口（QPainter 绘制 16 种外观、张嘴/咀嚼/眨眼动画、拖动/防抖单击、打盹/摸头/系统角标/装饰/节日彩蛋）
+│   ├── ClotheslineWindow.h/cpp   # 晾衣绳窗口（悬链绳挂历史卡片、摆动与滑动动画、触发方式可配置、点窗外关闭豁免）
 │   ├── CardPreviewPopup.h/cpp    # 卡片悬停放大预览弹窗（原图+滚轮缩放、右键复制/标注/OCR/翻译）
 │   ├── FlyAnimationWidget.h/cpp  # 飞入宠物动画窗口（透明、鼠标穿透、到达自毁）
+│   ├── PetStateMachine.h/cpp     # 待机打盹状态机（15s 检查、互动唤醒、Idle/Sleep 两态）
+│   ├── PetSystemMonitor.h/cpp    # 系统状态采样（CPU/内存/电量 5s 轮询、过载冒汗与低电量角标、Win/mac 平台分支）
+│   ├── PetReminder.h/cpp         # 提醒源（待办红点 30s 轮询、番茄钟墙钟锚定计时）
+│   ├── PetBadgeWidget.h/cpp      # 宠物头顶红点角标（逾期/今日到期数量、点击开待办）
+│   ├── TodoWindow.h/cpp          # 待办清单气泡窗口（右击宠物展开、悬浮宠物上方）
+│   ├── TodoStore.h/cpp           # 待办持久化（todos.json、QSaveFile 原子写、读失败拒绝覆盖写）
+│   ├── PomodoroCard.h/cpp        # 番茄钟阶段提醒卡（工作/休息、接受/跳过/继续）
+│   ├── CustomPetStore.h/cpp      # 自定义素材导入/删除/选择（尺寸与体积上限保护、旧配置迁移）
+│   ├── PetTheme.h/cpp            # 宠物模块主题色板（随应用深浅主题、含晾衣绳专用段）
 │   └── PetUiScale.h              # pet 模块 DPI 缩放工具（PetUi 命名空间，系数夹取 1.0–3.0）
 ├── recording/            # 录屏功能
 │   ├── ScreenRecorder.h/cpp             # 录屏器（录制线程、状态管理、实时标注合成）
@@ -3488,7 +3527,7 @@ src/
 │   │   ├── SettingsStyleTab.h/cpp      # 样式（主题/21色自定义）
 │   │   ├── SettingsTranslateTab.h/cpp  # 翻译（引擎/目标语言/Key）
 │   │   ├── SettingsHistoryTab.h/cpp    # 历史记录（开关/保留/清理/统计）
-│   │   ├── SettingsPetTab.h/cpp        # 宠物（开关/6种外观点选/重置位置）
+│   │   ├── SettingsPetTab.h/cpp        # 宠物（四分组：基本/样式 16 外观+装饰/自定义宠物/行为：晾衣绳触发、待办提醒、番茄钟、打盹、系统状态、节日、生日）
 │   │   └── SettingsAboutTab.h/cpp      # 关于（版本/官网）
 │   ├── SettingsWindow.h/cpp   # 设置窗口（拖拽移动、7个选项卡、DPI适配、21种颜色数据驱动配置、主题切换）
 │   ├── HistoryWindow.h/cpp    # 历史记录窗口（截图+剪贴板分类、多选批量、搜索、实时刷新）
@@ -3588,6 +3627,7 @@ option(ENABLE_OCR_GPU_ACCELERATION "Enable GPU acceleration for OCR (DirectML/Co
 # 源文件为显式逐文件列表（src/ 各模块），平台特定文件用 target_sources 追加：
 #   Windows: ScreenRecorder_win.cpp；macOS: ScreenRecorder_mac.cpp + mac_helper.mm；
 #   Linux: ScreenRecorder_linux.cpp
+# macOS 电池采样另链 IOKit 框架（find_library(IO_KIT IOKit)，IOPowerSources 头文件）
 # 测试由 QUICKSHOT_BUILD_TESTS（默认 ON）控制，见 tests/CMakeLists.txt
 ```
 

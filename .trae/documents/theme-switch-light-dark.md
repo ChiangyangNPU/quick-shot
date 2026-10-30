@@ -1,5 +1,7 @@
 # 浅色/深色主题切换功能
 
+> 状态：**已实现**（commit `caa913d`，随 v0.1.3 发布）；实现后新增的接线（如宠物待办窗口刷新）见 [docs/architecture.md](../../docs/architecture.md) §6.20。
+
 ## 背景（Context）
 
 用户很喜欢滚动截图提示条的深色 HUD 样式（[ScrollCaptureSession.cpp](file:///e:/develop/Code/github_new/quick-shot/src/capture/ScrollCaptureSession.cpp) 里 `ScrollHintContainer`：底板 `rgba(22,22,26,248)`、1px 亮边、白字加粗、按钮 `rgba(255,255,255,48)` 填充），希望把它推广为整个应用的深色主题。

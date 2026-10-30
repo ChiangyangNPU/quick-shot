@@ -1,5 +1,7 @@
 # 录制 GIF 功能
 
+> 状态：**已实现**（随 v0.1.2 发布，见 docs/release-notes/release-notes-v0.1.2.md）。
+
 ## Context
 
 录屏原先只输出视频（Windows 走 Media Foundation H.264）。需求：**截屏模式和录屏模式都能录制 GIF**，默认 10 fps。

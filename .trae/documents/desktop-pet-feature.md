@@ -1,6 +1,7 @@
 # 桌面宠物功能实现计划（已实现）
 
 > 状态：**已实现**。本文档原为实现计划，实际落地多处超出原设计；正文已按现有代码改写，计划外新增见文末「实现超出计划的部分」一节。
+> 本文档只覆盖最初的桌面宠物功能（开关/16 种内置外观/投喂/晾衣绳基础能力）；此后模块持续扩张——自定义图片/GIF 外观（CustomPetStore）、晾衣绳显示/消失方式可配置（pet/clotheslineTrigger）、陪伴功能四阶段（待办/番茄钟/打盹/系统状态/装饰与节日彩蛋）等见 [docs/pet-companion-plan.md](../../docs/pet-companion-plan.md)，模块现有 15 个组件类，整体架构以 [docs/architecture.md](../../docs/architecture.md) §6.20 为准。
 
 ## Context（背景）
 
@@ -87,7 +88,7 @@
 
 ## 实现超出计划的部分
 
-以下能力为计划外新增（实现已落地，超出原设计）：
+以下能力为计划外新增（实现已落地，超出原设计）。**注意：本节只记录本文档写作时点的超计划项；此后模块又经多轮扩张（自定义素材、陪伴功能四阶段、晾衣绳热区等），最新全貌以 [docs/architecture.md](../../docs/architecture.md) §6.20 与 [docs/pet-companion-plan.md](../../docs/pet-companion-plan.md) 为准**：
 
 - **16 种宠物外观样式**：经典组 4 种（猫/熊猫/企鹅/青蛙）+ 十二生肖组 12 种按传统顺序（鼠/牛/虎/兔/龙/蛇/马/羊/猴/鸡/狗/猪；兔复用原兔子长耳造型、狗复用原柴犬造型，仅显示名改为"兔/狗"；其余十种为生肖专属造型）（`PetWindow::PetStyle` 枚举 0-15 且**枚举值稳定不变**保证 pet/style 持久化兼容，[PetWindow.h](file:///e:/develop/Code/github_new/quick-shot/src/pet/PetWindow.h)）；配置键 `pet/style`（[ConfigManager.cpp](file:///e:/develop/Code/github_new/quick-shot/src/core/ConfigManager.cpp) L150）；设置页为平铺预览图按钮，分组归属由 `kClassicStyles`/`kZodiacStyles` 下标表决定（SettingsPetTab.cpp），经典组单行居首、生肖组经 `FlowLayout`（src/widgets/FlowLayout.h）自动换行。样式为 `PetSpec` 数据驱动：形体骨架共用，差异在配色、耳形（三角/圆/长耳/无耳）、尾巴（无/直尾/卷尾）与特征部件——猫 = 额头三道虎斑 + 左后方上翘直尾；狗（柴犬造型）= 奶油口鼻面罩 + 豆眉 + 耳内奶油 + 右上卷尾圆环；熊猫 = 深色圆耳 + 眼圈 + 深色脚掌；兔 = 长耳；企鹅 = 小翅膀 + 橙喙脚；青蛙 = 无耳绿身；鼠 = 灰身大圆耳粉耳内 + 直尾；牛 = 白身 + 头顶牛角 + 粉口鼻面罩；虎 = 深橙黑条纹 + 圆耳 + 白眼圈 + 直尾；龙 = 绿身金肚 + 分叉鹿角；蛇 = 蓝绿无耳无脚 + 分叉信子；马 = 棕身白口鼻 + 头顶鬃毛 + 直尾；羊 = 米白身 + 头顶卷角；猴 = 棕身大浅色脸 + 圆耳耳内；鸡 = 黄身 + 头顶红鸡冠；猪 = 粉身 + 猪鼻鼻孔 + 卷尾
 - **文字投喂 `feedText()`**：监听 `HistoryManager::itemAdded`，文本记录触发文字卡片飞入宠物并被吃掉（[DesktopPetManager.h](file:///e:/develop/Code/github_new/quick-shot/src/pet/DesktopPetManager.h) L67-74、DesktopPetManager.cpp L49-52 接线）

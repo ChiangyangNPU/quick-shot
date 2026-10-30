@@ -1,5 +1,7 @@
 # 桌面宠物陪伴功能方案
 
+> 状态：四阶段均已实现（阶段一 `647fabb`、阶段二 `1a6b011`、阶段三 `9f3b7f3`、阶段四 `3fb0347`）；实现与方案的偏差已在对应小节以"实现说明"标注。
+
 ## 一、需求概述
 
 在现有桌面宠物（外观样式、投喂、晾衣绳、待办气泡）基础上，分四个阶段扩展陪伴能力：
@@ -32,9 +34,10 @@ DesktopPetManager（单例，已有）
  ├── PetWindow          —— 宠物窗口（点击/右击/拖动/投喂，已有）
  ├── ClotheslineWindow  —— 晾衣绳历史（已有）
  ├── TodoWindow         —— 待办气泡（已有）
- ├── PetStateMachine    —— 宠物状态机（新增，第一阶段）
- │    状态：Idle 正常 / Remind 提醒（待办、番茄钟）/ Sleep 待机 / Interact 互动 / Alert 系统状态
- │    优先级：Interact > Alert > Remind > Sleep > Idle；高优先级打断低优先级，结束后回落
+ ├── PetStateMachine    —— 待机打盹状态机（新增，第二阶段落地为 Idle/Sleep 两态）
+ │    状态：Idle 正常 / Sleep 待机打盹（无互动 N 分钟入睡，任意互动唤醒）
+ │    说明：方案设想的 Remind/Interact/Alert 未并入状态机，由 PetReminder/PetWindow/
+ │          PetSystemMonitor 各自直连实现（见 3.1 实现说明）
  ├── PetReminder        —— 提醒源（新增，第一阶段）：待办轮询、番茄钟计时
  └── PetSystemMonitor   —— 系统状态采集（新增，第三阶段，平台相关）
 ```
@@ -48,6 +51,8 @@ DesktopPetManager（单例，已有）
 | Sleep | N 分钟无互动（第二阶段） | 缓慢缩放呼吸 + 上下浮动 | 鼠标靠近/点击、高优先级状态 |
 | Interact | 双击/拖动/投喂（第二阶段） | 弹跳/摇晃变换动画 | 动画结束 |
 | Alert | CPU/内存超阈值、低电量（第三阶段） | 冒汗/瞌睡叠加图标 | 指标回落 |
+
+> **实现说明**：实际落地为 Idle/Sleep 两态（仅待机打盹走状态机，15s 周期检查）。提醒（Remind）由 `PetReminder` 直连红点角标与番茄钟提示卡实现；互动反馈（Interact）由 `PetWindow` 动画方法实现、`PetStateMachine::noteInteraction()` 只做计时复位；系统状态（Alert）由 `PetSystemMonitor` 直连 `PetWindow::setSysAlert()` 实现——三者均未经过统一状态机，优先级仲裁分散在各组件，后续如需更复杂的状态互斥可在此收敛。
 
 ## 四、阶段拆解
 
@@ -71,8 +76,9 @@ DesktopPetManager（单例，已有）
 
 ### 阶段二：趣味陪伴（变换动画，无新素材）（已完成）
 
-- `PetWindow` 增加 `playJump()` / `playWobble()` / `playBreathing()` 等变换动画方法，
-  内部用 `QPropertyAnimation` 驱动 `pos`/`geometry` 或自定义 transform 属性。
+- `PetWindow` 增加 `playJump()`（双击摸头原地弹跳）与 `setSleeping()`（打盹呼吸 +
+  浮动循环动画），内部用 `QPropertyAnimation` 驱动 `pos`/`chewScale` 等属性；
+  单击与双击经防抖定时器解耦（双击窗口期内来 doubleClicked 则取消待发的 clicked）。
 - 待机检测：`PetStateMachine` 内 `QTimer` 检测距上次互动（点击/拖动/投喂）超过阈值
   （`pet/idleSleepMin`，默认 5）进入 Sleep；鼠标进入宠物区域退出 Sleep。
 - 互动映射：双击 → 弹跳；拖动中 → 周期性轻摇；投喂到达 → 满足抖动（复用 chew 时机）。
@@ -143,7 +149,7 @@ QDateEdit，避免新控件的深浅色适配工作），日上限随月份收�
 - 8 种装饰在浅色 / 深色主题下逐个离屏截图确认：轮廓与配色清晰，帽子贴合头顶，
   墨镜准确覆盖双眼。
 - 设置页浅/深色截图确认装饰行、节日彩蛋、生日行排布正常。
-- 六语言 JSON 键数一致（各 449 个，本阶段新增 12 个键）。
+- 六语言 JSON 键数一致（各 457 个，随版本持续增长）。
 
 ## 五、持久化键一览（ConfigManager/QSettings）
 

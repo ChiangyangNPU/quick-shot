@@ -2,9 +2,9 @@
 
 QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基于 **Qt 6** 开发，支持 **Windows** 与 **macOS** 双平台（Linux 支持尚不完整，录屏暂不产出视频文件），旨在提供高效、流畅的截图体验。
 
-当前版本 **v0.1.2**，可从 [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases) 下载最新版本。
+当前版本 **v0.1.3**，可从 [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases) 下载最新版本。
 
-![Version](https://img.shields.io/badge/version-v0.1.2-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
+![Version](https://img.shields.io/badge/version-v0.1.3-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
 
 ## ⚠️ macOS 首次打开：未公证应用需手动放行
 
@@ -186,20 +186,24 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 *   **样式**: **浅色/深色主题一键切换**（深色为 HUD 风格：深色底板 + 白字 + 半透明按钮，作用于整个应用 UI——截图/录屏工具栏、子工具栏、录屏控制栏、设置/历史窗口、托盘菜单、对话框，切换立即生效并持久化）；支持自定义 20+ 个 UI 颜色属性（边框颜色、工具栏背景/按钮/文字/悬停/禁用颜色、子工具栏颜色、选项卡颜色、角手柄颜色等），21 种颜色通过 `colorSettingTable()` 元数据表统一管理（含 17 个 UI 按钮颜色 + 4 个仅保存的颜色），通过循环遍历数据表统一加载/保存（数据表循环取代了原先 34 个分散的成员变量）；按钮显示模式（文字/图标）、子工具栏/控制栏/选项卡颜色定制。
 *   **翻译（在样式与历史记录之间）**: 选择翻译引擎（MyMemory 免注册 / 百度 / DeepL / LibreTranslate）、配置目标语言（默认英文，下拉选择）、填写对应引擎的 API Key / URL、启用翻译功能开关、首次翻译隐私提示开关；首次使用时弹窗说明文本将发送到第三方服务（自定义 MessageBox 居中定位到选区）。
 *   **历史记录**: 支持开关截图历史记录和剪贴板历史记录、设置保留时间（7/30/90/180/365 天）和最大记录数（500/1000/2000/5000 条）、清理过期记录（软件启动时 HistoryManager 自动调用 cleanupExpired()）、清空所有历史、查看存储占用统计。
-*   **宠物**: 桌面宠物开关、16 种外观样式（经典 4 种：猫/熊猫/企鹅/青蛙 + 十二生肖 12 种：鼠/牛/虎/兔/龙/蛇/马/羊/猴/鸡/狗/猪，兔/狗复用原兔子/柴犬造型）平铺图标点选即时切换、重置宠物位置。
+*   **宠物**: 四个分组——**基本**（桌面宠物开关）；**宠物样式**（16 种外观平铺点选：经典 4 种猫/熊猫/企鹅/青蛙 + 十二生肖 12 种，兔/狗复用原兔子/柴犬造型；装饰下拉：无/小红花/草帽/墨镜/皇冠/圣诞帽/南瓜帽/派对帽）；**自定义宠物**（导入本地图片/GIF 作为外观，与内置样式互斥点选，可删除）；**行为**（晾衣绳显示/消失方式、待办提醒、番茄钟工作/休息时长、待机打盹时长、系统状态监控、节日彩蛋与生日、重置宠物位置）。全部设置持久化，重启自动恢复。
 *   **关于**: 查看版本信息及 GitHub 仓库链接。
 *   **DPI 手动适配**: SettingsWindow 与 HistoryWindow 因项目禁用 Qt 自动高 DPI 缩放（QT_ENABLE_HIGHDPI_SCALING=0），DPI 变化时自动调用 StyleManager::reapplyGlobalStyleSheet() 重新加载全局 QSS，SettingsWindow 重新计算宽度/控件尺寸并根据选项卡类型（滚动/非滚动）适配高度；HistoryWindow 重新计算初始尺寸与控件大小。
 *   **统一消息框样式**: 所有确认/提示对话框使用自定义 `MessageBox` 类（继承 QMessageBox），自动应用项目消息框 QSS 样式、加载应用图标、按钮文本自动 tm->get 翻译（确定/是/否），支持 Yes/No 询问框默认否按钮、居中定位到选区/父窗口、静态便捷方法（information/warning/critical/question）一行调用。
 
 ### 10. 🐾 桌面宠物
-*   **开关与外观**: 设置 → 宠物选项卡开启；16 种外观样式（经典组一行：猫/熊猫/企鹅/青蛙；十二生肖组按鼠牛虎兔龙蛇马羊猴鸡狗猪顺序自动换行，兔/狗复用原兔子/柴犬造型）平铺图标点选即时切换；开关、位置、样式均持久化，重启自动恢复。整个宠物模块按屏幕 DPI 缩放（PetUiScale）。
-*   **宠物交互**: 常驻桌面（默认主屏右下角，可拖动、可一键重置位置）的无边框透明置顶窗口，纯 QPainter 矢量绘制；待机随机眨眼，投喂时提前张嘴等待，咀嚼弹跳，完成后左眼闪星星。
-*   **投喂动画**: 截图复制/贴图/快照后，截图从原位置缩小飞入宠物嘴中（FlyAnimationWidget）；复制文本时文字渲染成圆角小卡片从鼠标位置飞入宠物（文字复制投喂）。
-*   **晾衣绳（历史快捷面板）**: 单击宠物或鼠标移到主屏上边界热区均可弹出/收起，铺满主屏幕宽度，悬垂绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；弹出时整体从屏幕上方滑下挂入，收起时向上滑出屏幕；历史增删实时刷新。
+*   **开关与外观**: 设置 → 宠物选项卡开启；16 种内置外观（经典组一行：猫/熊猫/企鹅/青蛙；十二生肖组按鼠牛虎兔龙蛇马羊猴鸡狗猪顺序自动换行，兔/狗复用原兔子/柴犬造型）平铺图标点选即时切换，另可配戴装饰（小红花/草帽/墨镜/皇冠/圣诞帽/南瓜帽/派对帽）；开关、位置、样式、装饰均持久化，重启自动恢复。整个宠物模块按屏幕 DPI 缩放（PetUiScale）。
+*   **自定义外观**: 导入本地 PNG/JPG/JPEG/WebP/GIF 作为宠物形象，与内置 16 种互斥点选、可随时删除；静态图最长边超 1024px 自动等比缩小（保留透明背景），GIF 直接入库（限 20MB，另有帧尺寸上限保护），素材存于应用数据目录。
+*   **宠物交互**: 常驻桌面（默认主屏右下角，可拖动）的无边框透明置顶窗口，纯 QPainter 矢量绘制；待机随机眨眼，投喂时提前张嘴等待，咀嚼弹跳，完成后左眼闪星星；双击摸头原地弹跳（单击已做防抖，摸头不会误切晾衣绳）；无互动达到设定分钟数自动待机打盹（呼吸 + 浮动动画），互动即唤醒。
+*   **投喂动画**: 截图复制/贴图/快照后，截图从原位置缩小飞入宠物嘴中（FlyAnimationWidget）；复制或剪贴文本时文字渲染成圆角小卡片从鼠标位置飞入宠物（文字复制投喂）。
+*   **待办清单与番茄钟**: 右击宠物展开待办清单气泡（悬浮在宠物上方，数据本地持久化），未完成/逾期待办在宠物头顶显示红点角标提醒；开启番茄钟后按工作/休息节奏弹出提醒卡（墙钟锚定计时，系统休眠不打乱节奏）。
+*   **系统状态**: 开启后监控 CPU/内存占用（超阈值宠物冒汗）与电池电量（低于 20% 且未充电时显示电池角标，单次提醒）。
+*   **节日彩蛋**: 圣诞/万圣节/元旦等节日自动戴上应景帽子，可设置生日、当天为宠物庆生。
+*   **晾衣绳（历史快捷面板）**: 显示/消失方式可配置（单击宠物 / 鼠标移到主屏上边界热区 / 两者皆可），铺满主屏幕宽度，悬垂绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；弹出时整体从屏幕上方滑下挂入，收起时向上滑出屏幕；历史增删实时刷新。
     *   **悬停放大预览**: 卡片悬停弹出放大预览，图片加载原图并支持滚轮 0.2–10 倍缩放，文本自动换行展示。
     *   **单击复制**: 点击卡片将内容重新复制到剪贴板（文本复制经 markTextAsRecorded 去重，不重复入库）。
     *   **右键菜单**: 预览上右键弹出复制 / 标注（创建贴图并直接进入标注模式）/ 文字识别 / 翻译。
-    *   **窗口操作**: 支持拖动、上下边缘与四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次点击宠物；应用内其他窗口（设置/历史/贴图/标注等）上的点击不会误关。
+    *   **窗口操作**: 支持拖动、上下边缘与四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次按触发方式操作（点击宠物或移入热区）；应用内其他窗口（设置/历史/贴图/标注等）上的点击不会误关。
 
 ## 📦 安装与部署
 
@@ -268,9 +272,10 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
 *   **标注交互统一 AnnotationInteractionHandler**: 截屏/录屏/贴图三处标注逻辑通过 Host 回调策略注入窗口差异（坐标限制、录屏同步、选区限制、工具栏碰撞检测等）共享同一套实现，包括：鼠标事件优先级（工具栏→文本框完成→橡皮擦→马赛克→控制点→文本→拖动→创建）、控制点光标样式、Shift/Alt 约束、橡皮擦/马赛克半径联动画笔粗细 × 2、全局马赛克算法、undo/redo 移动优先。
 *   **快捷键系统 ShortcutManager**: 9 个全局热键 ShortcutType 枚举 + ShortcutConfigItem 数据表（单一事实源）；ShortcutManager 外观模式统一 API；ShortcutRegistry 注册表管理 GlobalShortcut 生命周期；AnnotationShortcutController + IShortcutHandler + QShortcut(Qt::WindowShortcut) 统一管理 SnipScreen/PinWindow 标注快捷键；setBareKeysEnabled(false/true) 处理文本编辑冲突。
 *   **工具栏子工具栏防闪烁**: BaseToolBar 切换工具时使用同步 `delete` 立即释放布局空间；`showSubTools` 包裹 `setUpdatesEnabled(false/true)` 阻塞中间绘制；PinWindow 独立顶层子工具栏窗口设置 `WA_NoSystemBackground` 阻止系统级背景清除。
+*   **截图保存质量**: JPG/JPEG 保存统一走 savePixmapToFile 单点并固定 quality=100（Qt 中 100 关闭色度 4:2:0 子采样，修复截图红边/色偏）；PNG 保存传 -1 保持默认压缩，避免体积膨胀。复制/保存/另存为等全部图片出口共用该实现。
 *   **历史记录**: 基于 SQLite 数据库存储截图和剪贴板文本，支持多选（拖拽框选/Ctrl追加/Shift范围选）、批量删除、自动清理（启动自动 cleanupExpired：7 天保留 + 1000 最大条数）、实时刷新（300ms 防抖）；HistoryManager::addScreenshotPixmap() 由所有截图生成路径统一调用（copy/save/pin/grabFullscreen/grabActiveWindow/snapshotRequested），供 Alt+P 贴图历史分页循环显示。
 *   **Alt+P 贴图剪贴板历史分页**: SnipScreen::pinClipboard() 基于 HistoryManager 时间倒序截图列表，首次按下在鼠标屏幕中心显示（QCursor::pos - QPoint(w/2, h/2)），后续按下 m_pinHistoryIndex++ 取模，窗口位置继承前一窗口 + (24,24)，qBound 夹到屏幕边界；QPointer<PinWindow> 安全跟踪，PinWindow WA_DeleteOnClose 关闭后指针自动置空。
-*   **桌面宠物模块 src/pet**: DesktopPetManager 单例统一管理开关/位置/外观持久化（pet/enabled、pet/posX、pet/posY、pet/style）与两种投喂入口（截图 feed() / 文本 feedText()）；PetWindow 纯 QPainter 绘制 16 种外观（经典 4 种 + 十二生肖 12 种，PetSpec 数据驱动共享形体骨架）+ 张嘴/咀嚼/眨眼动画；ClotheslineWindow 悬链线晾衣绳挂载最近 12 条历史卡片（HistoryManager 信号驱动实时刷新），CardPreviewPopup 悬停放大预览（原图 + 滚轮缩放）右键接入复制/标注/文字识别/翻译；FlyAnimationWidget 飞入动画；PetUiScale 按主屏 DPI 缩放（夹取 1.0–3.0）；晾衣绳关闭只走显式途径（×/Esc/双击空白/再点宠物），全局事件过滤保证应用自身窗口上的点击一律不关闭。
+*   **桌面宠物模块 src/pet**: DesktopPetManager 单例统一管理开关/位置/外观/行为持久化（pet/enabled、pet/posX、pet/posY、pet/style、pet/clotheslineTrigger 等 15 个 pet/* 配置键）与两种投喂入口（截图 feed() / 文本 feedText()），是待办提醒/番茄钟/状态机/系统监控/节日定时器的调度中枢；PetWindow 纯 QPainter 绘制 16 种外观（经典 4 种 + 十二生肖 12 种，PetSpec 数据驱动共享形体骨架）+ 张嘴/咀嚼/眨眼动画 + 待机打盹（呼吸浮动）/双击摸头弹跳/系统状态角标（过载冒汗、低电量电池）/装饰与节日彩蛋；ClotheslineWindow 悬链线晾衣绳挂载最近 12 条历史卡片（HistoryManager 信号驱动实时刷新），支持主屏顶边热区触发与整体滑动出入场动画，CardPreviewPopup 悬停放大预览（原图 + 滚轮缩放）右键接入复制/标注/文字识别/翻译；TodoWindow + TodoStore 右击宠物的待办清单气泡（todos.json 持久化，QSaveFile 原子写、读失败拒绝覆盖写）+ PetBadgeWidget 头顶红点角标；PetReminder 待办红点 30s 轮询 + 番茄钟墙钟锚定计时（休眠补偿）；PomodoroCard 番茄钟提醒卡；PetStateMachine 待机打盹状态机（15s 检查，互动唤醒）；PetSystemMonitor CPU/内存/电量采样（5s 轮询，Windows/macOS 平台分支）；CustomPetStore 自定义素材导入（尺寸/体积上限保护，旧 pet/style 配置自动迁移）；PetTheme 宠物模块主题色板（随应用深浅主题，含晾衣绳专用段）；FlyAnimationWidget 飞入动画；PetUiScale 按主屏 DPI 缩放（夹取 1.0–3.0）；晾衣绳关闭只走显式途径（×/Esc/双击空白/触发方式操作），全局事件过滤保证应用自身窗口上的点击一律不关闭。
 *   **自定义统一 MessageBox**: 所有对话框（提示/确认/隐私/翻译错误详情）使用 src/widgets/MessageBox.h，继承 QMessageBox 自动 applyProjectStyle()（getMessageBoxStyle QSS + loadAppIcon 图标），提供 addOkButton()/addYesNoButtons()（tm->get("yes/no") 翻译按钮，默认否按钮）/centerOn(rect) 居中定位到选区、information/warning/critical/question 静态便捷方法一行调用；翻译错误支持「详细信息」次级 MessageBox。
 *   **配置持久化**: 使用 QSettings 持久化配置，ConfigManager 单例基于 QSettings 惰性加载、统一读写，支持配置文件切换/重置/打开位置。
 *   **代码注释规范**: 采用标准的 Doxygen 风格注释（@brief、@param、@return、@note、@author），所有公共方法均有中文方法注释（及 Doxygen 格式的英文标签），确保代码的可读性和可维护性。
@@ -295,6 +300,7 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
 *   [架构说明](docs/architecture.md)：模块划分与整体设计。
 *   [OCR 功能](docs/ocr.md)：OCR 引擎实现与配置。
 *   [历史记录功能](docs/history-feature.md)：历史记录与晾衣绳快捷面板设计。
+*   [桌面宠物陪伴功能](docs/pet-companion-plan.md)：待办/番茄钟/打盹/系统状态/装饰彩蛋三阶段方案。
 *   [翻译功能](docs/translation-design.md)：翻译引擎抽象与批量翻译流程。
 *   [快捷键说明](docs/shortcuts.md)：全局热键与标注/贴图快捷键一览。
 *   [Windows 录屏](docs/recording-windows.md)：Windows 录屏实现细节。
