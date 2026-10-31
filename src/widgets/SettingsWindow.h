@@ -337,6 +337,7 @@ private:
     QPropertyAnimation *heightAnimation; ///< 高度动画
     int m_animatedHeight; ///< 动画高度属性
     QScrollArea *m_suppressedScrollArea = nullptr; ///< 高度动画期间被抑制滚动条的选项卡滚动区
+    bool m_heightRecheckScheduled = false; ///< 高度复核是否已安排（防重复排队）
 
 private slots:
 
@@ -432,6 +433,16 @@ private:
      * @author chiangyang
      */
     void applyTabHeight(bool animated);
+
+    /**
+     * @brief 延迟一拍复核窗口高度
+     *
+     * 页面/嵌套布局的几何在高度设置后才真正重算（激活滞后一拍），延迟复核
+     * 用重算后的数据再适配一次；高度已达标时 applyTabHeight 直接早退，
+     * 不会循环排队。
+     * @author chiangyang
+     */
+    void scheduleHeightRecheck();
 
     /**
      * @brief 抑制当前选项卡滚动区的垂直滚动条并记录；恢复上次抑制

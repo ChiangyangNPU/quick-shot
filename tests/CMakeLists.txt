@@ -131,3 +131,15 @@ add_executable(ScrollStitcherTest ScrollStitcherTest.cpp
 target_include_directories(ScrollStitcherTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(ScrollStitcherTest PRIVATE Qt6::Test Qt6::Core Qt6::Gui)
 add_test(NAME ScrollStitcherTest COMMAND ScrollStitcherTest)
+
+# ---- AboutTab：更新流程各状态的 tab 高度测量回归（需 QApplication，offscreen 可跑）----
+add_executable(AboutTabHeightTest AboutTabHeightTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/widgets/ElidedLabel.h
+    ${CMAKE_SOURCE_DIR}/src/widgets/settings/SettingsAboutTab.cpp
+    ${CMAKE_SOURCE_DIR}/src/update/UpdateManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/widgets/MessageBox.cpp
+    ${QS_TEST_CORE_SOURCES})
+target_include_directories(AboutTabHeightTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(AboutTabHeightTest PRIVATE
+    Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
+add_test(NAME AboutTabHeightTest COMMAND AboutTabHeightTest)

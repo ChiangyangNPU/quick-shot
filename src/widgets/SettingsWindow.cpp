@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFontMetrics>
+#include <functional>
 #include "MessageBox.h"
 #include <QSvgRenderer>
 #include <QPainter>
@@ -521,7 +522,7 @@ void SettingsWindow::fitWindowHeight() {
 /**
  * @brief 按当前选项卡内容调整窗口高度（可选动画）
  *
- * 先让当前页缩放回其 sizeHint 自然高度（adjustSize()），
+ * 先同步失效页面布局的几何缓存并按 sizeHint 调整页面，
  * 再读取内容真实所需高度，按 animated 决定是动画过渡还是立即设置。
  * @param animated 是否使用高度动画（false 时立即设置目标高度）
  * @author chiangyang
@@ -530,11 +531,19 @@ void SettingsWindow::applyTabHeight(bool animated) {
     QWidget *currentTab = tabWidget->currentWidget();
     if (!currentTab) return;
 
-    // adjustSize() 会把页面缩到其 sizeHint 的自然高度，
-    // 然后 size().height() 就是内容真实需要的高度
+    // 内容需求高度必须读「布局失效后的 sizeHint」，不能用页面 size()：
+    // 页面在 QTabWidget 的 QStackedLayout 里被强制撑满 pane，size() 是
+    // pane 回填值。而布局几何缓存的失效在嵌套布局（分组框内部）与页面/
+    // 窗口级之间不同步——子控件 show/hide 只失效了直接父布局，页面级
+    // 缓存要等一次激活才重算。因此这里调整两次：第一次 adjustSize 激活
+    // 消费旧缓存，第二次按此时已新鲜的 sizeHint 修正页面，随后读到的
+    // 高度才是真实内容需求（如取消更新下载后隐藏的进度条/按钮不再计入，
+    // 窗口底部不再残留大段空白）。
     if (currentTab->layout()) {
-        currentTab->layout()->update();
+        currentTab->layout()->invalidate();
         currentTab->adjustSize();
+        if (currentTab->size() != currentTab->sizeHint())
+            currentTab->resize(currentTab->sizeHint());
     }
 
     int tabHeight = currentTab->size().height();
@@ -596,6 +605,7 @@ void SettingsWindow::applyTabHeight(bool animated) {
     if (!animated) {
         // 无动画路径：立即把窗口高度设为目标值
         setAnimatedHeight(targetHeight);
+        scheduleHeightRecheck();
         return;
     }
 
@@ -604,6 +614,7 @@ void SettingsWindow::applyTabHeight(bool animated) {
         heightAnimation->setEasingCurve(QEasingCurve::InOutQuad);
         connect(heightAnimation, &QPropertyAnimation::finished, this, [this]() {
             restoreSuppressedScrollBar();
+            scheduleHeightRecheck();
         });
     }
 
@@ -650,6 +661,21 @@ void SettingsWindow::restoreSuppressedScrollBar() {
     if (!m_suppressedScrollArea) return;
     m_suppressedScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
     m_suppressedScrollArea = nullptr;
+}
+
+/**
+ * @brief 延迟一拍复核窗口高度
+ * @author chiangyang
+ */
+void SettingsWindow::scheduleHeightRecheck() {
+    if (m_heightRecheckScheduled)
+        return;
+    m_heightRecheckScheduled = true;
+    QTimer::singleShot(0, this, [this]() {
+        m_heightRecheckScheduled = false;
+        if (isVisible())
+            applyTabHeight(false);
+    });
 }
 
 /**

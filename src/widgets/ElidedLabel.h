@@ -16,6 +16,8 @@
  * @author chiangyang
  */
 class ElidedLabel : public QLabel {
+    Q_OBJECT
+
 public:
     explicit ElidedLabel(QWidget *parent = nullptr) : QLabel(parent) {}
 
@@ -25,6 +27,13 @@ public:
         m_fullText = text;
         QLabel::setText(text);
         setToolTip(text);
+    }
+
+    // 同理覆盖 clear()：QLabel::clear() 走 clearText() 路径，不会重置
+    // QLabel 内部缓存的 sizeHint（updateGeometry 只失效父布局），后续
+    // 布局计算仍按旧文字高度计入；改走 setText("") 触发完整重算
+    void clear() {
+        setText(QString());
     }
 
 protected:
