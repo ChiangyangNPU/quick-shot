@@ -217,9 +217,11 @@ void UpdateManager::onCheckTimeout() {
     if (!m_currentReply) return;
 
     LOG_WARNING(QString("UpdateManager: check timeout on %1").arg(channelName(m_currentChannel)));
-    m_currentReply->abort();
-    m_currentReply->deleteLater();
+    // 先摘下成员再 abort：abort() 同步触发 onCheckReply 重入（见 cancel() 注释）
+    QNetworkReply *reply = m_currentReply;
     m_currentReply = nullptr;
+    reply->abort();
+    reply->deleteLater();
 
     handleCheckFailure(TranslationManager::instance()->get("update.requestTimeout", "Request timed out"));
 }
@@ -443,9 +445,13 @@ void UpdateManager::onDownloadTimeout() {
     if (!m_currentReply) return;
 
     LOG_WARNING(QString("UpdateManager: download timeout on %1").arg(channelName(m_currentChannel)));
-    m_currentReply->abort();
-    m_currentReply->deleteLater();
+    // 先摘下成员再 abort：abort() 同步触发 onDownloadFinished 重入 → 错误处理
+    // 会切渠道并给 m_currentReply 赋新 reply，若沿用旧的"abort 后再 deleteLater"
+    // 写法会把新渠道的请求误删（静默杀死重试）
+    QNetworkReply *reply = m_currentReply;
     m_currentReply = nullptr;
+    reply->abort();
+    reply->deleteLater();
 
     handleDownloadFailure(TranslationManager::instance()->get("update.downloadTimeout", "Download timed out"));
 }
@@ -567,9 +573,13 @@ void UpdateManager::cancel() {
     m_downloadTimer.stop();
 
     if (m_currentReply) {
-        m_currentReply->abort();
-        m_currentReply->deleteLater();
+        // abort() 会同步发射 finished()，onCheckReply/onDownloadFinished 随即
+        // 重入并把 m_currentReply 置空（deleteLater 已由其完成）：必须先摘下
+        // 成员再 abort，否则回到这里时对空指针调 deleteLater 直接闪退
+        QNetworkReply *reply = m_currentReply;
         m_currentReply = nullptr;
+        reply->abort();
+        reply->deleteLater();
     }
     // 仅下载进行中才清理半截文件；下载已完成（ReadyToInstall 等待用户安装）时
     // 保留已校验的安装包——否则"稍后安装"场景退出应用会经析构→cancel 误删安装包
