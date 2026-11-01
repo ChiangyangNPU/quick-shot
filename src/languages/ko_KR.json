@@ -429,7 +429,7 @@
   "update.installing": "업데이트 설치 중, 프로그램이 재시작됩니다...",
   "update.installError": "업데이트 파일 경로를 가져올 수 없습니다",
   "update.channelSwitch": "%1(으)로 전환되었습니다 (%2)",
-  "update.channelOfficial": "공식 웹사이트",
+  "update.channelOfficial": "Gitee(예비)",
   "update.extractFailed": "업데이트 패키지 압축 해제에 실패했습니다",
   "update.installComplete": "업데이트 설치가 완료되었습니다. 프로그램이 자동으로 다시 시작됩니다",
   "update.installFileMissing": "업데이트 파일을 찾을 수 없습니다",

@@ -23,6 +23,20 @@ const QStringList UpdateManager::s_channelNames = {
 };
 
 /**
+ * @brief 渠道实际数据源：官网尚未上线，官网渠道暂复用 Gitee
+ *
+ * 官网渠道的检查地址/下载地址与 Gitee 完全一致（相当于给最可靠的源多一次
+ * 重试机会）。上线真实官网后，把本函数改为恒等映射、并补回官网地址即可；
+ * 响应解析已按 JSON 内容判断形状（tag_name / version），无需同步修改。
+ * @param channel 渠道枚举值
+ * @return 实际请求数据源渠道
+ * @author chiangyang
+ */
+UpdateManager::Channel UpdateManager::sourceChannel(Channel channel) {
+    return channel == Channel::Official ? Channel::Gitee : channel;
+}
+
+/**
  * @brief 构造函数
  *
  * 初始化网络管理器、状态变量和超时定时器。
@@ -104,6 +118,11 @@ void UpdateManager::tryNextCheckChannel() {
     m_currentChannel = m_channelOrder[m_channelIndex];
     LOG_INFO(QString("UpdateManager: trying channel: %1").arg(channelName(m_currentChannel)));
 
+    // 每次尝试前清空版本信息：不同渠道/不同 JSON 形状的字段并不齐全
+    // （如 version.json 风格无 assets），残留项会与新响应混在一起，
+    // 导致下载阶段误用上一渠道的附件地址
+    m_latestVersion = VersionInfo();
+
     QString url = getVersionInfoUrl(m_currentChannel);
     LOG_INFO(QString("UpdateManager: requesting version info from: %1").arg(url));
 
@@ -161,11 +180,15 @@ void UpdateManager::onCheckReply() {
 
     QJsonObject obj = doc.object();
 
-    // 按渠道分支解析字段：Gitee/GitHub release API 与 Official version.json 字段不同
-    if (m_currentChannel == Channel::Gitee || m_currentChannel == Channel::GitHub) {
+    // 按响应内容判断 JSON 形状，不绑渠道：
+    // - release API（GitHub/Gitee，官网渠道暂也复用 Gitee）：有 tag_name
+    // - version.json 风格（本地测试服务器 QUICKSHOT_UPDATE_URL 的 Windows 清单、
+    //   将来官网）：有 version 字段
+    // 两个本地测试脚本分别产出这两种形状，按内容判断可同时兼容。
+    if (obj.contains(QStringLiteral("tag_name"))) {
         parseReleaseApi(obj, m_latestVersion);
     } else {
-        // Official 渠道：解析 version.json 风格字段
+        // version.json 风格字段
         m_latestVersion.version = obj.value("version").toString().trimmed();
         // 按行翻译 releaseNotes：每行视为翻译 key，tm->get 找不到则保留原文
         {
@@ -284,9 +307,9 @@ void UpdateManager::tryNextDownloadChannel() {
     } else {
         downloadUrl = getDownloadUrl(m_currentChannel, m_currentDownloadInfo.version);
     }
-    if (m_currentChannel == Channel::Official && !m_currentDownloadInfo.downloadUrl.isEmpty()) {
-        downloadUrl = m_currentDownloadInfo.downloadUrl;
-    }
+    // 注：不需要按 Official 渠道覆写 downloadUrl——官网渠道暂复用 Gitee，
+    // 无附件时由 getDownloadUrl 返回 Gitee 模板；测试覆盖（QUICKSHOT_UPDATE_URL）
+    // 下 getDownloadUrl 本身即返回清单里的 downloadUrl
 
     LOG_INFO(QString("UpdateManager: downloading from: %1").arg(downloadUrl));
 
@@ -863,13 +886,13 @@ QString UpdateManager::getVersionInfoUrl(Channel channel) const {
         return QString::fromUtf8(overrideUrl);
     }
 
-    switch (channel) {
+    switch (sourceChannel(channel)) {
     case Channel::GitHub:
         return QStringLiteral("https://api.github.com/repos/chiangyangNPU/quick-shot/releases/latest");
     case Channel::Gitee:
         return QStringLiteral("https://gitee.com/api/v5/repos/chiangyangNPU/quick-shot/releases/latest");
     case Channel::Official:
-        return QStringLiteral("https://www.juran.com/quick-shot/version.json");
+        break; // sourceChannel 已把官网归一为 Gitee，不可达
     }
     return QString();
 }
@@ -889,7 +912,7 @@ QString UpdateManager::getDownloadUrl(Channel channel, const QString &version) c
         return m_currentDownloadInfo.downloadUrl;
     }
 
-    switch (channel) {
+    switch (sourceChannel(channel)) {
     case Channel::GitHub:
 #ifdef Q_OS_WIN
         return QStringLiteral("https://github.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1-Windows-x64.zip").arg(version);
@@ -903,7 +926,7 @@ QString UpdateManager::getDownloadUrl(Channel channel, const QString &version) c
         return QStringLiteral("https://gitee.com/chiangyangNPU/quick-shot/releases/download/v%1/QuickShot-Release-v%1.dmg").arg(version);
 #endif
     case Channel::Official:
-        return m_currentDownloadInfo.downloadUrl;
+        break; // sourceChannel 已把官网归一为 Gitee，不可达
     }
     return QString();
 }

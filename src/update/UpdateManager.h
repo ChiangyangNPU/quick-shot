@@ -12,7 +12,7 @@
  * @brief 更新管理器
  *
  * 负责版本检查、下载、校验和安装。支持多渠道回退机制
- * （GitHub -> Gitee -> 官方网站）和超时保护。
+ * （GitHub / Gitee / 官网，其中官网暂复用 Gitee）和超时保护。
  * @author chiangyang
  */
 class UpdateManager : public QObject {
@@ -39,7 +39,7 @@ public:
     enum class Channel {
         GitHub,             ///< GitHub
         Gitee,              ///< Gitee
-        Official            ///< 官方网站
+        Official            ///< 官方网站（尚未上线，暂复用 Gitee，见 sourceChannel）
     };
 
     /**
@@ -50,7 +50,7 @@ public:
         QString releaseNotes;   ///< 更新说明
         QString downloadUrl;    ///< 下载链接
         QString checksum;       ///< SHA256 校验和
-        qint64 fileSize;        ///< 文件大小（字节）
+        qint64 fileSize = 0;    ///< 文件大小（字节；未提供时为 0，跳过大小校验）
 
         /// release API 的附件资产，按平台扩展名从中挑选安装包
         struct Asset {
@@ -58,7 +58,7 @@ public:
             QString url;        ///< 下载地址
             qint64 size = 0;    ///< 字节数
         };
-        QList<Asset> assets;    ///< 全部附件（GitHub/Gitee 渠道填充，Official 渠道为空）
+        QList<Asset> assets;    ///< 全部附件（release API 响应填充；version.json 风格响应为空）
     };
 
     /**
@@ -324,11 +324,24 @@ private:
 
 public:
     /**
+     * @brief 渠道实际数据源
+     *
+     * 官网尚未上线，官网渠道暂复用 Gitee：检查地址与下载地址均与 Gitee 一致
+     * （相当于给最可靠的源多一次重试）。上线真实官网后改为恒等映射并补回
+     * 官网地址即可——响应解析按 JSON 内容判断形状，无需同步修改。
+     * @param channel 渠道枚举值
+     * @return 实际请求数据源渠道
+     * @author chiangyang
+     */
+    static Channel sourceChannel(Channel channel);
+
+    /**
      * @brief 解析 Gitee/GitHub release API 响应为 VersionInfo
      *
-     * Gitee/GitHub 的 /releases/latest 接口返回字段与 Official 渠道的 version.json 不同：
+     * Gitee/GitHub 的 /releases/latest 接口返回字段与 version.json 风格清单不同
+     * （调用方按响应是否含 tag_name 判断形状，与渠道无关）：
      * - 版本号：tag_name（可能带 v 前缀，需剥离以便 compareVersion 按数字段比较）
-     * - 更新说明：body（按行翻译，与 Official 渠道一致）
+     * - 更新说明：body（按行翻译，与 version.json 的 releaseNotes 一致）
      * - 下载链接：assets[0].browser_download_url
      * - 文件大小：assets[0].size
      * - 校验和：release API 不提供，留空

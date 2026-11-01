@@ -429,7 +429,7 @@
   "update.installing": "Installing update, the program will restart...",
   "update.installError": "Unable to get update file path",
   "update.channelSwitch": "Switched to %1 (%2)",
-  "update.channelOfficial": "Official Website",
+  "update.channelOfficial": "Gitee (backup)",
   "update.extractFailed": "Failed to extract update package",
   "update.installComplete": "Update installed, the program will restart automatically",
   "update.installFileMissing": "Update file not found",

@@ -85,6 +85,20 @@ private slots:
         QCOMPARE(UpdateManager::parseReleaseApi(obj, info), false);
         QVERIFY(info.version.isEmpty());
     }
+
+    // ---- sourceChannel：官网尚未上线，官网渠道复用 Gitee ----
+    void sourceChannel_officialReusesGitee() {
+        QCOMPARE(UpdateManager::sourceChannel(UpdateManager::Channel::Official),
+                 UpdateManager::Channel::Gitee);
+    }
+
+    void sourceChannel_othersUnchanged() {
+        // GitHub/Gitee 不得被归一改道，否则回退链会退化成同一个源
+        QCOMPARE(UpdateManager::sourceChannel(UpdateManager::Channel::GitHub),
+                 UpdateManager::Channel::GitHub);
+        QCOMPARE(UpdateManager::sourceChannel(UpdateManager::Channel::Gitee),
+                 UpdateManager::Channel::Gitee);
+    }
 };
 
 QTEST_GUILESS_MAIN(UpdateManagerVersionTest)

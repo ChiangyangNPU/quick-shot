@@ -429,7 +429,7 @@
   "update.installing": "安裝更新中，程式即將重啟...",
   "update.installError": "無法取得更新檔案路徑",
   "update.channelSwitch": "已切換到 %1（%2）",
-  "update.channelOfficial": "官方網站",
+  "update.channelOfficial": "Gitee（備用）",
   "update.extractFailed": "解壓更新套件失敗",
   "update.installComplete": "安裝完成，程式即將自動重新啟動",
   "update.installFileMissing": "找不到更新檔案",

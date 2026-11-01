@@ -429,7 +429,7 @@
   "update.installing": "アップデートをインストール中。プログラムが再起動します...",
   "update.installError": "アップデートファイルのパスを取得できません",
   "update.channelSwitch": "%1（%2）に切り替えました",
-  "update.channelOfficial": "公式サイト",
+  "update.channelOfficial": "Gitee（予備）",
   "update.extractFailed": "更新パッケージの解凍に失敗しました",
   "update.installComplete": "インストールが完了しました。プログラムは自動的に再起動します",
   "update.installFileMissing": "更新ファイルが見つかりません",
