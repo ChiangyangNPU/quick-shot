@@ -95,7 +95,9 @@ public:
     /**
      * @brief 下载更新
      *
-     * 按 GitHub -> Gitee -> 官方网站 的顺序回退下载。
+     * 从检查成功的渠道起步（其版本信息与附件地址已验证可用），失败后按
+     * 渠道顺序回退。每个渠道的下载地址按该渠道重建：附件地址只在与检查
+     * 响应同源的渠道上使用，跨渠道按版本号模板拼接，保证回退真正换主机。
      * 每个渠道有 30 秒无数据传输超时。
      * @param info 版本信息
      * @param downloadDir 下载目录
@@ -389,6 +391,7 @@ private:
     Channel m_currentChannel;
     int m_channelIndex;
     QList<Channel> m_channelOrder;  ///< 渠道优先级顺序（根据地区调整）
+    Channel m_infoSourceChannel = Channel::GitHub; ///< 检查成功的渠道（下载起步与同源附件判定用）
 
     VersionInfo m_latestVersion;
     VersionInfo m_currentDownloadInfo;

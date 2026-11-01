@@ -2296,7 +2296,7 @@ QuickShot 内置自动更新功能，支持多渠道回退、SHA256 校验、解
 
 #### 6.18.2 多渠道回退
 
-UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`initChannelOrder()`）：中国大陆 Gitee → GitHub → 官网，其他地区 GitHub → Gitee → 官网。**官网尚未上线，官网渠道暂复用 Gitee**（`sourceChannel()` 归一，检查/下载地址与 Gitee 一致，等于给该源多一次重试）；上线后改为恒等映射并补回官网地址即可。响应解析按 JSON 内容判断形状（含 `tag_name` 走 release API，含 `version` 走 version.json 风格），与渠道解耦。每个渠道独立超时（10 秒，`CHECK_TIMEOUT_MS`）。某渠道失败后自动切换到下一个渠道，全部失败后报错。
+UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`initChannelOrder()`）：中国大陆 Gitee → GitHub → 官网，其他地区 GitHub → Gitee → 官网。**官网尚未上线，官网渠道暂复用 Gitee**（`sourceChannel()` 归一，检查/下载地址与 Gitee 一致，等于给该源多一次重试）；上线后改为恒等映射并补回官网地址即可。响应解析按 JSON 内容判断形状（含 `tag_name` 走 release API，含 `version` 走 version.json 风格），与渠道解耦。每个渠道独立超时（10 秒，`CHECK_TIMEOUT_MS`）。某渠道失败后自动切换到下一个渠道，全部失败后报错。下载阶段从**检查成功的渠道**起步（`m_infoSourceChannel`），且附件地址（assets）只在同源渠道上使用——assets 的 URL 指向检查响应来源主机，跨渠道复用会让回退形同虚设；跨渠道回退时按版本号模板重建该渠道自己的下载地址。
 
 支持环境变量 `QUICKSHOT_UPDATE_URL` 覆盖版本检查地址，用于本地模拟更新测试（详见 update-test/README.md）。
 

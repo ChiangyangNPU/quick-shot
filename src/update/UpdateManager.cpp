@@ -162,8 +162,13 @@ void UpdateManager::onCheckReply() {
     }
 
     if (reply->error() != QNetworkReply::NoError) {
-        LOG_WARNING(QString("UpdateManager: check failed on %1: %2")
-            .arg(channelName(m_currentChannel), reply->errorString()));
+        // HTTP 状态一并记录：403 多为匿名 API 限流（GitHub/Gitee 60 次/小时/IP），
+        // 与网络故障的表现（超时/DNS 失败）在日志里应可区分
+        const QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+        LOG_WARNING(QString("UpdateManager: check failed on %1: %2 (http=%3%4)")
+            .arg(channelName(m_currentChannel), reply->errorString())
+            .arg(httpStatus.isValid() ? httpStatus.toString() : QStringLiteral("n/a"),
+                 httpStatus.toInt() == 403 ? QStringLiteral(", likely API rate limit") : QString()));
         handleCheckFailure(reply->errorString());
         return;
     }
@@ -189,7 +194,13 @@ void UpdateManager::onCheckReply() {
         parseReleaseApi(obj, m_latestVersion);
     } else {
         // version.json 风格字段
-        m_latestVersion.version = obj.value("version").toString().trimmed();
+        // 版本号与 parseReleaseApi 一致用正则提取数字段：裸 trim 时 "v1.0"
+        // 这类带前缀的值会在 compareVersion 中被当作 0（toInt 失败返回 0），
+        // 导致主版本升级漏报
+        static const QRegularExpression versionRe(QStringLiteral("(\\d+(?:\\.\\d+)*)"));
+        const QRegularExpressionMatch versionMatch =
+            versionRe.match(obj.value(QStringLiteral("version")).toString().trimmed());
+        m_latestVersion.version = versionMatch.hasMatch() ? versionMatch.captured(1) : QString();
         // 按行翻译 releaseNotes：每行视为翻译 key，tm->get 找不到则保留原文
         {
             auto *tm = TranslationManager::instance();
@@ -218,6 +229,9 @@ void UpdateManager::onCheckReply() {
         handleCheckFailure(TranslationManager::instance()->get("update.invalidVersion", "Invalid version number returned by server"));
         return;
     }
+
+    // 记录版本信息来源渠道：下载从此起步，且其附件地址仅在此渠道（同源）上使用
+    m_infoSourceChannel = m_currentChannel;
 
     if (isNewerVersion(m_latestVersion.version, m_currentVersion)) {
         LOG_INFO(QString("UpdateManager: new version available: %1").arg(m_latestVersion.version));
@@ -262,8 +276,15 @@ void UpdateManager::downloadUpdate(const VersionInfo &info, const QString &downl
     m_currentDownloadInfo = info;
     m_downloadDir = downloadDir;
     initChannelOrder();
-    m_channelIndex = 0;
-    m_currentChannel = m_channelOrder.first();
+    // 从检查成功的渠道起步（其版本信息与附件地址已验证可用），而非固定从
+    // 首选渠道重来——检查阶段已确认该渠道可达，避免在已知不可达的渠道上
+    // 白等一个超时周期；不在顺序中（异常情况）时退回首选
+    int startIdx = m_channelOrder.indexOf(m_infoSourceChannel);
+    if (startIdx < 0) {
+        startIdx = 0;
+    }
+    m_channelIndex = startIdx;
+    m_currentChannel = m_channelOrder[startIdx];
     setStatus(Status::Downloading);
     tryNextDownloadChannel();
 }
@@ -290,22 +311,36 @@ void UpdateManager::tryNextDownloadChannel() {
         dir.mkpath(".");
     }
 
-    // 安装包文件名与下载地址按平台区分：Windows 取 zip，macOS 取 dmg
+    // 安装包文件名与下载地址按平台区分：Windows 取 zip，macOS 取 dmg。
+    // 本地命名与 release 资产命名（QuickShot-Release-v{ver}-…）保持一致，
+    // 便于排查时与发布页附件对号
 #ifdef Q_OS_WIN
-    QString fileName = QString("QuickShot-%1-Windows-x64.zip").arg(m_currentDownloadInfo.version);
+    QString fileName = QString("QuickShot-Release-v%1-Windows-x64.zip").arg(m_currentDownloadInfo.version);
 #else
     QString fileName = QString("QuickShot-Release-v%1.dmg").arg(m_currentDownloadInfo.version);
 #endif
     m_tempFilePath = dir.filePath(fileName);
 
-    // 优先使用 release 附件列表中匹配当前平台的附件（地址与大小最可靠），
-    // 没有匹配资产时回退到按版本号拼装的 URL 模板
+    // 下载地址按当前渠道重建：assets 里的 URL 指向"检查响应来源渠道"的主机，
+    // 跨渠道复用会让回退形同虚设（切了渠道仍在请求同一台主机）。因此仅在
+    // 当前渠道与检查响应同源时使用资产地址，否则按版本号模板拼接当前渠道
+    // 自己的地址，保证回退真正换主机。
     QString downloadUrl;
-    if (const VersionInfo::Asset *asset = pickPlatformAsset(m_currentDownloadInfo)) {
-        downloadUrl = asset->url;
-        m_currentDownloadInfo.fileSize = asset->size;
-    } else {
+    const VersionInfo::Asset *platformAsset = pickPlatformAsset(m_currentDownloadInfo);
+    if (platformAsset && sourceChannel(m_currentChannel) == sourceChannel(m_infoSourceChannel)) {
+        downloadUrl = platformAsset->url;
+    }
+    if (downloadUrl.isEmpty()) {
         downloadUrl = getDownloadUrl(m_currentChannel, m_currentDownloadInfo.version);
+    }
+    // 大小校验基准（渠道侧 checksum 恒为空，字节数是唯一廉价的完整性防线）：
+    // 同一安装包双渠道体积一致，有平台资产就用其大小，与所走主机无关；
+    // 无平台资产时——version.json 清单的 fileSize 与其 downloadUrl 配套可沿用，
+    // release-API 风格的 downloadUrl/fileSize 则属于其他平台资产，不可信，放弃校验
+    if (platformAsset) {
+        m_currentDownloadInfo.fileSize = platformAsset->size;
+    } else if (!m_currentDownloadInfo.assets.isEmpty()) {
+        m_currentDownloadInfo.fileSize = 0;
     }
     // 注：不需要按 Official 渠道覆写 downloadUrl——官网渠道暂复用 Gitee，
     // 无附件时由 getDownloadUrl 返回 Gitee 模板；测试覆盖（QUICKSHOT_UPDATE_URL）
@@ -378,8 +413,11 @@ void UpdateManager::onDownloadFinished() {
     }
 
     if (reply->error() != QNetworkReply::NoError) {
-        LOG_WARNING(QString("UpdateManager: download failed on %1: %2")
-            .arg(channelName(m_currentChannel), reply->errorString()));
+        // HTTP 状态一并记录（403 = 被限流/拒绝，便于与网络故障区分）
+        const QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
+        LOG_WARNING(QString("UpdateManager: download failed on %1: %2 (http=%3)")
+            .arg(channelName(m_currentChannel), reply->errorString())
+            .arg(httpStatus.isValid() ? httpStatus.toString() : QStringLiteral("n/a")));
         reply->deleteLater();
         handleDownloadFailure(reply->errorString());
         return;
