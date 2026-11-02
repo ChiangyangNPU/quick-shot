@@ -3,7 +3,6 @@
 #include "../../core/StyleManager.h"
 #include "../../pet/DesktopPetManager.h"
 #include "../../pet/PetWindow.h"
-#include "../../pet/PetTheme.h"
 #include "../../pet/PetUiScale.h"
 #include "../FlowLayout.h"
 #include "../MessageBox.h"
@@ -330,8 +329,8 @@ void SettingsPetTab::setupUi() {
     connect(m_sysMonitorCheck, &QCheckBox::toggled, this, [](bool checked) {
         DesktopPetManager::instance()->setSysMonitorEnabled(checked);
     });
-    // 行为说明：紧跟「系统状态」复选框右侧的小号灰字（颜色在 refreshStyles 随主题刷新，
-    // 全局 QSS 的 QLabel 颜色优先级高于 palette，只能 setStyleSheet 覆盖）
+    // 行为说明：紧跟「系统状态」复选框右侧的说明文字，使用与其他说明文字一致的主文字色
+    // （颜色由全局 QSS 的 QLabel 规则提供，主题切换时随 @textColor 自动刷新）
     m_sysMonitorHint = new QLabel(
         tm->get("pet.sysMonitorHint",
                 "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low."),
@@ -341,8 +340,6 @@ void SettingsPetTab::setupUi() {
     // 垂直方向微调下移，抵消居中后仍显得偏上的视觉误差
     m_sysMonitorHint->setContentsMargins(PetUi::scaled(6), PetUi::scaled(2), 0, 0);
     m_sysMonitorHint->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
-    m_sysMonitorHint->setStyleSheet(
-        QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));
 
     // 节日彩蛋：圣诞/万圣/元旦/生日当天自动戴对应帽子，区间结束后恢复手动装饰
     m_festivalCheck = new QCheckBox(tm->get("pet.festival", "Festival Surprise"), m_behaviorGroup);
@@ -676,9 +673,6 @@ void SettingsPetTab::refreshStyles() {
     if (m_accessoryCombo) m_accessoryCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_birthdayMonthCombo) m_birthdayMonthCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_birthdayDaySpin) m_birthdayDaySpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
-    // 说明标签：次要文字色（全局 QSS 的 QLabel 颜色需用 setStyleSheet 覆盖）
-    if (m_sysMonitorHint) m_sysMonitorHint->setStyleSheet(
-        QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));
     // SpinBox 样式与样式选项卡一致：复用输入框（ComboBox）主题样式
     if (m_pomodoroWorkSpin) m_pomodoroWorkSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_pomodoroBreakSpin) m_pomodoroBreakSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
