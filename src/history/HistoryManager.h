@@ -46,13 +46,15 @@ public:
      * @brief 添加截图记录
      * @param filePath 截图文件路径
      * @param windowTitle 窗口标题
-     * @param imageSize 图片尺寸
+     * @param imageSize 图片尺寸（物理像素）
+     * @param imageDpr 截图时的设备像素比（PNG 不保存 DPR，需显式记录）
      * @return 新记录的 ID，失败返回 -1
      * @author chiangyang
      */
     qint64 addScreenshot(const QString &filePath,
                           const QString &windowTitle,
-                          const QSize &imageSize);
+                          const QSize &imageSize,
+                          qreal imageDpr = 1.0);
 
     /**
      * @brief 添加截图记录（直接从 pixmap 创建，用于复制操作）
@@ -251,7 +253,7 @@ private:
      */
     qint64 insertScreenshotRecord(const QString &filePath, const QString &thumbnailPath,
                                   const QString &windowTitle, const QString &timestampStr,
-                                  const QSize &imageSize);
+                                  const QSize &imageSize, qreal imageDpr);
     /**
      * @brief 构造函数（私有，单例模式）
      * @param parent 父对象

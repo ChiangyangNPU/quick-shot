@@ -135,6 +135,11 @@ bool ScrollCaptureSession::start(ScrollStitcher::Orientation orientation) {
         m_captureRect = selection;
     }
 
+    // 记录选区所在屏的 DPR：拼接帧按物理像素处理，最终长图需携带该 DPR 才能按逻辑尺寸显示
+    QScreen *screen = QGuiApplication::screenAt(m_captureRect.center());
+    if (!screen) screen = QGuiApplication::primaryScreen();
+    m_dpr = screen ? screen->devicePixelRatio() : 1.0;
+
     m_stitcher.reset(orientation);
     m_active = true;
     m_noMatchStreak = 0;
@@ -299,9 +304,10 @@ void ScrollCaptureSession::finish() {
     }
 
     QPixmap pixmap = QPixmap::fromImage(image);
-    pixmap.setDevicePixelRatio(1.0);
-    LOG_INFO(QString("[ScrollCapture] finished, result %1x%2")
-        .arg(pixmap.width()).arg(pixmap.height()));
+    // 拼接图是物理像素，携带选区屏 DPR，贴图窗口按逻辑尺寸显示才不会放大模糊
+    pixmap.setDevicePixelRatio(qMax<qreal>(1.0, m_dpr));
+    LOG_INFO(QString("[ScrollCapture] finished, result %1x%2 dpr=%3")
+        .arg(pixmap.width()).arg(pixmap.height()).arg(pixmap.devicePixelRatio()));
 
     emit completed(pixmap, m_captureRect.topLeft());
     emit finished();

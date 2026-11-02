@@ -569,7 +569,8 @@ void SnipScreen::copy() {
 
     // 桌面宠物投喂动画：截图从选区飞入宠物（宠物未开启时内部直接返回）
     if (!pixmap.isNull()) {
-        DesktopPetManager::instance()->feed(pixmap, QRect(pos, pixmap.size()));
+        DesktopPetManager::instance()->feed(pixmap,
+            QRect(pos, pixmap.deviceIndependentSize().toSize()));
     }
 
     exit();
@@ -593,10 +594,12 @@ void SnipScreen::save() {
     // provider，保存成功后无需再调一次 snip() 取尺寸（每次 snip 都是一轮
     // 全桌面 composeCanvas 合成）
     QSize savedSize;
+    qreal savedDpr = 1.0;
     QString filename = Utils::savePixmapToFile(
-        this, [&savedSize, this]() -> QPixmap {
+        this, [&savedSize, &savedDpr, this]() -> QPixmap {
             auto [pixmap, _] = snip();
             savedSize = pixmap.isNull() ? QSize(0, 0) : pixmap.size();
+            savedDpr = pixmap.isNull() ? 1.0 : qMax<qreal>(1.0, pixmap.devicePixelRatio());
             return pixmap;
         }, defaultName, TranslationManager::instance()->get("dialog.saveImage", "Save Image"),
         QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
@@ -608,7 +611,8 @@ void SnipScreen::save() {
             QString windowTitle = this->windowTitle().isEmpty()
                                       ? QApplication::applicationName()
                                       : this->windowTitle();
-            HistoryManager::instance()->addScreenshot(filename, windowTitle, savedSize);
+            // PNG 不保存 DPR，随记录落库，Alt+P 贴图时按真实 DPR 还原显示尺寸
+            HistoryManager::instance()->addScreenshot(filename, windowTitle, savedSize, savedDpr);
         }
     }
 
@@ -650,8 +654,9 @@ void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToS
     }
 
     // 长截图可能远超屏幕高度：按当前屏幕可用高度等比缩小初始显示窗口，
-    // PinWindow 内部仍保留原图，复制/保存不受影响
-    QSize windowSize = pixmap.size();
+    // PinWindow 内部仍保留原图，复制/保存不受影响。
+    // 窗口尺寸用设备无关尺寸：高 DPR 截图（物理像素）按 DPR 折算回逻辑尺寸显示
+    QSize windowSize = pixmap.deviceIndependentSize().toSize();
     if (fitToScreen) {
         QScreen *screen = QGuiApplication::screenAt(pos);
         if (!screen) screen = QGuiApplication::primaryScreen();
@@ -694,8 +699,9 @@ void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToS
         pinWindow->showOperationHint();
     }
     QRect targetRect(safePos, windowSize);
-    LOG_INFO(QString("[SnipScreen] pin: creating PinWindow at (%1,%2) size %3x%4")
-        .arg(safePos.x()).arg(safePos.y()).arg(windowSize.width()).arg(windowSize.height()));
+    LOG_INFO(QString("[SnipScreen] pin: creating PinWindow at (%1,%2) size %3x%4 dpr=%5")
+        .arg(safePos.x()).arg(safePos.y()).arg(windowSize.width()).arg(windowSize.height())
+        .arg(pixmap.devicePixelRatio()));
     pinWindow->setGeometry(targetRect);
 
     // 延迟显示，确保事件循环稳定后再展示
@@ -740,16 +746,18 @@ void SnipScreen::pinClipboard() {
     } else {
         // 无活跃贴图，从最新一张开始
         m_pinHistoryIndex = 0;
-        // 位置 = 鼠标所在屏幕中央（用历史记录中的 imageSize 预估位置）
-        QSize imgSize = items[0].imageSize;
+        // 位置 = 鼠标所在屏幕中央（用历史记录中的物理尺寸 + DPR 折算逻辑尺寸预估位置）
+        const QSize firstPx = items[0].imageSize;
+        const qreal firstDpr = items[0].imageDpr > 0.0 ? items[0].imageDpr : 1.0;
+        const QSize firstLogical(qRound(firstPx.width() / firstDpr), qRound(firstPx.height() / firstDpr));
+        m_lastPinPos = QCursor::pos() - QPoint(firstLogical.width() / 2, firstLogical.height() / 2);
         QScreen *scr = QGuiApplication::screenAt(QCursor::pos());
         if (!scr) scr = QGuiApplication::primaryScreen();
         QRect sg = scr->geometry();
-        m_lastPinPos = QCursor::pos() - QPoint(imgSize.width() / 2, imgSize.height() / 2);
         int minX = sg.left();
-        int maxX = qMax(minX, sg.right() - imgSize.width());
+        int maxX = qMax(minX, sg.right() - firstLogical.width());
         int minY = sg.top();
-        int maxY = qMax(minY, sg.bottom() - imgSize.height());
+        int maxY = qMax(minY, sg.bottom() - firstLogical.height());
         m_lastPinPos.setX(qBound(minX, m_lastPinPos.x(), maxX));
         m_lastPinPos.setY(qBound(minY, m_lastPinPos.y(), maxY));
     }
@@ -765,12 +773,20 @@ void SnipScreen::pinClipboard() {
     // 位置 clamp 到屏幕范围内（偏移后可能超出）
     QScreen *scr = QGuiApplication::screenAt(m_lastPinPos);
     if (!scr) scr = QGuiApplication::primaryScreen();
+
+    // 历史截图按物理像素保存，PNG 本身不携带 DPR：用记录里的 image_dpr 还原
+    // 逻辑显示尺寸（老记录默认 1.0，保持升级前的显示大小）
+    if (item.imageDpr > 0.0) {
+        pix.setDevicePixelRatio(item.imageDpr);
+    }
+    const QSize displaySize = pix.deviceIndependentSize().toSize();
+
     QRect sg = scr->geometry();
     QPoint pos = m_lastPinPos;
     int minX2 = sg.left();
-    int maxX2 = qMax(minX2, sg.right() - pix.width());
+    int maxX2 = qMax(minX2, sg.right() - displaySize.width());
     int minY2 = sg.top();
-    int maxY2 = qMax(minY2, sg.bottom() - pix.height());
+    int maxY2 = qMax(minY2, sg.bottom() - displaySize.height());
     pos.setX(qBound(minX2, pos.x(), maxX2));
     pos.setY(qBound(minY2, pos.y(), maxY2));
     m_lastPinPos = pos;
@@ -789,7 +805,7 @@ void SnipScreen::pinClipboard() {
         s_firstHistoryPin = false;
         pinWindow->showOperationHint();
     }
-    QRect targetRect(pos, pix.size());
+    QRect targetRect(pos, displaySize);
     pinWindow->setGeometry(targetRect);
     QTimer::singleShot(0, pinWindow, [pinWindow]() {
         pinWindow->show();
@@ -868,6 +884,19 @@ void SnipScreen::stopRecording() {
 // ============================================================
 
 /**
+ * @brief 将画布逻辑坐标矩形换算为物理像素矩形（用于裁剪高 DPR 画布）
+ * @param canvas 目标画布（携带 DPR）
+ * @param logicalRect 逻辑坐标矩形
+ * @return 物理像素矩形
+ * @author chiangyang
+ */
+static QRect logicalToPixelRect(const QPixmap &canvas, const QRect &logicalRect) {
+    const qreal dpr = canvas.devicePixelRatio();
+    return QRect(qRound(logicalRect.x() * dpr), qRound(logicalRect.y() * dpr),
+                 qRound(logicalRect.width() * dpr), qRound(logicalRect.height() * dpr));
+}
+
+/**
  * @brief 获取选区截图（带标注合成）
  * @return 截图和左上角坐标的 pair
  * @author chiangyang
@@ -887,9 +916,9 @@ std::pair<QPixmap, QPoint> SnipScreen::snip() {
                                                     m_annotationHandler->manager(),
                                                     globalOffset);
 
-    // 从合成图中裁剪选区区域（转换为本地坐标）
+    // 从合成图中裁剪选区区域（全局逻辑坐标 → 画布物理像素坐标）
     QRect localRect = rect.translated(globalOffset);
-    return { canvas.copy(localRect), rect.topLeft() };
+    return { canvas.copy(logicalToPixelRect(canvas, localRect)), rect.topLeft() };
 }
 
 // ============================================================
@@ -912,7 +941,7 @@ QPixmap SnipScreen::captureSelectionForOcr() {
                                                     globalOffset);
 
     QRect localRect = rect.translated(globalOffset);
-    return canvas.copy(localRect);
+    return canvas.copy(logicalToPixelRect(canvas, localRect));
 }
 
 // ============================================================

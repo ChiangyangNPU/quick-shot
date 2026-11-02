@@ -32,7 +32,8 @@ struct HistoryItem {
     QString sourceApp;          ///< 来源应用名称（仅剪贴板类型）
     QString windowTitle;        ///< 窗口标题（仅截图类型）
     QDateTime timestamp;        ///< 记录时间戳
-    QSize imageSize;            ///< 图片尺寸（仅截图类型）
+    QSize imageSize;            ///< 图片尺寸（物理像素，仅截图类型）
+    qreal imageDpr = 1.0;       ///< 截图时的设备像素比（仅截图类型；PNG 不保存 DPR，需随记录落库）
 
     /**
      * @brief 构造函数

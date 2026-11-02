@@ -100,7 +100,7 @@ public:
 signals:
     /**
      * @brief 拼接完成
-     * @param pixmap 长图（物理像素、dpr=1）
+     * @param pixmap 长图（物理像素，携带选区屏 DPR）
      * @param pos 选区左上角全局坐标（贴图初始位置参考）
      * @author chiangyang
      */
@@ -184,6 +184,7 @@ private:
     QPushButton *m_finishBtn = nullptr;  ///< 完成按钮
     QPushButton *m_cancelBtn = nullptr;  ///< 取消按钮
     QRect m_captureRect;                 ///< 选区（全局坐标，已内缩避开边框）
+    qreal m_dpr = 1.0;                   ///< 选区所在屏 DPR（拼接结果按此折算逻辑尺寸）
     int m_noMatchStreak = 0;             ///< 连续无法定位的帧数
     bool m_active = false;               ///< 会话是否进行中
     bool m_showResyncNotice = false;     ///< 是否正在显示重新对齐提示

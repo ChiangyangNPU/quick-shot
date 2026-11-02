@@ -106,13 +106,30 @@ void HistoryManager::initDatabase()
         "window_title TEXT,"
         "timestamp DATETIME NOT NULL,"
         "image_width INTEGER,"
-        "image_height INTEGER"
+        "image_height INTEGER,"
+        "image_dpr REAL NOT NULL DEFAULT 1.0"
         ")"
     );
 
     if (!query.exec(createTableSql)) {
         LOG_ERROR(QString("Failed to create history_items table: %1").arg(query.lastError().text()));
         return;
+    }
+
+    // 老库迁移：补 image_dpr 列（升级前的截图没有记录 DPR，默认 1.0 保持原有显示尺寸）
+    bool hasDprColumn = false;
+    if (query.exec("PRAGMA table_info(history_items)")) {
+        while (query.next()) {
+            if (query.value("name").toString() == QStringLiteral("image_dpr")) {
+                hasDprColumn = true;
+                break;
+            }
+        }
+    }
+    if (!hasDprColumn) {
+        if (!query.exec("ALTER TABLE history_items ADD COLUMN image_dpr REAL NOT NULL DEFAULT 1.0")) {
+            LOG_WARNING(QString("Failed to add image_dpr column: %1").arg(query.lastError().text()));
+        }
     }
 
     // 创建索引
@@ -158,15 +175,17 @@ HistoryItem HistoryManager::readItem(const QSqlQuery &query) {
     item.windowTitle = query.value("window_title").toString();
     item.timestamp = QDateTime::fromString(query.value("timestamp").toString(), Qt::ISODate);
     item.imageSize = QSize(query.value("image_width").toInt(), query.value("image_height").toInt());
+    const qreal dpr = query.value("image_dpr").toDouble();
+    item.imageDpr = dpr > 0.0 ? dpr : 1.0;
     return item;
 }
 
 qint64 HistoryManager::insertScreenshotRecord(const QString &filePath, const QString &thumbnailPath,
                                               const QString &windowTitle, const QString &timestampStr,
-                                              const QSize &imageSize) {
+                                              const QSize &imageSize, qreal imageDpr) {
     QSqlQuery query(m_database);
-    query.prepare("INSERT INTO history_items (type, content, thumbnail_path, window_title, timestamp, image_width, image_height) "
-                  "VALUES (:type, :content, :thumbnail_path, :window_title, :timestamp, :image_width, :image_height)");
+    query.prepare("INSERT INTO history_items (type, content, thumbnail_path, window_title, timestamp, image_width, image_height, image_dpr) "
+                  "VALUES (:type, :content, :thumbnail_path, :window_title, :timestamp, :image_width, :image_height, :image_dpr)");
 
     query.bindValue(":type", typeToInt(HistoryType::Screenshot));
     query.bindValue(":content", filePath);
@@ -175,6 +194,7 @@ qint64 HistoryManager::insertScreenshotRecord(const QString &filePath, const QSt
     query.bindValue(":timestamp", timestampStr);
     query.bindValue(":image_width", imageSize.width());
     query.bindValue(":image_height", imageSize.height());
+    query.bindValue(":image_dpr", imageDpr > 0.0 ? imageDpr : 1.0);
 
     if (!query.exec()) {
         LOG_ERROR(QString("Failed to insert screenshot record: %1").arg(query.lastError().text()));
@@ -190,7 +210,8 @@ qint64 HistoryManager::insertScreenshotRecord(const QString &filePath, const QSt
  */
 qint64 HistoryManager::addScreenshot(const QString &filePath,
                                       const QString &windowTitle,
-                                      const QSize &imageSize)
+                                      const QSize &imageSize,
+                                      qreal imageDpr)
 {
     if (!m_screenshotEnabled) {
         return -1;
@@ -205,7 +226,8 @@ qint64 HistoryManager::addScreenshot(const QString &filePath,
     // 创建缩略图
     createThumbnail(filePath, thumbnailPath);
 
-    const qint64 id = insertScreenshotRecord(filePath, thumbnailPath, windowTitle, timestampStr, imageSize);
+    const qint64 id = insertScreenshotRecord(filePath, thumbnailPath, windowTitle, timestampStr,
+                                             imageSize, imageDpr);
     if (id < 0) {
         return -1;
     }
@@ -219,6 +241,7 @@ qint64 HistoryManager::addScreenshot(const QString &filePath,
     item.windowTitle = windowTitle;
     item.timestamp = QDateTime::currentDateTime();
     item.imageSize = imageSize;
+    item.imageDpr = imageDpr > 0.0 ? imageDpr : 1.0;
 
     emit itemAdded(item);
     LOG_INFO(QString("Screenshot record added: id=%1, path=%2").arg(id).arg(filePath));
@@ -266,9 +289,12 @@ qint64 HistoryManager::addScreenshotPixmap(const QPixmap &pixmap,
     }
 
     QSize imageSize = pixmap.size();
+    // 截图 pixmap 携带设备像素比（Retina 2x / 普通屏 1x），随记录落库供 Alt+P 贴图还原显示尺寸
+    const qreal imageDpr = qMax<qreal>(1.0, pixmap.devicePixelRatio());
     QString dbTimestamp = QDateTime::currentDateTime().toString(Qt::ISODate);
 
-    const qint64 id = insertScreenshotRecord(filePath, thumbnailPath, windowTitle, dbTimestamp, imageSize);
+    const qint64 id = insertScreenshotRecord(filePath, thumbnailPath, windowTitle, dbTimestamp,
+                                             imageSize, imageDpr);
     if (id < 0) {
         return -1;
     }
@@ -282,6 +308,7 @@ qint64 HistoryManager::addScreenshotPixmap(const QPixmap &pixmap,
     item.windowTitle = windowTitle;
     item.timestamp = QDateTime::currentDateTime();
     item.imageSize = imageSize;
+    item.imageDpr = imageDpr;
 
     emit itemAdded(item);
     LOG_INFO(QString("Screenshot pixmap record added: id=%1, path=%2").arg(id).arg(filePath));

@@ -103,16 +103,23 @@ private slots:
         // 真实 PNG 走截图路径（含缩略图生成）
         const QString png = m_tempDir.filePath("shot.png");
         QVERIFY(QImage(4, 4, QImage::Format_RGB32).save(png, "PNG"));
-        QVERIFY(m_mgr->addScreenshot(png, "unit-test", QSize(4, 4)) > 0);
+        QVERIFY(m_mgr->addScreenshot(png, "unit-test", QSize(4, 4), 2.0) > 0);
+        // 复制路径：pixmap 自带 DPR，应随记录落库
+        QPixmap retina(4, 4);
+        retina.setDevicePixelRatio(2.0);
+        QVERIFY(m_mgr->addScreenshotPixmap(retina, "unit-test") > 0);
         QCOMPARE(insertTexts("tx", 5), 5);
 
-        QCOMPARE(m_mgr->getItemCount(HistoryType::All), 6);
-        QCOMPARE(m_mgr->getItemCount(HistoryType::Screenshot), 1);
+        QCOMPARE(m_mgr->getItemCount(HistoryType::All), 7);
+        QCOMPARE(m_mgr->getItemCount(HistoryType::Screenshot), 2);
         QCOMPARE(m_mgr->getItemCount(HistoryType::ClipboardText), 5);
 
         auto shots = m_mgr->getItems(HistoryType::Screenshot, 0, 10);
-        QCOMPARE(shots.size(), 1);
-        QCOMPARE(shots.first().type, HistoryType::Screenshot);
+        QCOMPARE(shots.size(), 2);
+        for (const HistoryItem &shot : shots) {
+            QCOMPARE(shot.type, HistoryType::Screenshot);
+            QCOMPARE(shot.imageDpr, 2.0);
+        }
         QCOMPARE(shots.first().imageSize, QSize(4, 4));
         QVERIFY(QFile::exists(shots.first().content));  // 原图路径保留
     }

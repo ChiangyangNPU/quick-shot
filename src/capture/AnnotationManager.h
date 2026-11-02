@@ -634,13 +634,20 @@ private:
 
         const int scale = qMax(2, blockSize); // 至少 2x，避免 1x 无效果
 
+        // 背景可能带 DPR（Retina 物理像素图）：笔迹与裁剪用逻辑坐标，
+        // 降采样预处理用物理像素，块大小按 DPR 换算，避免高 DPI 下马赛克错位
+        const qreal dpr = qMax<qreal>(1.0, background.devicePixelRatio());
+        const QSize bgPx = background.size();
+        const QRect bgLogical(QPoint(0, 0),
+                              QSize(qRound(bgPx.width() / dpr), qRound(bgPx.height() / dpr)));
+
         // ------------------------------------------------------------
         // 第 1 步：合并所有笔迹矩形为一个 QRegion（并集），减少重复绘制
         // ------------------------------------------------------------
         QRegion mosaicRegion;
         for (const QRect &stroke : rects) {
             QRect adjusted = offset.isNull() ? stroke : stroke.translated(offset);
-            QRect clipped = adjusted.intersected(background.rect());
+            QRect clipped = adjusted.intersected(bgLogical);
             if (!clipped.isEmpty())
                 mosaicRegion += clipped;
         }
@@ -651,15 +658,17 @@ private:
         // 第 2 步：对完整背景一次性做全局马赛克预处理
         //   先缩小（Smooth 让块颜色是邻域平均，比 Fast 自然）后放大（Fast 保留硬方块感）
         // ------------------------------------------------------------
-        const QSize bgSize = background.size();
-        const QSize smallSize(qMax(1, bgSize.width() / scale),
-                              qMax(1, bgSize.height() / scale));
+        const int pxScale = qMax(2, qRound(scale * dpr));
+        const QSize smallSize(qMax(1, bgPx.width() / pxScale),
+                              qMax(1, bgPx.height() / pxScale));
         QPixmap small = background.scaled(smallSize,
                                           Qt::IgnoreAspectRatio,
                                           Qt::SmoothTransformation);
-        QPixmap mosaicizedFull = small.scaled(bgSize,
+        QPixmap mosaicizedFull = small.scaled(bgPx,
                                               Qt::IgnoreAspectRatio,
                                               Qt::FastTransformation);
+        // 结果按背景 DPR 绘制，painter 的逻辑坐标即可 1:1 覆盖背景
+        mosaicizedFull.setDevicePixelRatio(dpr);
 
         // ------------------------------------------------------------
         // 第 3 步：设置 clip，一次性把全局马赛克图绘入（仅笔迹区域生效）

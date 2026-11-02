@@ -397,10 +397,14 @@ void AnnotationInteractionHandler::drawWithMosaic(QPainter &target, const QPixma
     //    直接复用上一帧结果。
     const quint64 contentVer = m_annotationManager.contentVersion();
     const qint64 bgKey = background.cacheKey();
+    // 缓存按背景 DPR 出物理像素，Retina 下背景与标注都保持原生清晰度
+    const qreal dpr = qMax<qreal>(1.0, background.isNull() ? 1.0 : background.devicePixelRatio());
+    const QSize cachePx(qRound(targetSize.width() * dpr), qRound(targetSize.height() * dpr));
     if (m_baseCache.isNull() || m_baseCacheVersion != contentVer
         || m_baseCacheBgKey != bgKey || m_baseCacheSize != targetSize
         || m_baseCacheOffset != offset || m_baseCacheStretch != stretchBackground) {
-        m_baseCache = QPixmap(targetSize);
+        m_baseCache = QPixmap(cachePx);
+        m_baseCache.setDevicePixelRatio(dpr);
         m_baseCache.fill(Qt::transparent);
         QPainter basePainter(&m_baseCache);
         basePainter.setRenderHint(QPainter::SmoothPixmapTransform, stretchBackground);
@@ -432,13 +436,15 @@ void AnnotationInteractionHandler::drawWithMosaic(QPainter &target, const QPixma
     if (m_mosaicCache.isNull() || m_mosaicCacheMosaicVer != mosaicVer
         || m_mosaicCacheBaseVer != m_baseCacheVersion
         || m_mosaicCacheBlockSize != blockSize) {
-        const int scale = qMax(2, blockSize);
-        const QSize smallSize(qMax(1, targetSize.width() / scale),
-                              qMax(1, targetSize.height() / scale));
+        // 块大小是逻辑像素：换到物理像素后降/升采样，Retina 下块观感与 1x 一致
+        const int pxScale = qMax(2, qRound(qMax(2, blockSize) * dpr));
+        const QSize smallSize(qMax(1, cachePx.width() / pxScale),
+                              qMax(1, cachePx.height() / pxScale));
         m_mosaicCache = m_baseCache.scaled(smallSize, Qt::IgnoreAspectRatio,
                                            Qt::SmoothTransformation)
-                                   .scaled(targetSize, Qt::IgnoreAspectRatio,
+                                   .scaled(cachePx, Qt::IgnoreAspectRatio,
                                            Qt::FastTransformation);
+        m_mosaicCache.setDevicePixelRatio(dpr);
         m_mosaicCacheMosaicVer = mosaicVer;
         m_mosaicCacheBaseVer = m_baseCacheVersion;
         m_mosaicCacheBlockSize = blockSize;

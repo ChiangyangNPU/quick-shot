@@ -245,8 +245,9 @@ void PinWindow::paintEvent(QPaintEvent *event) {
     QPainter painter(this);
     // 物理像素图缩放到逻辑窗口：任意方向缩放（放大或缩小）都开启双线性平滑插值，
     // 避免最近邻缩放产生的锯齿/不清晰（缩小时最近邻降采样会丢细节并产生锯齿）；
-    // 仅 1:1（窗口尺寸 == 原图尺寸、无缩放）时关闭以保持像素精确。
-    bool scaled = (width() != m_pixmap.width()) || (height() != m_pixmap.height());
+    // 仅 1:1（窗口逻辑尺寸 == 原图设备无关尺寸、无缩放）时关闭以保持像素精确。
+    const QSizeF logicalSize = m_pixmap.deviceIndependentSize();
+    bool scaled = (width() != qRound(logicalSize.width())) || (height() != qRound(logicalSize.height()));
     painter.setRenderHint(QPainter::SmoothPixmapTransform, scaled);
     painter.drawPixmap(rect(), m_pixmap, QRectF(m_pixmap.rect()));
 
@@ -906,17 +907,22 @@ QPixmap PinWindow::compositePixmap() {
         return m_pixmap;
     }
 
-    // 有标注：合成窗口尺寸的所见即所得图
-    QPixmap result(size());
+    // 有标注：合成窗口尺寸的所见即所得图（按原图 DPR 出物理像素，Retina 下保持清晰）
+    const qreal dpr = qMax<qreal>(1.0, m_pixmap.devicePixelRatio());
+    const QSize pixelSize(qRound(width() * dpr), qRound(height() * dpr));
+    QPixmap result(pixelSize);
+    result.setDevicePixelRatio(dpr);
     result.fill(Qt::transparent);
     QPainter painter(&result);
-    bool scaled = (width() != m_pixmap.width()) || (height() != m_pixmap.height());
+    const QSizeF logicalSize = m_pixmap.deviceIndependentSize();
+    bool scaled = (width() != qRound(logicalSize.width())) || (height() != qRound(logicalSize.height()));
     painter.setRenderHint(QPainter::SmoothPixmapTransform, scaled);
     painter.drawPixmap(rect(), m_pixmap, QRectF(m_pixmap.rect()));
 
     if (m_annotationHandler->manager().hasMosaicStrokes()) {
         // 有马赛克：离屏 canvas（拉伸原图 + 标注）再像素化马赛克区域
-        QPixmap canvas(size());
+        QPixmap canvas(pixelSize);
+        canvas.setDevicePixelRatio(dpr);
         canvas.fill(Qt::transparent);
         QPainter cp(&canvas);
         cp.setRenderHint(QPainter::SmoothPixmapTransform, scaled);
