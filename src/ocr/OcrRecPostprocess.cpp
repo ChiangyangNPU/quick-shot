@@ -52,6 +52,13 @@ OcrRecPostprocess::RecResult OcrRecPostprocess::decode(const float *logits, int 
     int validCount = 0;
     int prevIdx = -1; // 上一个字符索引
 
+    // PP-OCR 系列识别模型在字典末尾追加一个空格类别（use_space_char）：
+    // 类别数 = blank(1) + 字典字符数 + 空格(1)，空格类别对应 dictIdx = dictSize。
+    // 字典中没有该字符，若不单独处理会被当作越界索引丢弃，
+    // 导致英文等以空格分词的语言识别结果所有单词粘连。
+    const int dictSize = static_cast<int>(charDict.size());
+    const bool hasTrailingSpaceClass = (numChars == dictSize + 2);
+
     for (int t = 0; t < seqLen; ++t) {
         const float *logitPtr = logits + t * numChars;
 
@@ -87,8 +94,13 @@ OcrRecPostprocess::RecResult OcrRecPostprocess::decode(const float *logits, int 
         // PP-OCR 字典格式：字典中没有 blank，index 0 对应字典第 0 个字符
         // 但模型输出的 index 0 是 blank，所以字典索引 = maxIdx - 1
         int dictIdx = maxIdx - 1;
-        if (dictIdx >= 0 && dictIdx < charDict.size()) {
+        if (dictIdx >= 0 && dictIdx < dictSize) {
             text += charDict[dictIdx];
+            totalScore += prob;
+            validCount++;
+        } else if (hasTrailingSpaceClass && dictIdx == dictSize) {
+            // 末尾空格类别：字典无对应字符，按空格输出
+            text += QLatin1Char(' ');
             totalScore += prob;
             validCount++;
         }

@@ -63,6 +63,16 @@ private slots:
                  qPrintable(QString("score %1 vs expected %2").arg(r.score).arg(expected)));
     }
 
+    void trailingSpaceClass_isDecodedAsSpace() {
+        // PP-OCR 模型类别数 = blank + 字典 + 末尾空格类别（use_space_char）
+        const QStringList dict = {"a", "b"};
+        // numChars=4 满足 size+2，index 3 = 末尾空格类别
+        // 序列: a, 空格, b
+        const auto logits = makeLogits({1, 3, 2}, 4);
+        const auto r = OcrRecPostprocess::decode(logits.data(), 3, 4, dict);
+        QCOMPARE(r.text, QString("a b"));
+    }
+
     void invalidInputs_returnEmpty() {
         const QStringList dict = {"a"};
         QVERIFY(OcrRecPostprocess::decode(nullptr, 0, 4, dict).text.isEmpty());
