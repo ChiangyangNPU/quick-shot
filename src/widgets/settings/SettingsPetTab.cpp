@@ -337,10 +337,10 @@ void SettingsPetTab::setupUi() {
                 "The pet sweats when CPU/memory usage is high, and shows a battery icon when battery is low."),
         m_behaviorGroup);
     m_sysMonitorHint->setWordWrap(true);
-    // 在网格水平间距之外再留一点空隙，避免文字紧贴复选框
-    m_sysMonitorHint->setContentsMargins(PetUi::scaled(6), 0, 0, 0);
-    // 顶部对齐：文案换行成多行时与复选框首行文字对齐，而不是整块垂直居中
-    m_sysMonitorHint->setAlignment(Qt::AlignLeft | Qt::AlignTop);
+    // 水平方向在网格间距外再留空隙避免紧贴复选框；
+    // 垂直方向微调下移，抵消居中后仍显得偏上的视觉误差
+    m_sysMonitorHint->setContentsMargins(PetUi::scaled(6), PetUi::scaled(2), 0, 0);
+    m_sysMonitorHint->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     m_sysMonitorHint->setStyleSheet(
         QString("color: %1;").arg(PetTheme::mutedColor(PetTheme::isDark()).name()));
 
