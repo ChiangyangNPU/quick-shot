@@ -6,6 +6,7 @@
 #include "../log/Logger.h"
 #include "../utils/Utils.h"
 
+#include <QAbstractButton>
 #include <QFontMetrics>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -13,7 +14,6 @@
 #include <QLabel>
 #include <QPainter>
 #include <QPen>
-#include <QPushButton>
 #include <QScreen>
 #include <QTimer>
 #include <QWidget>
@@ -104,6 +104,53 @@ protected:
                             StyleManager::SNIP_BORDER_WIDTH));
         // 内缩 1px 绘制：2px 宽的边框整体落在窗口外缘，即选区外侧
         painter.drawRect(rect().adjusted(1, 1, -1, -1));
+    }
+};
+
+/**
+ * @brief 提示条按钮
+ *
+ * 提示条窗口虽然不做全局样式作用域隔离，但 QPushButton 仍会命中 app.qss 中的
+ * `QPushButton { height: 1.0em; }`：样式表的盒模型与 setFixedHeight 冲突，
+ * 会让按钮在布局中整体偏下，上下留白不对称。改用自绘按钮绕开 QSS 尺寸规则，
+ * 保证边框与文字严格垂直居中。
+ * @author chiangyang
+ */
+class ScrollHintButton : public QAbstractButton {
+public:
+    explicit ScrollHintButton(const QString &text, QWidget *parent = nullptr)
+        : QAbstractButton(parent) {
+        setText(text);
+        setFocusPolicy(Qt::NoFocus);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_Hover, true);
+    }
+
+    QSize sizeHint() const override {
+        QFont boldFont = font();
+        boldFont.setBold(true);
+        const QFontMetrics fm(boldFont);
+        // 左右各 14px 内边距 + 1px 描边，与原 QSS 按钮尺寸一致
+        return QSize(fm.horizontalAdvance(text()) + 30, qMax(26, minimumHeight()));
+    }
+
+protected:
+    /**
+     * @brief 绘制圆角半透明按钮，悬停时提亮
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const bool hovered = underMouse();
+        painter.setPen(QPen(QColor(255, 255, 255, hovered ? 170 : 125), 1));
+        painter.setBrush(QColor(255, 255, 255, hovered ? 78 : 48));
+        painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
+        QFont boldFont = font();
+        boldFont.setBold(true);
+        painter.setFont(boldFont);
+        painter.setPen(Qt::white);
+        painter.drawText(rect(), Qt::AlignCenter, text());
     }
 };
 
@@ -522,19 +569,19 @@ void ScrollCaptureSession::createHintBar() {
     m_statusLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(m_statusLabel, 0, Qt::AlignVCenter);
 
-    m_finishBtn = new QPushButton(scrollText("scroll.finish", "Finish"), container);
+    m_finishBtn = new ScrollHintButton(scrollText("scroll.finish", "Finish"), container);
     m_finishBtn->setObjectName(QStringLiteral("ScrollHintButton"));
     m_finishBtn->setFixedHeight(hintRowHeight);
     // 按钮不抢焦点：Enter/Esc 始终由提示条窗口的 eventFilter 统一处理
     m_finishBtn->setFocusPolicy(Qt::NoFocus);
-    connect(m_finishBtn, &QPushButton::clicked, this, &ScrollCaptureSession::finish);
+    connect(m_finishBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::finish);
     layout->addWidget(m_finishBtn, 0, Qt::AlignVCenter);
 
-    m_cancelBtn = new QPushButton(scrollText("scroll.cancel", "Cancel"), container);
+    m_cancelBtn = new ScrollHintButton(scrollText("scroll.cancel", "Cancel"), container);
     m_cancelBtn->setObjectName(QStringLiteral("ScrollHintButton"));
     m_cancelBtn->setFixedHeight(hintRowHeight);
     m_cancelBtn->setFocusPolicy(Qt::NoFocus);
-    connect(m_cancelBtn, &QPushButton::clicked, this, &ScrollCaptureSession::cancel);
+    connect(m_cancelBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::cancel);
     layout->addWidget(m_cancelBtn, 0, Qt::AlignVCenter);
 
     /**
@@ -543,6 +590,7 @@ void ScrollCaptureSession::createHintBar() {
      * 容器底板 248/255 不透明，加 1px 亮边与页面内容分离；状态文字由
      * 灰色提升为高亮半粗体，按钮填充/描边同步增强，避免在浅色或复杂
      * 页面上看起来像半透明、看不清。
+     * 按钮外观由 ScrollHintButton 自绘，避免继承 app.qss 的按钮高度规则。
      */
     container->setStyleSheet(QStringLiteral(
         "QWidget#ScrollHintContainer {"
@@ -552,14 +600,7 @@ void ScrollCaptureSession::createHintBar() {
         "QLabel#ScrollHintTitle {"
         "  color: #ffffff; font-weight: bold; padding: 0; margin: 0; }"
         "QLabel#ScrollHintStatus {"
-        "  color: #f2f2f2; font-weight: bold; padding: 0; margin: 0; }"
-        "QPushButton#ScrollHintButton {"
-        "  color: #ffffff; background-color: rgba(255, 255, 255, 48);"
-        "  border: 1px solid rgba(255, 255, 255, 125); border-radius: 5px;"
-        "  padding: 0 14px; margin: 0; font-weight: bold; }"
-        "QPushButton#ScrollHintButton:hover {"
-        "  background-color: rgba(255, 255, 255, 78);"
-        "  border-color: rgba(255, 255, 255, 170); }"));
+        "  color: #f2f2f2; font-weight: bold; padding: 0; margin: 0; }"));
 
     updateHintText();
     m_hintBar->adjustSize();

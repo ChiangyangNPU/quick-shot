@@ -9,8 +9,8 @@
 #include <QRect>
 
 class SnipScreen;
+class QAbstractButton;
 class QLabel;
-class QPushButton;
 class QTimer;
 class QWidget;
 
@@ -197,8 +197,8 @@ private:
     QPointer<QWidget> m_hintBar;         ///< 提示条窗口
     QPointer<QWidget> m_frameOverlay;    ///< 选区参考框窗口（悬浮在选区位）
     QLabel *m_statusLabel = nullptr;     ///< 提示条状态文字
-    QPushButton *m_finishBtn = nullptr;  ///< 完成按钮
-    QPushButton *m_cancelBtn = nullptr;  ///< 取消按钮
+    QAbstractButton *m_finishBtn = nullptr;  ///< 完成按钮
+    QAbstractButton *m_cancelBtn = nullptr;  ///< 取消按钮
     QRect m_captureRect;                 ///< 选区（全局坐标，已内缩避开边框）
     qreal m_dpr = 1.0;                   ///< 选区所在屏 DPR（拼接结果按此折算逻辑尺寸）
     int m_noMatchStreak = 0;             ///< 连续无法定位的帧数
