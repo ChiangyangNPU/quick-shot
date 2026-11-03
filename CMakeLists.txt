@@ -276,6 +276,23 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/PetUiScale.h
         src/pet/PetTheme.cpp
         src/pet/PetTheme.h
+        src/pet/pets/PetStyles.h
+        src/pet/pets/CatPet.cpp
+        src/pet/pets/ShibaPet.cpp
+        src/pet/pets/PandaPet.cpp
+        src/pet/pets/BunnyPet.cpp
+        src/pet/pets/PenguinPet.cpp
+        src/pet/pets/FrogPet.cpp
+        src/pet/pets/MousePet.cpp
+        src/pet/pets/OxPet.cpp
+        src/pet/pets/TigerPet.cpp
+        src/pet/pets/DragonPet.cpp
+        src/pet/pets/SnakePet.cpp
+        src/pet/pets/HorsePet.cpp
+        src/pet/pets/GoatPet.cpp
+        src/pet/pets/MonkeyPet.cpp
+        src/pet/pets/RoosterPet.cpp
+        src/pet/pets/PigPet.cpp
         src/pet/PetReminder.cpp
         src/pet/PetReminder.h
         src/pet/PetBadgeWidget.cpp

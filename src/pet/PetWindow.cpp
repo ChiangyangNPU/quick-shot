@@ -1,4 +1,5 @@
 #include "PetWindow.h"
+#include "pets/PetStyles.h"
 #include "PetTheme.h"
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
@@ -29,309 +30,6 @@ constexpr QPointF kMouthCenter(48.0, 62.0);
 constexpr int kDragThreshold = 8;
 
 /**
- * @brief 宠物外观规格：描述一个样式在 96 基准坐标系里的配色与特征部件
- *
- * 形体骨架（身体/肚皮/脚/眼睛/嘴的位置与动画）全样式共用，
- * 样式差异体现在配色、耳朵/尾巴形状与特征部件（眼圈/虎斑/面罩/豆眉/
- * 小翅膀/角/鸡冠/猪鼻/蛇信/马鬃）上。
- * @author chiangyang
- */
-struct PetSpec {
-    QColor body;            ///< 身体主色
-    QColor earFill;         ///< 耳朵填充
-    QColor outline;         ///< 描边
-    QColor belly;           ///< 肚皮
-    QColor blush;           ///< 腮红（含 alpha）
-    QColor eye;             ///< 眼睛瞳色 / 眨眼横线颜色
-    QColor mouthInner;      ///< 张嘴口腔
-    QColor foot;            ///< 脚
-    QColor smilePen;        ///< 闭嘴微笑弧线颜色
-    QColor earInner = QColor(0, 0, 0, 0); ///< 耳内填充（alpha 0 表示不画）
-    enum class Ear { Triangle, Round, Long, None } ear = Ear::Triangle;
-    QColor eyePatch = QColor(0, 0, 0, 0); ///< 眼圈颜色（alpha 0 表示不画，熊猫/虎）
-    QColor foreheadStripes = QColor(0, 0, 0, 0); ///< 额头虎斑条纹颜色（alpha 0 表示不画，猫/虎）
-    QColor muzzleMask = QColor(0, 0, 0, 0); ///< 口鼻奶油面罩颜色（alpha 0 表示不画，柴犬/牛/马/猴）
-    QColor browSpots = QColor(0, 0, 0, 0); ///< 眼上豆眉圆点颜色（alpha 0 表示不画，柴犬）
-    enum class Tail { None, Cat, Curl } tail = Tail::None; ///< 尾巴：无 / 猫直尾 / 柴犬卷尾
-    enum class Horns { None, Bull, Deer, Curl } horns = Horns::None; ///< 头顶角：无 / 牛角 / 鹿角(龙) / 卷角(羊)
-    bool comb = false;      ///< 是否画头顶红色鸡冠（鸡）
-    bool snout = false;     ///< 是否画鼻吻椭圆+鼻孔（猪）
-    bool forkTongue = false; ///< 是否画嘴下分叉信子（蛇）
-    bool legless = false;   ///< 是否不画脚（蛇）
-    bool mane = false;      ///< 是否画头顶鬃毛（马，色取 outline）
-    bool highlight = true;  ///< 是否画白色眼睛高光
-    bool flippers = false;  ///< 是否画两侧小翅膀（企鹅）
-};
-
-PetSpec catSpec() {
-    PetSpec s;
-    s.body = QColor(255, 206, 115);
-    s.earFill = s.body;
-    s.outline = QColor(217, 138, 43);
-    s.belly = QColor(255, 231, 184);
-    s.blush = QColor(255, 138, 128, 140);
-    s.eye = QColor(40, 32, 24);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = s.body;
-    s.smilePen = s.eye;
-    s.foreheadStripes = QColor(217, 138, 43, 170);
-    s.tail = PetSpec::Tail::Cat;
-    return s;
-}
-
-PetSpec shibaSpec() {
-    PetSpec s;
-    s.body = QColor(232, 167, 99);
-    s.earFill = s.body;
-    s.outline = QColor(176, 111, 44);
-    s.belly = QColor(251, 235, 210);
-    s.blush = QColor(240, 144, 112, 140);
-    s.eye = QColor(70, 53, 31);
-    s.mouthInner = QColor(110, 52, 34);
-    s.foot = s.body;
-    s.smilePen = s.eye;
-    s.earInner = QColor(249, 224, 188);
-    s.muzzleMask = QColor(251, 235, 210);
-    s.browSpots = QColor(251, 235, 210);
-    s.tail = PetSpec::Tail::Curl;
-    return s;
-}
-
-PetSpec pandaSpec() {
-    PetSpec s;
-    s.body = QColor(252, 252, 252);
-    s.earFill = QColor(46, 46, 46);
-    s.outline = QColor(69, 69, 69);
-    s.belly = QColor(240, 240, 240);
-    s.blush = QColor(255, 154, 162, 150);
-    s.eye = QColor(252, 252, 252);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(46, 46, 46);
-    s.smilePen = QColor(69, 69, 69);
-    s.ear = PetSpec::Ear::Round;
-    s.eyePatch = QColor(46, 46, 46);
-    s.highlight = false;
-    return s;
-}
-
-PetSpec bunnySpec() {
-    PetSpec s;
-    s.body = QColor(252, 252, 253);
-    s.earFill = s.body;
-    s.outline = QColor(184, 188, 201);
-    s.belly = QColor(255, 233, 240);
-    s.blush = QColor(255, 158, 181, 150);
-    s.eye = QColor(58, 63, 82);
-    s.mouthInner = QColor(199, 112, 128);
-    s.foot = s.body;
-    s.smilePen = s.eye;
-    s.earInner = QColor(255, 199, 212);
-    s.ear = PetSpec::Ear::Long;
-    return s;
-}
-
-PetSpec penguinSpec() {
-    PetSpec s;
-    s.body = QColor(78, 90, 107);
-    s.earFill = s.body;
-    s.outline = QColor(48, 56, 68);
-    s.belly = QColor(245, 247, 250);
-    s.blush = QColor(255, 138, 128, 120);
-    s.eye = QColor(245, 247, 250);
-    s.mouthInner = QColor(36, 32, 38);
-    s.foot = QColor(240, 162, 74);
-    s.smilePen = QColor(240, 162, 74);
-    s.ear = PetSpec::Ear::None;
-    s.highlight = false;
-    s.flippers = true;
-    return s;
-}
-
-PetSpec frogSpec() {
-    PetSpec s;
-    s.body = QColor(127, 200, 110);
-    s.earFill = s.body;
-    s.outline = QColor(76, 130, 67);
-    s.belly = QColor(223, 242, 206);
-    s.blush = QColor(247, 156, 141, 140);
-    s.eye = QColor(36, 54, 31);
-    s.mouthInner = QColor(94, 58, 66);
-    s.foot = QColor(111, 179, 95);
-    s.smilePen = s.eye;
-    s.ear = PetSpec::Ear::None;
-    return s;
-}
-
-// ===== 十二生肖（兔/狗归入生肖组：复用 Bunny/Shiba 造型，仅显示名改为"兔/狗"；以下为新绘制的十种） =====
-
-PetSpec mouseSpec() {
-    PetSpec s;
-    s.body = QColor(160, 160, 170);
-    s.earFill = s.body;
-    s.outline = QColor(104, 104, 116);
-    s.belly = QColor(214, 214, 222);
-    s.blush = QColor(240, 144, 112, 130);
-    s.eye = QColor(36, 32, 40);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(238, 186, 192);
-    s.smilePen = s.eye;
-    s.ear = PetSpec::Ear::Round;
-    s.earInner = QColor(240, 186, 192);
-    s.tail = PetSpec::Tail::Cat;
-    return s;
-}
-
-PetSpec oxSpec() {
-    PetSpec s;
-    s.body = QColor(247, 245, 238);
-    s.earFill = QColor(88, 78, 72);
-    s.outline = QColor(122, 110, 100);
-    s.belly = QColor(250, 248, 242);
-    s.blush = QColor(240, 144, 112, 120);
-    s.eye = QColor(48, 40, 34);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(105, 95, 88);
-    s.smilePen = s.eye;
-    s.muzzleMask = QColor(244, 200, 192);
-    s.horns = PetSpec::Horns::Bull;
-    return s;
-}
-
-PetSpec tigerSpec() {
-    PetSpec s;
-    s.body = QColor(238, 150, 58);
-    s.earFill = QColor(50, 38, 30);
-    s.outline = QColor(140, 80, 30);
-    s.belly = QColor(250, 224, 178);
-    s.blush = QColor(240, 144, 112, 140);
-    s.eye = QColor(40, 30, 22);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = s.body;
-    s.smilePen = s.eye;
-    s.foreheadStripes = QColor(40, 30, 20, 205);
-    s.eyePatch = QColor(255, 250, 240, 180);
-    s.ear = PetSpec::Ear::Round;
-    s.tail = PetSpec::Tail::Cat;
-    return s;
-}
-
-PetSpec dragonSpec() {
-    PetSpec s;
-    s.body = QColor(108, 188, 148);
-    s.earFill = s.body;
-    s.outline = QColor(58, 130, 95);
-    s.belly = QColor(250, 222, 130);
-    s.blush = QColor(240, 144, 112, 130);
-    s.eye = QColor(36, 42, 34);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(88, 164, 126);
-    s.smilePen = s.eye;
-    s.ear = PetSpec::Ear::None;
-    s.horns = PetSpec::Horns::Deer;
-    s.tail = PetSpec::Tail::Cat;
-    return s;
-}
-
-PetSpec snakeSpec() {
-    PetSpec s;
-    s.body = QColor(88, 158, 148);
-    s.earFill = s.body;
-    s.outline = QColor(52, 110, 104);
-    s.belly = QColor(214, 236, 226);
-    s.blush = QColor(240, 144, 112, 130);
-    s.eye = QColor(30, 44, 40);
-    s.mouthInner = QColor(110, 52, 40);
-    s.foot = s.body;
-    s.smilePen = s.eye;
-    s.ear = PetSpec::Ear::None;
-    s.forkTongue = true;
-    s.legless = true;
-    return s;
-}
-
-PetSpec horseSpec() {
-    PetSpec s;
-    s.body = QColor(194, 140, 92);
-    s.earFill = s.body;
-    s.outline = QColor(135, 90, 52);
-    s.belly = QColor(232, 210, 182);
-    s.blush = QColor(240, 144, 112, 130);
-    s.eye = QColor(44, 34, 26);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(120, 84, 54);
-    s.smilePen = s.eye;
-    s.muzzleMask = QColor(240, 228, 210);
-    s.mane = true;
-    s.tail = PetSpec::Tail::Cat;
-    return s;
-}
-
-PetSpec goatSpec() {
-    PetSpec s;
-    s.body = QColor(240, 236, 226);
-    s.earFill = QColor(206, 196, 180);
-    s.outline = QColor(176, 164, 146);
-    s.belly = QColor(252, 250, 244);
-    s.blush = QColor(255, 158, 181, 140);
-    s.eye = QColor(52, 48, 44);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(196, 186, 170);
-    s.smilePen = s.eye;
-    s.horns = PetSpec::Horns::Curl;
-    return s;
-}
-
-PetSpec monkeySpec() {
-    PetSpec s;
-    s.body = QColor(170, 122, 84);
-    s.earFill = QColor(150, 104, 70);
-    s.outline = QColor(112, 76, 48);
-    s.belly = QColor(220, 184, 146);
-    s.blush = QColor(240, 144, 112, 130);
-    s.eye = QColor(40, 30, 22);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(150, 104, 70);
-    s.smilePen = s.eye;
-    s.ear = PetSpec::Ear::Round;
-    s.earInner = QColor(250, 226, 188);
-    s.muzzleMask = QColor(248, 224, 186);
-    return s;
-}
-
-PetSpec roosterSpec() {
-    PetSpec s;
-    s.body = QColor(247, 204, 94);
-    s.earFill = s.body;
-    s.outline = QColor(188, 142, 48);
-    s.belly = QColor(252, 231, 166);
-    s.blush = QColor(240, 144, 112, 130);
-    s.eye = QColor(42, 34, 24);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(238, 158, 74);
-    s.smilePen = QColor(238, 158, 74);
-    s.ear = PetSpec::Ear::None;
-    s.comb = true;
-    return s;
-}
-
-PetSpec pigSpec() {
-    PetSpec s;
-    s.body = QColor(245, 172, 178);
-    s.earFill = QColor(230, 148, 156);
-    s.outline = QColor(196, 116, 124);
-    s.belly = QColor(252, 214, 216);
-    s.blush = QColor(240, 120, 130, 130);
-    s.eye = QColor(46, 34, 34);
-    s.mouthInner = QColor(122, 46, 34);
-    s.foot = QColor(230, 148, 156);
-    s.smilePen = s.eye;
-    s.earInner = QColor(210, 128, 138);
-    s.snout = true;
-    s.tail = PetSpec::Tail::Curl;
-    return s;
-}
-
-/**
  * @brief 鲸鱼娘（图片型样式）的占位规格
  *
  * 该样式的形体全部由内置素材图片绘制，不使用 PetSpec 的配色与特征部件；
@@ -339,7 +37,7 @@ PetSpec pigSpec() {
  * @author chiangyang
  */
 PetSpec whaleGirlSpec() {
-    return catSpec();
+    return PetStyles::cat();
 }
 
 /**
@@ -348,7 +46,7 @@ PetSpec whaleGirlSpec() {
  * @author chiangyang
  */
 PetSpec whaleGirlAltSpec() {
-    return catSpec();
+    return PetStyles::cat();
 }
 
 /**
@@ -357,9 +55,9 @@ PetSpec whaleGirlAltSpec() {
  */
 const PetSpec &specFor(PetWindow::PetStyle style) {
     static const PetSpec specs[PetWindow::petStyleCount()] = {
-        catSpec(), shibaSpec(), pandaSpec(), bunnySpec(), penguinSpec(), frogSpec(),
-        mouseSpec(), oxSpec(), tigerSpec(), dragonSpec(), snakeSpec(), horseSpec(),
-        goatSpec(), monkeySpec(), roosterSpec(), pigSpec(), whaleGirlSpec(), whaleGirlAltSpec()
+        PetStyles::cat(), PetStyles::shiba(), PetStyles::panda(), PetStyles::bunny(), PetStyles::penguin(), PetStyles::frog(),
+        PetStyles::mouse(), PetStyles::ox(), PetStyles::tiger(), PetStyles::dragon(), PetStyles::snake(), PetStyles::horse(),
+        PetStyles::goat(), PetStyles::monkey(), PetStyles::rooster(), PetStyles::pig(), whaleGirlSpec(), whaleGirlAltSpec()
     };
     return specs[qBound(0, int(style), PetWindow::petStyleCount() - 1)];
 }
