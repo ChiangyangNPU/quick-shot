@@ -26,12 +26,13 @@ constexpr const char *kStyleKeys[] = {
     "pet.style.bunny", "pet.style.penguin", "pet.style.frog",
     "pet.style.mouse", "pet.style.ox", "pet.style.tiger", "pet.style.dragon",
     "pet.style.snake", "pet.style.horse", "pet.style.goat",
-    "pet.style.monkey", "pet.style.rooster", "pet.style.pig"
+    "pet.style.monkey", "pet.style.rooster", "pet.style.pig", "pet.style.whaleGirl",
+    "pet.style.whaleGirlAlt"
 };
 constexpr const char *kStyleFallbacks[] = {
     "Orange Cat", "Dog", "Panda", "Rabbit", "Penguin", "Frog",
     "Rat", "Ox", "Tiger", "Dragon", "Snake", "Horse",
-    "Goat", "Monkey", "Rooster", "Pig"
+    "Goat", "Monkey", "Rooster", "Pig", "Whale Girl", "Whale Girl 2"
 };
 
 // 分组归属（下标为 PetStyle 枚举值）。枚举值保持稳定保证 pet/style 持久化兼容，
@@ -45,6 +46,11 @@ constexpr int kClassicStyles[] = {
 // 十二生肖按传统顺序：鼠牛虎兔龙蛇马羊猴鸡狗猪（兔=Bunny、狗=Shiba 复用造型）
 constexpr int kZodiacStyles[] = {
     6, 7, 8, 3, 9, 10, 11, 12, 13, 14, 1, 15
+};
+// 特殊样式（图片型内置素材，独立成组）
+constexpr int kSpecialStyles[] = {
+    16,  // 鲸鱼娘
+    17   // 鲸鱼娘 2
 };
 
 // 装饰名 i18n 键与英文兜底文案（下标对应 PetWindow::Accessory 枚举值）
@@ -171,6 +177,18 @@ void SettingsPetTab::setupUi() {
     styleLayout->addLayout(styleRow);
     styleLayout->addWidget(m_zodiacLabel);
     styleLayout->addLayout(zodiacRow);
+
+    // 特殊样式：图片型内置素材（鲸鱼娘），单独一行避免与生肖分组混淆
+    m_specialLabel = new QLabel(tm->get("pet.specialGroup", "Special"), m_styleGroupBox);
+    QHBoxLayout *specialRow = new QHBoxLayout();
+    specialRow->setContentsMargins(0, 0, 0, 0);
+    specialRow->setSpacing(PetUi::scaled(6));
+    for (int idx : kSpecialStyles) {
+        if (idx < m_styleButtons.size()) specialRow->addWidget(m_styleButtons[idx]);
+    }
+    specialRow->addStretch();
+    styleLayout->addWidget(m_specialLabel);
+    styleLayout->addLayout(specialRow);
 
     // 装饰：手动选择（节日区间内由节日装饰自动覆盖，结束后回落到这里的选择）
     m_accessoryLabel = new QLabel(tm->get("pet.accessory", "Accessory") + ":", m_styleGroupBox);

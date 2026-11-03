@@ -4,6 +4,10 @@
     <file alias="app.svg">../icons/app.svg</file>
 
     <file alias="QS.png">../icons/QS.png</file>
+
+    <!-- 内置宠物样式素材（图片型样式，设置页预览与宠物窗口共用） -->
+    <file alias="pets/whale-girl.png">resources/pets/whale-girl.png</file>
+    <file alias="pets/whale-girl-alt.png">resources/pets/whale-girl-alt.png</file>
     <file alias="QS.svg">../icons/QS.svg</file>
     
     <file alias="rect.svg">../icons/rect.svg</file>

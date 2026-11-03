@@ -99,6 +99,7 @@ private:
     QGroupBox *m_styleGroupBox;         ///< 宠物样式分组（经典样式 + 十二生肖）
     QLabel *m_classicLabel;             ///< 经典样式分组标签（第一行）
     QLabel *m_zodiacLabel;              ///< 十二生肖分组标签（第二行起，FlowLayout 自动换行）
+    QLabel *m_specialLabel;             ///< 特殊样式分组标签（图片型内置样式）
     QList<QToolButton*> m_styleButtons; ///< 外观样式图标按钮（下标对应 PetStyle 枚举值）
     QButtonGroup *m_styleGroup;         ///< 样式按钮互斥组（id = 样式下标；自定义项从 1000 起）
     QGroupBox *m_behaviorGroup;         ///< 行为分组（晾衣绳方式、待办提醒、番茄钟、重置位置、功能说明）

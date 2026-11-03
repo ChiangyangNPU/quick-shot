@@ -17,6 +17,7 @@
 #include <QParallelAnimationGroup>
 #include <QTimer>
 #include <QRandomGenerator>
+#include <QHash>
 #include <QtMath>
 
 namespace {
@@ -331,6 +332,26 @@ PetSpec pigSpec() {
 }
 
 /**
+ * @brief 鲸鱼娘（图片型样式）的占位规格
+ *
+ * 该样式的形体全部由内置素材图片绘制，不使用 PetSpec 的配色与特征部件；
+ * 此函数仅为保持 specs 数组下标与 PetStyle 枚举值一一对应。
+ * @author chiangyang
+ */
+PetSpec whaleGirlSpec() {
+    return catSpec();
+}
+
+/**
+ * @brief 鲸鱼娘 2（图片型样式）的占位规格
+ * @return 占位规格（同鲸鱼娘，仅在数组下标对齐时使用）
+ * @author chiangyang
+ */
+PetSpec whaleGirlAltSpec() {
+    return catSpec();
+}
+
+/**
  * @brief 获取样式对应的绘制规格
  * @author chiangyang
  */
@@ -338,9 +359,50 @@ const PetSpec &specFor(PetWindow::PetStyle style) {
     static const PetSpec specs[PetWindow::petStyleCount()] = {
         catSpec(), shibaSpec(), pandaSpec(), bunnySpec(), penguinSpec(), frogSpec(),
         mouseSpec(), oxSpec(), tigerSpec(), dragonSpec(), snakeSpec(), horseSpec(),
-        goatSpec(), monkeySpec(), roosterSpec(), pigSpec()
+        goatSpec(), monkeySpec(), roosterSpec(), pigSpec(), whaleGirlSpec(), whaleGirlAltSpec()
     };
     return specs[qBound(0, int(style), PetWindow::petStyleCount() - 1)];
+}
+
+/**
+ * @brief 图片型内置样式的素材路径（空表示该样式由 QPainter 代码绘制）
+ * @param style 宠物样式
+ * @return Qt 资源路径
+ * @author chiangyang
+ */
+QString builtinStyleImagePath(PetWindow::PetStyle style) {
+    switch (style) {
+    case PetWindow::PetStyle::WhaleGirl:
+        return QStringLiteral(":/icons/pets/whale-girl.png");
+    case PetWindow::PetStyle::WhaleGirlAlt:
+        return QStringLiteral(":/icons/pets/whale-girl-alt.png");
+    default:
+        return QString();
+    }
+}
+
+/**
+ * @brief 加载图片型内置样式的素材（按路径缓存，避免每帧解码）
+ * @param style 宠物样式
+ * @return 素材图像；非图片型样式或加载失败时返回空图
+ * @author chiangyang
+ */
+QPixmap builtinStylePixmap(PetWindow::PetStyle style) {
+    const QString path = builtinStyleImagePath(style);
+    if (path.isEmpty()) {
+        return QPixmap();
+    }
+    static QHash<QString, QPixmap> cache;
+    auto it = cache.constFind(path);
+    if (it != cache.constEnd()) {
+        return it.value();
+    }
+    QPixmap pix(path);
+    if (pix.isNull()) {
+        LOG_WARNING(QString("Builtin pet image missing: %1").arg(path));
+    }
+    cache.insert(path, pix);
+    return pix;
 }
 
 /**
@@ -786,6 +848,17 @@ QPixmap PetWindow::renderStylePreview(PetStyle style, int size) {
     p.setRenderHint(QPainter::Antialiasing);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
 
+    // 图片型样式：等比 contain 素材图，与运行时 imageTargetRect 规则保持一致
+    const QPixmap frame = builtinStylePixmap(style);
+    if (!frame.isNull()) {
+        QSizeF scaled = frame.size();
+        scaled.scale(QSizeF(size, size), Qt::KeepAspectRatio);
+        const QRectF target(QPointF((size - scaled.width()) / 2.0,
+                                    (size - scaled.height()) / 2.0), scaled);
+        p.drawPixmap(target, frame, QRectF(frame.rect()));
+        return pix;
+    }
+
     // 与窗口同一 96 基准坐标系绘制，保证预览与实际外观一致
     const qreal s = size / 96.0;
     p.scale(s, s);
@@ -872,16 +945,12 @@ void PetWindow::setCustomPet(const QString &sourcePath) {
 }
 
 /**
- * @brief 计算自定义素材在 96 基准坐标系中的绘制矩形
+ * @brief 计算图片素材在 96 基准坐标系中的绘制矩形
+ * @param frameSize 素材像素尺寸
+ * @return 等比居中后的绘制矩形；尺寸为空时返回空矩形
  * @author chiangyang
  */
-QRectF PetWindow::customTargetRect() const {
-    QSizeF frameSize;
-    if (m_movie && m_movie->isValid()) {
-        frameSize = m_movie->currentImage().size();
-    } else {
-        frameSize = m_customImage.size();
-    }
+QRectF PetWindow::imageTargetRect(const QSizeF &frameSize) const {
     if (frameSize.isEmpty()) {
         return QRectF();
     }
@@ -897,17 +966,28 @@ QRectF PetWindow::customTargetRect() const {
 }
 
 /**
- * @brief 绘制自定义素材（静态图或 GIF 当前帧）
+ * @brief 计算自定义素材在 96 基准坐标系中的绘制矩形
+ * @return 素材绘制矩形
  * @author chiangyang
  */
-void PetWindow::paintCustomPet(QPainter &p) {
-    QPixmap frame;
+QRectF PetWindow::customTargetRect() const {
+    QSizeF frameSize;
     if (m_movie && m_movie->isValid()) {
-        frame = m_movie->currentPixmap();
+        frameSize = m_movie->currentImage().size();
     } else {
-        frame = m_customImage;
+        frameSize = m_customImage.size();
     }
-    const QRectF target = customTargetRect();
+    return imageTargetRect(frameSize);
+}
+
+/**
+ * @brief 按图片等比 contain 绘制并叠加动效（自定义素材与图片型内置样式共用）
+ * @param p 画笔（已按 96 基准坐标系缩放）
+ * @param frame 当前帧图像
+ * @author chiangyang
+ */
+void PetWindow::paintImageFrame(QPainter &p, const QPixmap &frame) {
+    const QRectF target = imageTargetRect(frame.size());
     if (frame.isNull() || target.isEmpty()) {
         return;
     }
@@ -926,10 +1006,34 @@ void PetWindow::paintCustomPet(QPainter &p) {
     p.drawPixmap(target, frame, QRectF(frame.rect()));
     p.restore();
 
-    // 奖励星星：自定义形象没有固定眼部，画在绘制区左上角
+    // 奖励星星：图片形象没有固定眼部，画在绘制区左上角
     if (m_starProgress > 0.0) {
         drawStarSparkle(p, QPointF(target.left() + 12.0, target.top() + 12.0), m_starProgress);
     }
+}
+
+/**
+ * @brief 绘制图片型内置样式（当前为鲸鱼娘）
+ * @param p 画笔（已按 96 基准坐标系缩放）
+ * @author chiangyang
+ */
+void PetWindow::paintImagePet(QPainter &p) {
+    paintImageFrame(p, builtinStylePixmap(m_style));
+}
+
+/**
+ * @brief 绘制自定义素材（静态图或 GIF 当前帧）
+ * @param p 画笔（已按 96 基准坐标系缩放）
+ * @author chiangyang
+ */
+void PetWindow::paintCustomPet(QPainter &p) {
+    QPixmap frame;
+    if (m_movie && m_movie->isValid()) {
+        frame = m_movie->currentPixmap();
+    } else {
+        frame = m_customImage;
+    }
+    paintImageFrame(p, frame);
 }
 
 /**
@@ -1391,6 +1495,9 @@ void PetWindow::paintEvent(QPaintEvent *event) {
     // 自定义素材：直接绘制图片/GIF 当前帧，替代内置造型
     if (isCustomActive()) {
         paintCustomPet(p);
+    } else if (!builtinStyleImagePath(m_style).isEmpty()) {
+        // 图片型内置样式（鲸鱼娘）：绘制随应用发布的内置素材
+        paintImagePet(p);
     } else {
         paintPetBody(p, m_style, m_mouthOpen, m_chewScale, m_eyesClosed, m_starProgress);
     }

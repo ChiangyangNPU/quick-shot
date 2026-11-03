@@ -60,14 +60,16 @@ public:
         Goat = 12,    ///< 生肖·羊
         Monkey = 13,  ///< 生肖·猴
         Rooster = 14, ///< 生肖·鸡
-        Pig = 15      ///< 生肖·猪
+        Pig = 15,     ///< 生肖·猪
+        WhaleGirl = 16, ///< 鲸鱼娘（特殊组，图片型样式：绘制内置素材而非代码造型）
+        WhaleGirlAlt = 17 ///< 鲸鱼娘 2（特殊组，另一张内置素材）
     };
 
     /**
      * @brief 样式总数（设置页遍历用）
      * @author chiangyang
      */
-    static constexpr int petStyleCount() { return 16; }
+    static constexpr int petStyleCount() { return 18; }
 
     /**
      * @brief 系统状态角标（阶段三）：叠加在宠物左侧的小图标
@@ -322,6 +324,32 @@ private:
      * @author chiangyang
      */
     void paintCustomPet(QPainter &p);
+
+    /**
+     * @brief 绘制图片型内置样式（当前为鲸鱼娘）
+     *
+     * 复用自定义素材的等比居中与动效逻辑（咀嚼挤压 / 张嘴上浮 / 奖励星星），
+     * 素材来自 Qt 资源而非用户导入文件。
+     * @param p 画笔（已按 96 基准坐标系缩放）
+     * @author chiangyang
+     */
+    void paintImagePet(QPainter &p);
+
+    /**
+     * @brief 按图片等比 contain 绘制并叠加动效（自定义素材与图片型内置样式共用）
+     * @param p 画笔（已按 96 基准坐标系缩放）
+     * @param frame 当前帧图像
+     * @author chiangyang
+     */
+    void paintImageFrame(QPainter &p, const QPixmap &frame);
+
+    /**
+     * @brief 计算图片素材在 96 基准坐标系中的绘制矩形
+     * @param frameSize 素材像素尺寸
+     * @return 等比居中后的绘制矩形；尺寸为空时返回空矩形
+     * @author chiangyang
+     */
+    QRectF imageTargetRect(const QSizeF &frameSize) const;
 
     /**
      * @brief 计算自定义素材在 96 基准坐标系中的绘制矩形
