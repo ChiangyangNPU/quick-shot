@@ -25,7 +25,9 @@ class QWidget;
  *
  * 抓帧窗口遮挡说明：
  * 宿主 SnipScreen 进入会话后立即 hide()，因此抓到的选区内像素不含遮罩与边框；
- * 提示条定位在选区外侧，裁剪选区时不会被拍入（Windows 另加捕获排除兜底）。
+ * 选区边框改由独立的透明穿透窗口（参考框）绘制，边框位于选区外侧，
+ * 裁剪选区时不会被拍入（Windows 另加捕获排除兜底）。
+ * 提示条同样定位在选区外侧。
  *
  * 键盘交互：
  * 宿主隐藏后由提示条窗口接收按键：Enter 完成、Esc 取消、H/V 切换方向。
@@ -146,6 +148,19 @@ private:
     void createHintBar();
 
     /**
+     * @brief 创建选区参考框窗口（透明、鼠标穿透，仅绘制边框）
+     * @param selection 选区矩形（全局坐标）
+     * @author chiangyang
+     */
+    void createFrameOverlay(const QRect &selection);
+
+    /**
+     * @brief 销毁选区参考框窗口
+     * @author chiangyang
+     */
+    void destroyFrameOverlay();
+
+    /**
      * @brief 销毁提示条窗口
      * @author chiangyang
      */
@@ -180,6 +195,7 @@ private:
     QTimer *m_timer = nullptr;           ///< 抓帧定时器
     QTimer *m_noticeTimer = nullptr;     ///< 重新对齐提示的显示时长
     QPointer<QWidget> m_hintBar;         ///< 提示条窗口
+    QPointer<QWidget> m_frameOverlay;    ///< 选区参考框窗口（悬浮在选区位）
     QLabel *m_statusLabel = nullptr;     ///< 提示条状态文字
     QPushButton *m_finishBtn = nullptr;  ///< 完成按钮
     QPushButton *m_cancelBtn = nullptr;  ///< 取消按钮

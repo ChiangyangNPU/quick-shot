@@ -1,6 +1,7 @@
 #include "ScrollCaptureSession.h"
 #include "SnipScreen.h"
 #include "Selector.h"
+#include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 #include "../utils/Utils.h"
@@ -10,6 +11,8 @@
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QPainter>
+#include <QPen>
 #include <QPushButton>
 #include <QScreen>
 #include <QTimer>
@@ -42,6 +45,67 @@ constexpr int kStartDelayMs = 120;
 constexpr int kNoMatchResetThreshold = 8;
 ///< “已重新对齐”提示显示时长
 constexpr int kResyncNoticeMs = 2500;
+///< 选区参考框向外扩展的像素：让边框整体落在抓帧区域之外，避免被拍进长图
+constexpr int kFrameOverlayOutset = 2;
+
+#ifdef Q_OS_MACOS
+/**
+ * @brief 让提示窗口忽略鼠标事件（macOS）
+ *
+ * Qt::WindowTransparentForInput 在 macOS 上不生效，需要直接设置
+ * NSWindow 的 ignoresMouseEvents：否则这个全屏透明的参考框会吞掉
+ * 滚轮与点击，用户无法操作下层页面滚动。
+ * @param wid 窗口句柄
+ * @author chiangyang
+ */
+void setWindowIgnoresMouse(WId wid) {
+    if (!wid) return;
+    id nsView = reinterpret_cast<id>(wid);
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) return;
+    ((void (*)(id, SEL, signed char))objc_msgSend)(nsWindow, sel_registerName("setIgnoresMouseEvents:"), 1);
+}
+#endif
+
+/**
+ * @brief 滚动截图期间的选区参考框
+ *
+ * 会话开始后宿主 SnipScreen 仍然要隐藏（否则遮罩会挡住页面，也会被拍进长图），
+ * 因此用独立的小窗口只画一圈边框，给用户提示当前正在截取的范围。
+ * 窗口完全透明且鼠标穿透，用户可以直接操作下层应用滚动页面；
+ * 边框绘制在选区外侧，抓帧区域（选区向内缩 2px）不会拍到框线。
+ * @author chiangyang
+ */
+class ScrollFrameOverlay : public QWidget {
+public:
+    explicit ScrollFrameOverlay(const QRect &selection, QWidget *parent = nullptr)
+        : QWidget(parent) {
+        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint
+                       | Qt::WindowTransparentForInput | Qt::WindowDoesNotAcceptFocus);
+        setAttribute(Qt::WA_TranslucentBackground);
+        // show() 不抢焦点：否则用户第一次滚动页面的点击会被这个提示框吃掉
+        setAttribute(Qt::WA_ShowWithoutActivating);
+#ifdef Q_OS_MACOS
+        // 用户会切到浏览器等其它应用滚动页面，参考框需在应用失活时继续显示
+        setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
+        setGeometry(selection.adjusted(-kFrameOverlayOutset, -kFrameOverlayOutset,
+                                      kFrameOverlayOutset, kFrameOverlayOutset));
+    }
+
+protected:
+    /**
+     * @brief 只绘制选区边框，不画遮罩、锚点与尺寸标签
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setPen(QPen(StyleManager::getCaptureBorderColor(),
+                            StyleManager::SNIP_BORDER_WIDTH));
+        // 内缩 1px 绘制：2px 宽的边框整体落在窗口外缘，即选区外侧
+        painter.drawRect(rect().adjusted(1, 1, -1, -1));
+    }
+};
 
 /**
  * @brief 将窗口排除在屏幕捕获之外（提示条兜底，避免选区占满整屏时被拍进长图）
@@ -151,6 +215,9 @@ bool ScrollCaptureSession::start(ScrollStitcher::Orientation orientation) {
     // 隐藏工具栏与遮罩窗口：让用户看到并操作真实页面
     m_host->hideToolBar();
     m_host->hide();
+
+    // 宿主整体隐藏后，用独立透明窗口保留选区边框，提示当前截取范围
+    createFrameOverlay(selection);
 
     createHintBar();
     positionHintBar();
@@ -296,6 +363,7 @@ void ScrollCaptureSession::finish() {
         m_noticeTimer->stop();
     }
     destroyHintBar();
+    destroyFrameOverlay();
 
     if (image.isNull()) {
         LOG_INFO("[ScrollCapture] finish without result, treating as cancel");
@@ -325,6 +393,7 @@ void ScrollCaptureSession::cancel() {
         m_noticeTimer->stop();
     }
     destroyHintBar();
+    destroyFrameOverlay();
     LOG_INFO("[ScrollCapture] canceled");
     emit finished();
 }
@@ -358,6 +427,37 @@ void ScrollCaptureSession::shutdown() {
     m_noMatchStreak = 0;
     m_showResyncNotice = false;
     destroyHintBar();
+    destroyFrameOverlay();
+}
+
+void ScrollCaptureSession::createFrameOverlay(const QRect &selection) {
+    if (m_frameOverlay) {
+        return;
+    }
+
+    m_frameOverlay = new ScrollFrameOverlay(selection);
+    m_frameOverlay->setObjectName(QStringLiteral("ScrollFrameOverlay"));
+    // 先 show 再设置捕获排除：Windows 需要窗口已创建且可见才能设置显示亲和性
+    m_frameOverlay->show();
+    m_frameOverlay->raise();
+    excludeWindowFromCapture(m_frameOverlay->winId());
+#ifdef Q_OS_MACOS
+    // 参考框只做视觉提示，不参与任何鼠标交互
+    setWindowIgnoresMouse(m_frameOverlay->winId());
+#endif
+
+    LOG_INFO(QString("[ScrollCapture] frame overlay rect: %1,%2 %3x%4")
+        .arg(m_frameOverlay->geometry().x()).arg(m_frameOverlay->geometry().y())
+        .arg(m_frameOverlay->geometry().width()).arg(m_frameOverlay->geometry().height()));
+}
+
+void ScrollCaptureSession::destroyFrameOverlay() {
+    if (!m_frameOverlay) {
+        return;
+    }
+    m_frameOverlay->hide();
+    m_frameOverlay->deleteLater();
+    m_frameOverlay = nullptr;
 }
 
 void ScrollCaptureSession::createHintBar() {
