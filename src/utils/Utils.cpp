@@ -1,15 +1,12 @@
 #include "Utils.h"
 #include "../core/ConfigManager.h"
 #include "../log/Logger.h"
-#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
-#include <QFile>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QScreen>
-#include <QSettings>
 #include <QStandardPaths>
 #include <QWidget>
 
@@ -236,100 +233,6 @@ void Utils::setWindowNormalLevel(QWidget *win) {
     setNSWindowLevel(win->winId(), 0);
 #else
     Q_UNUSED(win);
-#endif
-}
-
-/**
- * @brief macOS 开机自启动 LaunchAgent plist 路径
- * @return plist 文件的绝对路径
- * @author chiangyang
- */
-#ifdef Q_OS_MACOS
-static QString launchAgentPlistPath() {
-    return QDir::homePath() + QStringLiteral("/Library/LaunchAgents/com.chiangyang.quickshot.plist");
-}
-#endif
-
-/**
- * @brief 查询当前是否已启用开机自启动
- * @return 已启用返回 true
- * @author chiangyang
- */
-bool Utils::isAutoStartEnabled() {
-#ifdef Q_OS_WIN
-    QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-                           QSettings::NativeFormat);
-    return bootSettings.contains("QuickShot");
-#elif defined(Q_OS_MACOS)
-    return QFileInfo::exists(launchAgentPlistPath());
-#else
-    return false;
-#endif
-}
-
-/**
- * @brief 启用或禁用开机自启动
- * @param enabled true=启用，false=禁用
- * @return 操作成功返回 true
- * @author chiangyang
- */
-bool Utils::setAutoStartEnabled(bool enabled) {
-#ifdef Q_OS_WIN
-    QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-                           QSettings::NativeFormat);
-    if (enabled) {
-        bootSettings.setValue("QuickShot",
-                              QDir::toNativeSeparators(QCoreApplication::applicationFilePath()));
-        return bootSettings.status() == QSettings::NoError;
-    }
-    bootSettings.remove("QuickShot");
-    return bootSettings.status() == QSettings::NoError;
-#elif defined(Q_OS_MACOS)
-    const QString plistPath = launchAgentPlistPath();
-    if (!enabled) {
-        const bool removed = !QFileInfo::exists(plistPath) || QFile::remove(plistPath);
-        if (removed) {
-            LOG_INFO("Auto start disabled (LaunchAgent removed)");
-        }
-        return removed;
-    }
-
-    // 路径需转义后写入 XML，避免含 & < > 等字符时破坏 plist 结构
-    QString exePath = QCoreApplication::applicationFilePath();
-    exePath.replace(QLatin1Char('&'), QStringLiteral("&amp;"));
-    exePath.replace(QLatin1Char('<'), QStringLiteral("&lt;"));
-    exePath.replace(QLatin1Char('>'), QStringLiteral("&gt;"));
-
-    const QString content = QStringLiteral(
-        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
-        "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
-        "<plist version=\"1.0\">\n"
-        "<dict>\n"
-        "    <key>Label</key>\n"
-        "    <string>com.chiangyang.quickshot</string>\n"
-        "    <key>ProgramArguments</key>\n"
-        "    <array>\n"
-        "        <string>%1</string>\n"
-        "    </array>\n"
-        "    <key>RunAtLoad</key>\n"
-        "    <true/>\n"
-        "</dict>\n"
-        "</plist>\n").arg(exePath);
-
-    QDir().mkpath(QFileInfo(plistPath).absolutePath());
-    QFile file(plistPath);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        LOG_WARNING(QString("Failed to write LaunchAgent plist: %1").arg(plistPath));
-        return false;
-    }
-    file.write(content.toUtf8());
-    file.close();
-    LOG_INFO("Auto start enabled (LaunchAgent created)");
-    return true;
-#else
-    Q_UNUSED(enabled);
-    return false;
 #endif
 }
 
