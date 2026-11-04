@@ -485,8 +485,10 @@ void ScrollCaptureSession::createFrameOverlay(const QRect &selection) {
     m_frameOverlay = new ScrollFrameOverlay(selection);
     m_frameOverlay->setObjectName(QStringLiteral("ScrollFrameOverlay"));
     // 先 show 再设置捕获排除：Windows 需要窗口已创建且可见才能设置显示亲和性
+    // 注意不能调 raise()：macOS 上 raise 会激活整个应用，把被盖住的窗口
+    // （如设置窗口）整体抬到前台。参考框有 WA_ShowWithoutActivating +
+    // 置顶 Tool 层级，show 后本身就在其他应用窗口之上，无需提升
     m_frameOverlay->show();
-    m_frameOverlay->raise();
     excludeWindowFromCapture(m_frameOverlay->winId());
 #ifdef Q_OS_MACOS
     // 参考框只做视觉提示，不参与任何鼠标交互
@@ -518,6 +520,9 @@ void ScrollCaptureSession::createHintBar() {
     // 用户需要切到其他应用滚动页面；Qt::Tool 窗口默认随应用失活隐藏，
     // 这里保持提示条常驻，确保进度与完成/取消按钮始终可见
     m_hintBar->setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+    // 非激活面板：滚动过程中点击完成/取消按钮不激活应用，应用里被其他
+    // 应用盖住的窗口（如设置窗口）不会随激活被系统整体抬起
+    Utils::setNSPanelNonActivating(m_hintBar);
 #endif
     m_hintBar->setAttribute(Qt::WA_TranslucentBackground);
     m_hintBar->setAttribute(Qt::WA_DeleteOnClose, false);

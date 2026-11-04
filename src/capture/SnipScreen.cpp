@@ -409,7 +409,32 @@ void SnipScreen::startScrollCapture(int orientation) {
                                             : ScrollStitcher::Orientation::Vertical;
     if (!m_scrollSession->start(direction)) {
         LOG_WARNING("[SnipScreen] startScrollCapture failed: invalid selection");
+        return;
     }
+
+    // 会话期间应用处于激活状态（滚轮滚动目标页面不切换焦点），设置窗口会
+    // 一直挡在截取页面上层（进入截图时已在 startCapture 隐藏，这里覆盖
+    // 截图会话期间又从托盘打开设置的边缘情况）
+    hideSettingsWindowForCapture();
+}
+
+/**
+ * @brief 进入截图/录屏/滚动截图时隐藏设置窗口（仅 macOS，不自动恢复）
+ *
+ * 截图、录屏、滚动截图都需要激活应用（选区/快捷键焦点），macOS 激活时
+ * 会把应用所有窗口连同被盖住的设置窗口整体抬到其他应用之上：截图/录屏
+ * 期间被全屏遮罩盖住不可见，取消后就会露出来；滚动截图期间更会直接挡在
+ * 截取页面上层。故进入会话时直接隐藏。不自动恢复是有意行为（需要时从
+ * 托盘再打开）。Windows 上激活不影响其他窗口层级，无需处理。
+ * @author chiangyang
+ */
+void SnipScreen::hideSettingsWindowForCapture() {
+#ifdef Q_OS_MACOS
+    if (m_settingsWindow && m_settingsWindow->isVisible()) {
+        m_settingsWindow->hide();
+        LOG_INFO("[SnipScreen] settings window hidden for capture");
+    }
+#endif
 }
 
 /**
@@ -420,6 +445,11 @@ void SnipScreen::startScrollCapture(int orientation) {
 void SnipScreen::startCapture(bool recording) {
     if (isVisible())
         return;
+
+    // 截图/录屏需要激活应用，macOS 会把被盖住的设置窗口也抬到前台：全屏
+    // 遮罩期间不可见，取消后就会露出来。进入会话前先隐藏（仅 macOS，
+    // 不自动恢复），并放在抓取前，避免任何时序下设置窗口进入背景图
+    hideSettingsWindowForCapture();
 
     // 设置模式
     m_recordingSession->setMode(recording);
@@ -808,8 +838,9 @@ void SnipScreen::pinClipboard() {
     QRect targetRect(pos, displaySize);
     pinWindow->setGeometry(targetRect);
     QTimer::singleShot(0, pinWindow, [pinWindow]() {
-        pinWindow->show();
-        pinWindow->raise();
+        // 全局热键触发时应用多处于未激活状态：不能用 raise()（macOS 上会激活
+        // 整个应用，把被盖住的设置窗口等整体抬到前台），只把贴图提到可见位置
+        Utils::showFrontNoActivate(pinWindow);
     });
 
     // 更新跟踪状态

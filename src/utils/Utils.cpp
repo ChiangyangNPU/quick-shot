@@ -69,6 +69,26 @@ static void setNSWindowNonActivatingPanel(WId wid) {
     // [nsWindow setStyleMask:mask]
     ((void (*)(id, SEL, unsigned long))objc_msgSend)(nsWindow, sel_registerName("setStyleMask:"), mask);
 }
+
+/**
+ * @brief 直接调 [NSWindow orderFrontRegardless] 把窗口提到所在层级最前
+ *
+ * 与 raise()（makeKeyAndOrderFront + activateIgnoringOtherApps）不同，
+ * orderFrontRegardless 只调整该窗口在自身层级内的全局 Z 序，不激活
+ * 所属应用：应用未激活时窗口照样显示到其他应用窗口之上，而应用里被
+ * 盖住的其他窗口（如设置窗口）不会被系统整体抬起。
+ * @param wid QWidget::winId() 返回的 NSView 指针
+ * @author chiangyang
+ */
+static void orderNSWindowFrontRegardless(WId wid) {
+    if (!wid) return;
+    id nsView = reinterpret_cast<id>(wid);
+    // [nsView window]
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) return;
+    // [nsWindow orderFrontRegardless]
+    ((void (*)(id, SEL))objc_msgSend)(nsWindow, sel_registerName("orderFrontRegardless"));
+}
 #endif
 
 /**
@@ -131,6 +151,50 @@ void Utils::setNSPanelNonActivating(QWidget *win) {
     setNSWindowNonActivatingPanel(win->winId());
 #else
     Q_UNUSED(win);
+#endif
+}
+
+/**
+ * @brief 显示窗口并提到所在层级最前，但不激活应用
+ *
+ * 全局热键/托盘等入口在应用未激活时打开窗口（历史窗口、贴图、待办等）：
+ * macOS 上 raise()/activateWindow() 会激活整个应用，系统把应用所有窗口
+ * （包括被其他应用盖住的设置窗口）整体抬到前台。这里改用
+ * orderFrontRegardless 只把目标窗口提到可见位置，应用保持未激活，
+ * 其余窗口层级不动；键盘输入由用户点击窗口时按 macOS 标准行为激活。
+ * 其他平台走 raise()+activateWindow()（仅影响该窗口本身，维持原行为）。
+ * @param w 目标顶层窗口
+ * @author chiangyang
+ */
+void Utils::showFrontNoActivate(QWidget *w) {
+    if (!w) return;
+    w->show();
+#ifdef Q_OS_MACOS
+    orderNSWindowFrontRegardless(w->winId());
+#else
+    w->raise();
+    w->activateWindow();
+#endif
+}
+
+/**
+ * @brief 仅在应用已处于激活状态时激活窗口（其他平台无条件激活）
+ *
+ * ClotheslineWindow 验证过的模式：应用未激活时 activateWindow() 会把
+ * 整个应用连同被盖住的窗口抬到前台；仅当应用已激活（用户正在与本应用
+ * 交互）时顺带激活窗口才是安全的。其他平台 activateWindow 不影响其余
+ * 窗口的层级，无条件调用维持原行为。
+ * @param w 目标顶层窗口
+ * @author chiangyang
+ */
+void Utils::activateIfAppActive(QWidget *w) {
+    if (!w) return;
+#ifdef Q_OS_MACOS
+    if (QGuiApplication::applicationState() == Qt::ApplicationActive) {
+        w->activateWindow();
+    }
+#else
+    w->activateWindow();
 #endif
 }
 

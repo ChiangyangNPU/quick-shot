@@ -126,6 +126,28 @@ public:
      */
     static void setNSPanelNonActivating(QWidget *win);
 
+    /**
+     * @brief 显示窗口并提到所在层级最前，但不激活应用
+     *
+     * macOS 用 [NSWindow orderFrontRegardless]：应用未激活（如全局热键
+     * 触发）时目标窗口照样显示到其他应用之上，但应用不被激活，被盖住的
+     * 其他窗口（如设置窗口）不会被系统整体抬起。其他平台走
+     * raise()+activateWindow()（仅影响该窗口本身）。
+     * @param w 目标顶层窗口
+     * @author chiangyang
+     */
+    static void showFrontNoActivate(QWidget *w);
+
+    /**
+     * @brief 仅当应用已处于激活状态时才 activateWindow（其他平台无条件激活）
+     *
+     * macOS 上应用未激活时 activateWindow() 会把整个应用连同被盖住的窗口
+     * 抬到前台；应用已激活时调用才安全。 ClotheslineWindow 的既有模式。
+     * @param w 目标顶层窗口
+     * @author chiangyang
+     */
+    static void activateIfAppActive(QWidget *w);
+
 #ifdef Q_OS_WIN
     /**
      * @brief 抓取指定 Windows 窗口的物理像素截图（供活动窗口截图复用）

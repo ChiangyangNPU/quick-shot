@@ -13,6 +13,7 @@
 #include "../history/HistoryManager.h"
 #include "../history/HistoryItem.h"
 #include "../log/Logger.h"
+#include "../utils/Utils.h"
 
 #include <QGuiApplication>
 #include <QScreen>
@@ -604,8 +605,12 @@ void DesktopPetManager::showTodoWindow() {
     m_todoWindow->show();
     // 先显示（showEvent 会重算内容高度），再按最终尺寸定位
     positionTodoWindow();
-    m_todoWindow->raise();
-    m_todoWindow->activateWindow();
+    // 右击宠物时应用多处于未激活状态（宠物是非激活面板，点击不激活应用）：
+    // 不能无条件 raise/activateWindow，否则整个应用（含被盖住的设置窗口）
+    // 会被系统整体抬到前台。仅把气泡提到可见位置；应用已激活时顺带激活
+    // 窗口，保持"打开即聚焦输入框"的体验
+    Utils::showFrontNoActivate(m_todoWindow);
+    Utils::activateIfAppActive(m_todoWindow);
 }
 
 /**

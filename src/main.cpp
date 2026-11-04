@@ -207,6 +207,8 @@ int main(int argc, char *argv[]) {
             return settingsWindow;
         }
         settingsWindow = new SettingsWindow();
+        // 注入 SnipScreen：滚动截图开始时临时隐藏设置窗口（不自动恢复）
+        snipScreen->setSettingsWindow(settingsWindow);
 
         // 工具栏按钮样式变更时同步 StyleManager
         QObject::connect(settingsWindow, &SettingsWindow::toolbarButtonStyleChanged,

@@ -68,9 +68,9 @@ void PinWindow::toggleAll() {
         for (PinWindow *pw : s_instances) {
             if (pw->m_hiddenByToggle) {
                 pw->m_hiddenByToggle = false;
-                pw->show();
-                pw->raise();
-                pw->activateWindow();
+                // 恢复显示不激活应用：macOS 上 raise/activateWindow 会把整个应用
+                // 连同被盖住的窗口（如设置窗口）抬到前台，只把贴图提回可见位置
+                Utils::showFrontNoActivate(pw);
                 if (pw->m_toolBar && pw->m_annotationMode) pw->m_toolBar->show();
                 ++restored;
             }
@@ -126,6 +126,11 @@ PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     // macOS 上 Qt::Tool 映射为 NSPanel，默认应用失活（点击其他应用/桌面）即被系统隐藏；
     // 贴图需长期驻留桌面，此属性关掉该行为
     setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+
+    // 非激活面板：点击贴图不激活应用。否则鼠标点一下贴图，macOS 会把整个
+    // 应用连同被盖住的窗口（如设置窗口）整体抬到前台。非激活面板的点击/
+    // 拖动照常送达，且面板可成为 key window 接收键盘（Esc 等快捷键不受影响）
+    Utils::setNSPanelNonActivating(this);
 #endif
     setAttribute(Qt::WA_DeleteOnClose);
     setMouseTracking(true);
@@ -139,9 +144,12 @@ PinWindow::PinWindow(const QPixmap &pixmap, QWidget *parent)
     // 分两步：先在事件循环中显示窗口，然后再激活
     QTimer::singleShot(100, this, [this]() {
         if (!isVisible()) return;
-        
+
         setFocus();
-        activateWindow();
+        // 仅在应用已激活时才 activateWindow：全局热键（如 Alt+P）触发时应用
+        // 未激活，激活会把整个应用连同被盖住的窗口（如设置窗口）抬到前台；
+        // 贴图的键盘快捷键由用户点击贴图后按 macOS 标准行为激活生效
+        Utils::activateIfAppActive(this);
         
         // 验证窗口几何有效性
         QRect geo = geometry();

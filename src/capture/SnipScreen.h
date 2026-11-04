@@ -65,6 +65,16 @@ public:
     bool annotationToolSelected() const { return m_annotationToolSelected; }
     void setAnnotationToolSelected(bool selected) { m_annotationToolSelected = selected; }
 
+    /**
+     * @brief 注入设置窗口指针（懒加载，由 main 在首次创建设置窗口时调用）
+     *
+     * 滚动截图开始时若设置窗口开着则临时隐藏：会话期间应用处于激活状态，
+     * macOS 会把应用所有窗口整体抬在其他应用之上，设置窗口会一直挡在
+     * 正在截取的页面上层。
+     * @author chiangyang
+     */
+    void setSettingsWindow(QWidget *window) { m_settingsWindow = window; }
+
 signals:
 public slots:
     /**
@@ -446,6 +456,16 @@ private:
     void startCapture(bool recording);
 
     /**
+     * @brief 进入截图/录屏/滚动截图时隐藏设置窗口（仅 macOS，不自动恢复）
+     *
+     * 截图、录屏、滚动截图都需要激活应用，macOS 激活时会把应用所有窗口
+     * 连同被盖住的设置窗口整体抬到其他应用之上，取消后会露出来。故进入
+     * 会话时直接隐藏；不自动恢复是有意行为（需要时从托盘再打开）。
+     * @author chiangyang
+     */
+    void hideSettingsWindowForCapture();
+
+    /**
      * @brief 切换到录屏模式
      * @author chiangyang
      */
@@ -601,6 +621,8 @@ private:
     int m_pinHistoryIndex = -1;              ///< 历史截图翻页索引（-1=未开始，0=最新，递增=更早）
     QPoint m_lastPinPos;                     ///< 上一个翻页贴图的左上角位置（用于位置继承）
     QPointer<PinWindow> m_lastPinHistoryWindow; ///< 跟踪最后一个翻页贴图（关闭后自动置 null）
+
+    QPointer<QWidget> m_settingsWindow;      ///< 设置窗口（滚动截图开始时临时隐藏，不自动恢复）
 
     // ---------- macOS 跨屏切换 ----------
     QTimer *m_screenWatchTimer = nullptr;    ///< 轮询鼠标所在屏的定时器（macOS 单屏窗口模式）

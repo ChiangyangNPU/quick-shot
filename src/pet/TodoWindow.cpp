@@ -369,6 +369,12 @@ TodoWindow::TodoWindow(QWidget *parent)
     // StaysOnTop 与宿主宠物（置顶）保持同层，避免被前台应用窗口盖住
     setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint
                    | Qt::WindowStaysOnTopHint);
+#ifdef Q_OS_MACOS
+    // 右击宠物打开时应用处于未激活状态（宠物是非激活面板，点击不激活应用）：
+    // Qt::Tool 映射出的 NSPanel 默认 hidesOnDeactivate，应用未激活时显示会被
+    // 系统立即隐藏，表现为右击无反应。与宠物/贴图窗口一致，保持气泡常驻
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+#endif
     setAttribute(Qt::WA_TranslucentBackground, true);
 
     // 尺寸按屏幕 DPI 缩放（与应用其余窗口一致：96 为逻辑基准）

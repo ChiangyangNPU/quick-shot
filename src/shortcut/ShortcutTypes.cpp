@@ -1,6 +1,7 @@
 #include "ShortcutTypes.h"
 
 #include "../capture/SnipScreen.h"
+#include "../utils/Utils.h"
 #include "../widgets/PinWindow.h"
 #include "../widgets/HistoryWindow.h"
 
@@ -20,9 +21,11 @@ void dispatchShortcutAction(ShortcutType type,
         break;
     case ShortcutType::History:
         if (historyWindow) {
-            historyWindow->show();
-            historyWindow->raise();
-            historyWindow->activateWindow();
+            // 全局热键/托盘打开时应用多处于未激活状态：不能 raise/activateWindow，
+            // 否则整个应用（含被盖住的设置窗口）会被系统整体抬到前台。
+            // orderFrontRegardless 只把历史窗口提到可见位置，键盘输入由用户
+            // 点击窗口时按 macOS 标准行为激活后生效
+            Utils::showFrontNoActivate(historyWindow);
         }
         break;
     case ShortcutType::Pin:
