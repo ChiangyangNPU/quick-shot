@@ -6,9 +6,23 @@ Current version: **v0.1.5** — download the latest release from [GitHub Release
 
 ![Version](https://img.shields.io/badge/version-v0.1.5-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
 
+## 📚 Table of Contents
+
+* [macOS First Open: Un-notarized App](#macos-first-open)
+* [macOS First Launch: Screen Recording Permissions](#macos-permissions)
+* [Key Features](#features)
+* [Installation & Deployment](#installation)
+* [Technical Features](#technical)
+* [Development Environment](#dev-env)
+* [More Documentation](#docs)
+* [License](#license)
+* [Third-Party Resources](#third-party)
+
+<a id="macos-first-open"></a>
+
 ## ⚠️ macOS First Open: Manually Allow the Un-notarized App
 
-0. QuickShot is **not notarized by Apple** yet. After installing from a DMG downloaded in a browser, the first launch is blocked by macOS: *"Apple could not verify 'QuickShot' is free of malware that may harm your Mac or compromise your privacy."* Follow these 4 steps once — afterwards it opens normally:
+QuickShot is **not notarized by Apple** yet. After installing from a DMG downloaded in a browser, the first launch is blocked by macOS: *"Apple could not verify 'QuickShot' is free of malware that may harm your Mac or compromise your privacy."* Follow these 4 steps once — afterwards it opens normally:
 
 ![First launch blocked by macOS: QuickShot was not opened](docs/images/macos-first-open-blocked.png)
 
@@ -27,13 +41,17 @@ Current version: **v0.1.5** — download the latest release from [GitHub Release
 
 macOS remembers your choice, so later launches open normally.
 
-> On some macOS versions, right-clicking (Control-clicking) QuickShot.app in Finder → \*\*Open\*\* also leads into the confirmation flow above; if nothing happens, use the System Settings path.
+> On some macOS versions, right-clicking (Control-clicking) QuickShot.app in Finder → **Open** also leads into the confirmation flow above; if nothing happens, use the System Settings path.
 > Removing this prompt entirely requires an Apple Developer certificate and notarization, which this project has not set up yet.
 > DMGs built locally (`deploy/mac/deploy_mac.sh`) carry no browser quarantine flag and are not blocked by Gatekeeper.
 
-## ⚠️ macOS First Launch: Screen Recording & System Audio Permissions — do not trigger a screenshot or recording immediately; otherwise the step-0 dialog appears, and steps 1–3 may still fail. Complete steps 1–3 first, before any screenshot or recording
+<a id="macos-permissions"></a>
 
-0. The first time you open QuickShot to take a **screenshot or record the screen**, macOS shows a dialog: **"QuickShot" wants to record this computer's screen and audio** — this is the system's security requirement for accessing screen content. Allow it so that screenshots, recording, OCR and other features work properly:
+## ⚠️ macOS First Launch: Screen Recording & System Audio Permissions
+
+> **Grant permissions before capturing.** On first launch, complete the steps below before taking a screenshot or recording. If you trigger a screenshot/recording first, macOS shows the permission dialog, but granting access afterwards may still not take effect — quit and relaunch QuickShot if that happens.
+
+The first time you open QuickShot to take a **screenshot or record the screen**, macOS shows a dialog: **"QuickShot" wants to record this computer's screen and audio** — this is the system's security requirement for accessing screen content. Allow it so that screenshots, recording, OCR and other features work properly:
 
 ![macOS dialog: QuickShot wants to record the screen and audio](docs/images/macos-screen-recording-prompt.png)
 
@@ -45,6 +63,8 @@ macOS remembers your choice, so later launches open normally.
 
 4. To record **microphone** audio, also enable QuickShot under Privacy & Security → Microphone.
 5. **Quit and relaunch QuickShot** for the permission to take effect.
+
+<a id="features"></a>
 
 ## ✨ Key Features
 
@@ -208,10 +228,12 @@ Right-click the system tray icon to access "Settings". **Seven tabs in order: Ge
   * **Context Menu**: Right-click the preview for Copy / Annotate (creates a pin window and enters annotation mode directly) / OCR / Translate.
   * **Window Operations**: Draggable, resizable from top/bottom edges and four corners; closable via the top-right ×, double-clicking blank space, Esc, or the configured trigger again; clicks on other in-app windows (settings/history/pin/annotation) never close it by mistake.
 
+<a id="installation"></a>
+
 ## 📦 Installation & Deployment
 
 ### Developer Build
-1. Ensure Qt 6.10.2 and CMake 3.20+ are installed.
+1. Ensure Qt 6.10.2 (the development version; 6.10 or newer recommended) and CMake 3.20+ are installed.
 2. Clone the project and build:
    ```bash
    mkdir build && cd build
@@ -226,7 +248,7 @@ Right-click the system tray icon to access "Settings". **Seven tabs in order: Ge
 
 ### Running Tests
 
-The tests/ directory contains 13 Qt Test unit tests. After building with the default `QUICKSHOT_BUILD_TESTS=ON`, run `ctest` in the build directory to execute them all.
+The tests/ directory contains 14 Qt Test unit tests. After building with the default `QUICKSHOT_BUILD_TESTS=ON`, run `ctest` in the build directory to execute them all.
 
 > **Windows environment setup & path configuration** (Qt / MinGW / CMake / ONNX Runtime path setup, CLion toolchain, common issues): see the [Windows Build Guide](docs/build-windows.md).
 
@@ -263,6 +285,8 @@ The project provides automated packaging scripts, no need to manually copy DLLs.
    ```
 2. The script will automatically generate `QuickShot-Release-v{version}.dmg` and/or `QuickShot-Debug-v{version}.dmg` installers in `deploy/mac/` (including Qt dependencies, ONNX Runtime, language files, with automatic code signing). See [Mac Deployment Guide](deploy/mac/README_DEPLOY_MAC.md) for details.
 
+<a id="technical"></a>
+
 ## 🛠️ Technical Features
 * **High DPI Support (Manual Adaptation)**: The project disables Qt auto high-DPI scaling (`QT_ENABLE_HIGHDPI_SCALING=0`); UI uses `pt`/`em` units for manual adaptation. On DPI change, SettingsWindow & HistoryWindow call StyleManager::reapplyGlobalStyleSheet() to reload global QSS and recalculate control sizes. Screenshots and pinned windows keep 1:1 pixel mapping; PinWindow paintEvent dynamically enables/disables SmoothPixmapTransform based on scale ratio to balance sharpness and smoothness.
 * **Active Window Anti-Black-Screen**: Uses screen DC (GetDC(NULL)) instead of window DC to capture active windows, avoiding black screens with hardware-accelerated apps (DirectX/Chromium/UWP) on Windows 8+.
@@ -293,12 +317,16 @@ The project provides automated packaging scripts, no need to manually copy DLLs.
   * **Model Reuse**: OCR models are released after recognition and auto-loaded when needed again
   * **Recording Frame-Buffer Reuse**: ScreenRecorder worker thread reuses frameBuffer to minimize memory allocations; the annotation overlay is guarded with QMutex for thread-safe concurrent access.
 
+<a id="dev-env"></a>
+
 ## 🚀 Development Environment
 * **Language**: C++ 17
 * **Framework**: Qt 6.10.2
 * **Build System**: CMake
 * **Compiler**: MinGW 64-bit (Windows) / Clang (macOS)
 * **OCR**: ONNX Runtime
+
+<a id="docs"></a>
 
 ## 📚 More Documentation
 * [Annotation System](docs/annotation.md): annotation tools, interaction and shortcuts.
@@ -313,6 +341,8 @@ The project provides automated packaging scripts, no need to manually copy DLLs.
 * [Windows Build Guide](docs/build-windows.md): Windows environment setup and common issues.
 * [Release Process](docs/release-publish.md): publishing releases to GitHub / Gitee.
 * [Multi-Remote Sync](docs/git-multi-remote.md): managing GitHub / Gitee remotes.
+
+<a id="license"></a>
 
 ## 📄 License
 
@@ -333,6 +363,8 @@ This project is licensed under the **CC BY-NC-SA 4.0** (Creative Commons Attribu
 * ⚠️ License derivative works under the same license
 
 See the [LICENSE](LICENSE) file for full terms.
+
+<a id="third-party"></a>
 
 ## 📦 Third-Party Resources
 

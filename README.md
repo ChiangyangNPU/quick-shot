@@ -6,9 +6,23 @@ QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基�
 
 ![Version](https://img.shields.io/badge/version-v0.1.5-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
 
+## 📚 目录
+
+* [macOS 首次打开：未公证应用放行](#macos-first-open)
+* [macOS 首次启动：录屏与系统录音授权](#macos-permissions)
+* [核心功能](#features)
+* [安装与部署](#installation)
+* [技术特性](#technical)
+* [开发环境](#dev-env)
+* [更多文档](#docs)
+* [许可证](#license)
+* [第三方资源声明](#third-party)
+
+<a id="macos-first-open"></a>
+
 ## ⚠️ macOS 首次打开：未公证应用需手动放行
 
-0. QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 安装后，首次双击打开会被 macOS 拦下，提示「Apple 无法验证"QuickShot"是否包含可能危害 Mac 安全或泄漏隐私的恶意软件」。按下面 4 步放行一次即可，之后都能正常打开：
+QuickShot 目前**未做 Apple 公证**，从网页（浏览器）下载的 DMG 安装后，首次双击打开会被 macOS 拦下，提示「Apple 无法验证"QuickShot"是否包含可能危害 Mac 安全或泄漏隐私的恶意软件」。按下面 4 步放行一次即可，之后都能正常打开：
 
 ![macOS 首次打开被拦截：未打开"QuickShot"](docs/images/macos-first-open-blocked.png)
 
@@ -27,13 +41,17 @@ QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基�
 
 系统会记住这次选择，之后双击即可正常打开。
 
-> 部分 macOS 版本上，在 Finder 里\*\*右键（或 Control + 点击）QuickShot.app →「打开」\*\*也会进入上面的确认流程；若没有反应，按上面的系统设置路径操作。
+> 部分 macOS 版本上，在 Finder 里**右键（或 Control + 点击）QuickShot.app →「打开」**也会进入上面的确认流程；若没有反应，按上面的系统设置路径操作。
 > 想彻底消除该提示，需要 Apple Developer 证书并对应用做公证（本项目暂未配置）。
 > 本地自行打包（`deploy/mac/deploy_mac.sh`）的 DMG 不带浏览器下载标记（quarantine），不会被 Gatekeeper 拦截。
 
-## ⚠️ macOS 首次启动：录屏与系统录音授权，建议不要立马触发截屏或者录屏，否则会出现步骤0中的弹框，然后按照步骤1-2-3，可能还是有问题。建议在没有触发截屏或录屏的时候，立马执行后续的步骤1-2-3
+<a id="macos-permissions"></a>
 
-0. 首次打开 QuickShot 进行**截图或录屏**时，macOS 会弹出 **""QuickShot"想要录制此电脑的屏幕和音频"** 系统弹窗——这是系统对屏幕内容访问的安全要求，允许后截图、录屏、OCR 等功能才可正常使用：
+## ⚠️ macOS 首次启动：录屏与系统录音授权
+
+> **建议先授权、再截屏/录屏。** 首次启动时请先完成下面的授权步骤，再触发截图或录屏。若先触发截屏/录屏，系统虽会弹出授权弹窗，但之后即使完成授权也可能不生效，需要退出并重新打开 QuickShot。
+
+首次打开 QuickShot 进行**截图或录屏**时，macOS 会弹出 **""QuickShot"想要录制此电脑的屏幕和音频"** 系统弹窗——这是系统对屏幕内容访问的安全要求，允许后截图、录屏、OCR 等功能才可正常使用：
 
 ![macOS 系统弹窗：QuickShot 想要录制屏幕和音频](docs/images/macos-screen-recording-prompt.png)
 
@@ -45,6 +63,8 @@ QuickShot 是一款轻量级、功能强大的屏幕截图与录制工具，基�
 
 4. 若需录制**麦克风**声音，另在「隐私与安全性」→「**麦克风**」中勾选 QuickShot。
 5. 授权后**退出并重新打开 QuickShot** 才会生效。
+
+<a id="features"></a>
 
 ## ✨ 核心功能
 
@@ -127,12 +147,12 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 
 #### 翻译引擎
 
-| 引擎             | 类型               | 说明                                           |
-| -------------- | ---------------- | -------------------------------------------- |
-| MyMemory       | 默认，免注册           | 国内可直连，无 email 5000 词/天，填 email 提升至 50000 词/天 |
-| 百度翻译           | 用户自填 AppId + Key | 国内稳定，每月免费 200 万字符                            |
-| DeepL          | 用户自填 Key         | 翻译质量最高                                       |
-| LibreTranslate | 用户自填 URL         | 可自托管实现完全离线                                   |
+| 引擎           | 类型                 | 说明                                                         |
+| -------------- | -------------------- | ------------------------------------------------------------ |
+| MyMemory       | 默认，免注册         | 国内可直连，无 email 5000 词/天，填 email 提升至 50000 词/天 |
+| 百度翻译       | 用户自填 AppId + Key | 国内稳定，每月免费 200 万字符                                |
+| DeepL          | 用户自填 Key         | 翻译质量最高                                                 |
+| LibreTranslate | 用户自填 URL         | 可自托管实现完全离线                                         |
 
 > **隐私保护**：首次使用翻译时弹窗说明文本将发送到第三方服务，可勾选「不再提示」。所有 Key / URL 由用户在设置页填写，软件不预置任何凭证，API Key 经 SecretStore 加密存储（Windows DPAPI / macOS Keychain）。详见 [翻译功能技术文档](docs/translation-design.md)。
 
@@ -220,11 +240,13 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
   * **右键菜单**: 预览上右键弹出复制 / 标注（创建贴图并直接进入标注模式）/ 文字识别 / 翻译。
   * **窗口操作**: 支持拖动、上下边缘与四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次按触发方式操作（点击宠物或移入热区）；应用内其他窗口（设置/历史/贴图/标注等）上的点击不会误关。
 
+<a id="installation"></a>
+
 ## 📦 安装与部署
 
 ### 开发者构建
 
-1. 确保已安装 Qt 6.10.2 和 CMake ≥ 3.20。
+1. 确保已安装 Qt 6.10.2（开发环境版本，建议不低于 6.10）和 CMake ≥ 3.20。
 2. 克隆项目并编译：
    ```bash
    mkdir build && cd build
@@ -240,7 +262,7 @@ QuickShot 提供两种翻译形式，基于 OCR 识别结果将文字翻译为�
 
 ### 运行测试
 
-tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUILD_TESTS=ON` 构建后，在 build 目录运行 `ctest` 即可执行全部测试。
+tests/ 目录下包含 14 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUILD_TESTS=ON` 构建后，在 build 目录运行 `ctest` 即可执行全部测试。
 
 > **Windows 环境搭建与路径配置**（Qt / MinGW / CMake / ONNX Runtime 的路径指定、CLion 工具链、常见问题）详见 [Windows 构建指南](docs/build-windows.md)。
 
@@ -279,6 +301,8 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
    ```
 2. 脚本会自动在 `deploy/mac/` 目录下生成 `QuickShot-Release-v{version}.dmg` 和/或 `QuickShot-Debug-v{version}.dmg` 安装包（包含 Qt 依赖、ONNX Runtime、语言文件，已自动签名）。详见 [Mac 打包指南](deploy/mac/README_DEPLOY_MAC.md)。
 
+<a id="technical"></a>
+
 ## 🛠️ 技术特性
 
 * **高分屏适配 (High DPI)**: 项目禁用 Qt 自动高 DPI 缩放（`QT_ENABLE_HIGHDPI_SCALING=0`），UI 使用 `pt`/`em` 单位手动适配；DPI 变化时 SettingsWindow 与 HistoryWindow 通过 StyleManager::reapplyGlobalStyleSheet() 重新加载全局 QSS 并重新计算控件尺寸；截图与悬浮窗均保持 1:1 像素级清晰度，PinWindow paintEvent 根据缩放比例动态启用/禁用 SmoothPixmapTransform 平衡锐利度与平滑度。
@@ -310,6 +334,8 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
   * **模型复用**: OCR 模型识别后释放，需要时自动加载
   * **录屏帧缓冲复用**: ScreenRecorder 工作线程复用 frameBuffer，减少内存分配，标注 overlay 通过 QMutex 保护并发访问
 
+<a id="dev-env"></a>
+
 ## 🚀 开发环境
 
 * **语言**: C++ 17
@@ -317,6 +343,8 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
 * **构建系统**: CMake
 * **编译器**: MinGW 64-bit (Windows) / Clang (macOS)
 * **OCR**: ONNX Runtime
+
+<a id="docs"></a>
 
 ## 📚 更多文档
 
@@ -332,6 +360,8 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
 * [Windows 构建指南](docs/build-windows.md)：Windows 环境搭建与常见问题。
 * [发布流程](docs/release-publish.md)：GitHub / Gitee 双端版本发布步骤。
 * [多远程仓库同步](docs/git-multi-remote.md)：GitHub / Gitee 双远程管理。
+
+<a id="license"></a>
 
 ## 📄 许可证
 
@@ -355,6 +385,8 @@ tests/ 目录下包含 13 个 Qt Test 单元测试。以默认的 `QUICKSHOT_BUI
 * ⚠️ 衍生项目使用相同许可证
 
 详细条款请参见 [LICENSE](LICENSE) 文件。
+
+<a id="third-party"></a>
 
 ## 📦 第三方资源声明
 
