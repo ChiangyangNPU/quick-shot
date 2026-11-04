@@ -7,6 +7,7 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QStandardPaths>
+#include <QSettings>
 #include <csignal>
 
 #include "shortcut/ShortcutManager.h"
@@ -22,6 +23,7 @@
 #include "pet/DesktopPetManager.h"
 #include "widgets/HistoryWindow.h"
 #include "ocr/OcrEngine.h"
+#include "utils/Utils.h"
 #include "../log/Logger.h"
 
 // 版本号宏，由 CMake 通过 add_compile_definitions 注入
@@ -68,6 +70,31 @@ static QString alreadyRunningText() {
         return QStringLiteral("QuickShot이 이미 실행 중입니다");
     }
     return QStringLiteral("QuickShot is already running");
+}
+
+/**
+ * @brief 首次启动时默认开启开机自启动
+ * @param configManager 配置管理器实例
+ *
+ * 自启动状态由系统决定（Windows 注册表 Run 键 / macOS LaunchAgent plist），
+ * 本身没有软件层面的默认值。此处通过 boot/autoStartInitialized 标记实现
+ * "默认自启动"：仅在本机从未初始化过该设置时开启，用户随后在设置中
+ * 手动关闭后不会再被强制重新开启。
+ * @author chiangyang
+ */
+static void applyDefaultAutoStart(ConfigManager *configManager) {
+    QSettings *settings = configManager->getSettings();
+    if (settings->value("boot/autoStartInitialized", false).toBool()) {
+        return;
+    }
+
+    if (!Utils::isAutoStartEnabled()) {
+        Utils::setAutoStartEnabled(true);
+        LOG_INFO("Auto start enabled by default on first launch");
+    }
+
+    settings->setValue("boot/autoStartInitialized", true);
+    settings->sync();
 }
 
 /**
@@ -140,6 +167,9 @@ int main(int argc, char *argv[]) {
     // 创建 ConfigManager 实例并设置为全局单例，支持后续通过依赖注入使用
     ConfigManager* configManager = new ConfigManager();
     ConfigManager::setInstance(configManager);
+
+    // 首次启动默认开启开机自启动（用户手动关闭后不再强制开启）
+    applyDefaultAutoStart(configManager);
 
     // StyleManager 启动自初始化：在任何窗口创建之前从持久化配置恢复样式
     // （依赖注入，与窗口构造顺序解耦，SnipScreen 构造即可读到持久化的标注默认值）

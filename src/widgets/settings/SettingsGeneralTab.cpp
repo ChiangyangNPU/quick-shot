@@ -7,6 +7,7 @@
 #include "../MessageBox.h"
 #include "../../core/TranslationManager.h"
 #include "../../core/StyleManager.h"
+#include "../../utils/Utils.h"
 #include "../../log/Logger.h"
 
 #include <QVBoxLayout>
@@ -268,12 +269,8 @@ void SettingsGeneralTab::loadSettings() {
     // 我们不在这里加载语言，而是让main.cpp统一处理
     // TranslationManager::instance()->loadLanguage(lang);
     
-    // Auto Start (Check Registry)
-#ifdef Q_OS_WIN
-    QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
-    bool isAutoStart = bootSettings.contains("QuickShot");
-    autoStartCheck->setChecked(isAutoStart);
-#endif
+    // Auto Start（Windows 读注册表、macOS 读 LaunchAgent，其他平台恒为未启用）
+    autoStartCheck->setChecked(Utils::isAutoStartEnabled());
 
     // Log Print
     bool isLogPrintEnabled = settings->value("logPrintEnabled", true).toBool();
@@ -552,15 +549,8 @@ void SettingsGeneralTab::onConfigPathChanged(const QString &newPath) {
 }
 
 void SettingsGeneralTab::onAutoStartChanged(Qt::CheckState state) {
-#ifdef Q_OS_WIN
-    QSettings bootSettings("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", QSettings::NativeFormat);
-    QString appPath = QDir::toNativeSeparators(QCoreApplication::applicationFilePath());
-    if (state == Qt::Checked) {
-        bootSettings.setValue("QuickShot", appPath);
-    } else {
-        bootSettings.remove("QuickShot");
-    }
-#endif
+    // Windows 写注册表 Run 键、macOS 写 LaunchAgent plist，其他平台无操作
+    Utils::setAutoStartEnabled(state == Qt::Checked);
 }
 void SettingsGeneralTab::onLogPrintChanged(Qt::CheckState state) {
     QSettings *settings = ConfigManager::instance()->getSettings();

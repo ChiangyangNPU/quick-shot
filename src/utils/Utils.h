@@ -171,6 +171,30 @@ public:
      */
     static void setWindowNormalLevel(QWidget *win);
 
+    /**
+     * @brief 查询当前是否已启用开机自启动
+     *
+     * Windows 检查注册表 HKCU\Software\Microsoft\Windows\CurrentVersion\Run
+     * 下的 "QuickShot" 键；macOS 检查 ~/Library/LaunchAgents 下的
+     * LaunchAgent plist 是否存在；其他平台恒返回 false。
+     * @return 已启用返回 true
+     * @author chiangyang
+     */
+    static bool isAutoStartEnabled();
+
+    /**
+     * @brief 启用或禁用开机自启动
+     *
+     * Windows 写入/删除注册表 Run 键（值为当前程序路径）；macOS 写入/删除
+     * ~/Library/LaunchAgents/com.chiangyang.quickshot.plist（RunAtLoad=true）；
+     * 其他平台为空操作。macOS 采用 LaunchAgent 方式：无需代码签名，
+     * 修改在下次登录时生效。
+     * @param enabled true=启用，false=禁用
+     * @return 操作成功返回 true
+     * @author chiangyang
+     */
+    static bool setAutoStartEnabled(bool enabled);
+
 #ifdef Q_OS_WIN
     /**
      * @brief 抓取指定 Windows 窗口的物理像素截图（供活动窗口截图复用）
