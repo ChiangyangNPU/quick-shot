@@ -99,7 +99,19 @@ HistoryWindow::HistoryWindow(QWidget *parent)
     setWindowIcon(StyleManager::loadAppIcon());
     // 初始尺寸按 DPI 缩放（100% 下为 1000x720，加大以容纳更多内容）
     resize(calculateDpiScaledSize());
+#ifdef Q_OS_MACOS
+    // 非激活面板：点击历史窗口不激活应用。普通窗口被点击时 macOS 必然
+    // 激活应用，把被其他应用盖住的窗口（如设置窗口）整体抬到前台。
+    // Qt::Tool 映射为 NSPanel，可成为 key window 而不激活应用；随后清除
+    // UtilityWindow 样式位保持普通窗口的标题栏外观；WA_MacAlwaysShowToolWindow
+    // 保证应用失活（切到其他应用）时窗口不被系统隐藏
+    setWindowFlags((windowFlags() & ~Qt::WindowType_Mask) | Qt::Tool);
+    setAttribute(Qt::WA_MacAlwaysShowToolWindow, true);
+    Utils::setNSPanelNonActivating(this);
+    Utils::clearNSPanelUtilityStyle(this);
+#else
     setWindowFlags(windowFlags() | Qt::Window);
+#endif
 
     // 连接语言切换信号，实现实时翻译
     connect(tm, &TranslationManager::languageChanged, this, [this](const QString &) {
@@ -173,6 +185,18 @@ void HistoryWindow::showEvent(QShowEvent *event)
         connect(screen, &QScreen::logicalDotsPerInchChanged,
                 this, &HistoryWindow::onDpiChanged, Qt::UniqueConnection);
     }
+
+#ifdef Q_OS_MACOS
+    // Qt 显示 Qt::Tool 窗口时会把它设为浮动层级（NSFloatingWindowLevel=3），
+    // 窗口会一直浮在其他应用的普通窗口之上、点击别处也无法沉到后面；该设置
+    // 在 show 返回后异步生效，需延迟一点再改回普通层级。延迟期间保持可见
+    // 检查，避免窗口已关闭还去改层级
+    QTimer::singleShot(50, this, [this]() {
+        if (isVisible()) {
+            Utils::setWindowNormalLevel(this);
+        }
+    });
+#endif
 }
 
 /**

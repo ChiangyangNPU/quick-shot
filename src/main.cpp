@@ -179,6 +179,8 @@ int main(int argc, char *argv[]) {
 
     // 创建截图主界面（StyleManager 已在上面由 initFromConfig 恢复持久化的标注默认值）
     SnipScreen *snipScreen = new SnipScreen();
+    // 注入历史窗口：截图/录屏开始时会临时隐藏它，避免应用激活把它带到前台
+    snipScreen->setHistoryWindow(historyWindow);
 
     // 初始化快捷键子系统：注入依赖 → 批量注册 9 种全局热键
     // 替代原先 main.cpp 中 9 个 GlobalShortcut 局部变量和 9 处 settings->value 读取

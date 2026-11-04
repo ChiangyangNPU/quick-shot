@@ -89,6 +89,28 @@ static void orderNSWindowFrontRegardless(WId wid) {
     // [nsWindow orderFrontRegardless]
     ((void (*)(id, SEL))objc_msgSend)(nsWindow, sel_registerName("orderFrontRegardless"));
 }
+
+/**
+ * @brief 清除 NSPanel 的 UtilityWindow 样式位，恢复普通窗口标题栏外观
+ *
+ * Qt::Tool 映射出的 NSPanel 默认带 NSWindowStyleMaskUtilityWindow（小标题
+ * 栏、无缩放按钮）。历史窗口需要非激活面板（点击不激活应用），但外观要
+ * 和普通窗口一致，故构造后清掉该样式位。
+ * @param wid QWidget::winId() 返回的 NSView 指针
+ * @author chiangyang
+ */
+static void clearNSWindowUtilityStyle(WId wid) {
+    if (!wid) return;
+    id nsView = reinterpret_cast<id>(wid);
+    // [nsView window]
+    id nsWindow = ((id (*)(id, SEL))objc_msgSend)(nsView, sel_registerName("window"));
+    if (!nsWindow) return;
+    // [nsWindow styleMask]
+    unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(nsWindow, sel_registerName("styleMask"));
+    mask &= ~(1UL << 4); // NSWindowStyleMaskUtilityWindow
+    // [nsWindow setStyleMask:mask]
+    ((void (*)(id, SEL, unsigned long))objc_msgSend)(nsWindow, sel_registerName("setStyleMask:"), mask);
+}
 #endif
 
 /**
@@ -174,6 +196,43 @@ void Utils::showFrontNoActivate(QWidget *w) {
 #else
     w->raise();
     w->activateWindow();
+#endif
+}
+
+/**
+ * @brief 清除 NSPanel 的 UtilityWindow 样式位，恢复普通窗口标题栏外观（仅 macOS）
+ *
+ * Qt::Tool 映射出的 NSPanel 默认是小标题栏的工具窗口。需要非激活面板但
+ * 外观与普通窗口一致时（如历史窗口），构造后调用本方法清掉样式位；
+ * 窗口创建的首次显示前、原生窗口已创建（winId 已触发）时调用有效。
+ * 其他平台为空实现。
+ * @param win 目标 NSPanel 窗口
+ * @author chiangyang
+ */
+void Utils::clearNSPanelUtilityStyle(QWidget *win) {
+#ifdef Q_OS_MACOS
+    if (!win) return;
+    clearNSWindowUtilityStyle(win->winId());
+#else
+    Q_UNUSED(win);
+#endif
+}
+
+/**
+ * @brief 把窗口的合成层级恢复为普通窗口层级（仅 macOS）
+ *
+ * Qt 显示 Qt::Tool 窗口时会把它设为 NSFloatingWindowLevel(3)（该设置经
+ * 事件循环异步生效），窗口会一直浮在其他应用的普通窗口之上。显示后调用
+ * 本方法改回 NSNormalWindowLevel(0)。其他平台为空实现。
+ * @param win 目标窗口
+ * @author chiangyang
+ */
+void Utils::setWindowNormalLevel(QWidget *win) {
+#ifdef Q_OS_MACOS
+    if (!win) return;
+    setNSWindowLevel(win->winId(), 0);
+#else
+    Q_UNUSED(win);
 #endif
 }
 

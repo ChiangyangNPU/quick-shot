@@ -148,6 +148,29 @@ public:
      */
     static void activateIfAppActive(QWidget *w);
 
+    /**
+     * @brief 清除 NSPanel 的 UtilityWindow 样式位，恢复普通窗口标题栏外观（仅 macOS）
+     *
+     * Qt::Tool 映射出的 NSPanel 默认是小标题栏的工具窗口。需要非激活面板但
+     * 外观与普通窗口一致时（如历史窗口），构造后调用本方法清掉样式位。
+     * 其他平台为空实现。
+     * @param win 目标 NSPanel 窗口
+     * @author chiangyang
+     */
+    static void clearNSPanelUtilityStyle(QWidget *win);
+
+    /**
+     * @brief 把窗口的合成层级恢复为普通窗口层级（仅 macOS）
+     *
+     * Qt 显示 Qt::Tool 窗口时会把它设为 NSFloatingWindowLevel(3)：窗口会一直
+     * 浮在其他应用的普通窗口之上，点击其他位置也无法沉到后面。Qt 的这一
+     * 设置在 show 返回后异步生效，故需要在显示后稍作延迟再改回普通层级
+     * （NSNormalWindowLevel）。其他平台为空实现。
+     * @param win 目标窗口
+     * @author chiangyang
+     */
+    static void setWindowNormalLevel(QWidget *win);
+
 #ifdef Q_OS_WIN
     /**
      * @brief 抓取指定 Windows 窗口的物理像素截图（供活动窗口截图复用）
