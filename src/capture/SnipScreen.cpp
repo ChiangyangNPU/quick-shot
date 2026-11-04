@@ -1052,7 +1052,7 @@ void SnipScreen::performTranslate() {
             // 批量翻译并显示译文叠加窗口（封装了标签提示、信号连接、错误处理）
             //    翻译成功显示 Overlay 后退出截图框（类似贴图完成后销毁截图框和工具栏）
             TranslateOverlayWindow::translateAndShow(
-                this, pixmap, result.texts, result.polygons,
+                this, pixmap, result.texts,
                 QPoint(sel.x(), sel.y()), localSel,
                 [this]() { exit(); });
 

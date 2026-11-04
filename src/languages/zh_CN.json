@@ -392,6 +392,8 @@
   "translate.viewOriginal": "原文",
   "translate.viewTranslation": "译文",
   "translate.viewBoth": "对照",
+  "translate.resultTitle": "翻译结果",
+  "translate.copyAll": "复制全文",
   "translate.errNetwork": "网络连接失败，请检查网络后重试。",
   "translate.errSsl": "SSL/TLS 未正确配置，无法建立加密连接，请检查 TLS 插件部署。",
   "translate.errSameLang": "源语言与目标语言相同，请更换目标语言。",

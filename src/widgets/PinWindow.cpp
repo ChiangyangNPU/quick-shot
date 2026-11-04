@@ -619,7 +619,7 @@ void PinWindow::performTranslate() {
                       [self, pixmap](const OcrEngine::OcrResult &result) {
             if (!self) return;
             TranslateOverlayWindow::translateAndShow(
-                self, pixmap, result.texts, result.polygons,
+                self, pixmap, result.texts,
                 self->pos(), self->rect());
 
             LOG_INFO(QString("PinWindow: OCR done, %1 segments, starting batch translation")

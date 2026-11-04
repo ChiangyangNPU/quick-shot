@@ -3,43 +3,223 @@
 #include "../translate/TranslateEngine.h"
 #include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
-#include "../capture/Resizer.h"
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
 #include <QPainter>
-#include <QFont>
-#include <QTextOption>
-#include <QMouseEvent>
-#include <QWheelEvent>
-#include <QKeyEvent>
+#include <QPaintEvent>
+#include <QVBoxLayout>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QTextEdit>
+#include <QToolButton>
+#include <QSplitter>
+#include <QSizeGrip>
+#include <QFrame>
 #include <QContextMenuEvent>
 #include <QMenu>
 #include <QAction>
 #include <QActionGroup>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QScreen>
 #include <QDateTime>
 #include <QTimer>
-#include <QLabel>
-#include <QTextEdit>
-#include <QResizeEvent>
+#include <QShortcut>
+#include <QMouseEvent>
+#include <QTextDocument>
+#include <QList>
 #include <memory>
 
+namespace {
+
 /**
- * @brief 一站式批量翻译并显示译文叠加窗口
+ * @brief 翻译窗口配色（跟随当前主题）
+ * @author chiangyang
+ */
+struct TranslatePalette {
+    QColor windowBg;  ///< 窗口/文本区域背景色
+    QColor headerBg;  ///< 标题栏背景色
+    QColor border;    ///< 窗口边框色
+    QColor divider;   ///< 分栏/分隔线颜色
+    QColor imageBg;   ///< 原图区域背景色
+    QColor textColor; ///< 主文字颜色
+    QColor subText;   ///< 次要文字颜色
+};
+
+/**
+ * @brief 按当前主题返回翻译窗口配色
+ * @return 配色结构体
+ * @author chiangyang
+ */
+TranslatePalette translatePalette() {
+    if (StyleManager::themeMode() == StyleManager::ThemeMode::Dark) {
+        return {QColor(32, 33, 36), QColor(43, 44, 47), QColor(60, 64, 67),
+                QColor(60, 64, 67), QColor(24, 25, 27), QColor(232, 234, 237),
+                QColor(154, 160, 166)};
+    }
+    return {QColor(255, 255, 255), QColor(242, 243, 245), QColor(217, 221, 227),
+            QColor(228, 231, 235), QColor(246, 247, 248), QColor(31, 31, 31),
+            QColor(95, 99, 104)};
+}
+
+/**
+ * @brief 创建底部操作按钮（图标在上、文字在下）
+ * @param iconPath 图标资源路径
+ * @param text 按钮文字
+ * @param palette 配色
+ * @param parent 父控件
+ * @return 创建好的工具按钮
+ * @author chiangyang
+ */
+QToolButton *createActionButton(const QString &iconPath, const QString &text,
+                                const TranslatePalette &palette, QWidget *parent) {
+    QToolButton *button = new QToolButton(parent);
+    button->setText(text);
+    button->setIcon(StyleManager::loadSvgIcon(iconPath, QSize(20, 20), palette.subText));
+    button->setIconSize(QSize(20, 20));
+    button->setToolButtonStyle(Qt::ToolButtonTextUnderIcon);
+    button->setCursor(Qt::PointingHandCursor);
+    button->setFixedHeight(54);
+    button->setMinimumWidth(76);
+    button->setStyleSheet(QString(
+        "QToolButton{background:transparent;border:none;border-radius:6px;"
+        "color:%1;font-size:9pt;padding:4px 6px;}"
+        "QToolButton:hover{background:%2;}"
+        "QToolButton:pressed{background:%3;}")
+        .arg(palette.subText.name(), palette.headerBg.name(), palette.divider.name()));
+    return button;
+}
+
+} // namespace
+
+/**
+ * @brief 原图显示控件：等比缩放并居中绘制截图
+ * @author chiangyang
+ */
+class TranslateImageView : public QWidget {
+public:
+    /**
+     * @brief 构造函数
+     * @param pixmap 待显示的原图
+     * @param bgColor 背景色
+     * @param parent 父控件
+     * @author chiangyang
+     */
+    TranslateImageView(const QPixmap &pixmap, const QColor &bgColor, QWidget *parent = nullptr)
+        : QWidget(parent), m_pixmap(pixmap), m_bgColor(bgColor) {
+        setMinimumSize(120, 120);
+    }
+
+protected:
+    /**
+     * @brief 绘制事件：等比缩放原图并居中绘制
+     * @param event 绘制事件
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *event) override {
+        Q_UNUSED(event);
+        QPainter painter(this);
+        painter.fillRect(rect(), m_bgColor);
+        if (m_pixmap.isNull()) return;
+
+        // 四周留白，原图按控件大小等比缩放后居中
+        const int margin = 16;
+        const QRect area = rect().adjusted(margin, margin, -margin, -margin);
+        if (area.width() <= 0 || area.height() <= 0) return;
+
+        const QSize scaledSize = m_pixmap.size().scaled(area.size(), Qt::KeepAspectRatio);
+        const QPoint topLeft(area.left() + (area.width() - scaledSize.width()) / 2,
+                             area.top() + (area.height() - scaledSize.height()) / 2);
+        painter.setRenderHint(QPainter::SmoothPixmapTransform, true);
+        painter.drawPixmap(QRect(topLeft, scaledSize), m_pixmap);
+    }
+
+private:
+    QPixmap m_pixmap;  ///< 原图
+    QColor m_bgColor;  ///< 背景色
+};
+
+/**
+ * @brief 翻译窗口标题栏：按住拖动窗口，双击关闭
+ * @author chiangyang
+ */
+class TranslateTitleBar : public QWidget {
+public:
+    /**
+     * @brief 构造函数
+     * @param target 被拖动的窗口
+     * @param parent 父控件
+     * @author chiangyang
+     */
+    explicit TranslateTitleBar(QWidget *target, QWidget *parent = nullptr)
+        : QWidget(parent), m_target(target) {}
+
+protected:
+    /**
+     * @brief 鼠标按下事件：记录拖动起点
+     * @param event 鼠标事件
+     * @author chiangyang
+     */
+    void mousePressEvent(QMouseEvent *event) override {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = true;
+            m_dragOffset = event->globalPosition().toPoint() - m_target->frameGeometry().topLeft();
+        }
+    }
+
+    /**
+     * @brief 鼠标移动事件：拖动窗口
+     * @param event 鼠标事件
+     * @author chiangyang
+     */
+    void mouseMoveEvent(QMouseEvent *event) override {
+        if (m_dragging) {
+            m_target->move(event->globalPosition().toPoint() - m_dragOffset);
+        }
+    }
+
+    /**
+     * @brief 鼠标释放事件：结束拖动
+     * @param event 鼠标事件
+     * @author chiangyang
+     */
+    void mouseReleaseEvent(QMouseEvent *event) override {
+        if (event->button() == Qt::LeftButton) {
+            m_dragging = false;
+        }
+    }
+
+    /**
+     * @brief 鼠标双击事件：关闭窗口
+     * @param event 鼠标事件
+     * @author chiangyang
+     */
+    void mouseDoubleClickEvent(QMouseEvent *event) override {
+        if (event->button() == Qt::LeftButton) {
+            event->accept();
+            m_target->close();
+        }
+    }
+
+private:
+    QWidget *m_target;    ///< 被拖动的窗口
+    QPoint m_dragOffset;  ///< 拖动起始偏移
+    bool m_dragging = false; ///< 是否正在拖动
+};
+
+/**
+ * @brief 一站式批量翻译并显示翻译结果窗口
  * @param parent 父窗口（用于创建标签和信号接收者）
- * @param pixmap 截图原图（用于 Overlay 背景显示）
+ * @param pixmap 截图原图（用于左侧原图显示）
  * @param texts 原文文本列表
- * @param polygons 原文区域多边形（像素坐标，相对截图图像）
- * @param overlayPos Overlay 窗口定位点（全局坐标）
+ * @param overlayPos 结果窗口定位点（全局坐标，自动夹取到屏幕内）
  * @param labelRect 加载/错误标签的居中区域（parent 相对坐标）
- * @param onOverlayShown 翻译成功并显示 Overlay 后的回调（可选，如 SnipScreen 退出截图框）
+ * @param onOverlayShown 翻译成功并显示结果窗口后的回调（可选，如 SnipScreen 退出截图框）
  * @author chiangyang
  */
 void TranslateOverlayWindow::translateAndShow(QWidget *parent,
                                               const QPixmap &pixmap,
                                               const QStringList &texts,
-                                              const QVector<QPolygonF> &polygons,
                                               const QPoint &overlayPos,
                                               const QRect &labelRect,
                                               std::function<void()> onOverlayShown) {
@@ -64,7 +244,7 @@ void TranslateOverlayWindow::translateAndShow(QWidget *parent,
     auto connFail = std::make_shared<QMetaObject::Connection>();
 
     *connFinish = QObject::connect(ts, &TranslateService::batchFinished, parent,
-            [pixmap, texts, polygons, overlayPos, labelRect, translatingLabel, connFinish, connFail, onOverlayShown](
+            [pixmap, texts, overlayPos, translatingLabel, connFinish, connFail, onOverlayShown](
                 const QStringList &translatedTexts) {
         QObject::disconnect(*connFinish);
         QObject::disconnect(*connFail);
@@ -72,13 +252,24 @@ void TranslateOverlayWindow::translateAndShow(QWidget *parent,
         translatingLabel->hide();
         translatingLabel->deleteLater();
 
-        auto *overlay = new TranslateOverlayWindow(pixmap, texts, polygons, translatedTexts);
-        overlay->move(overlayPos);
+        auto *overlay = new TranslateOverlayWindow(pixmap, texts, translatedTexts);
+
+        // 结果窗口比截图选区更宽，定位点夹取到所在屏幕的可用区域内，避免超出屏幕
+        QPoint pos = overlayPos;
+        QScreen *screen = QGuiApplication::screenAt(overlayPos);
+        if (!screen) screen = QGuiApplication::primaryScreen();
+        if (screen) {
+            const QRect avail = screen->availableGeometry();
+            pos.setX(qBound(avail.left(), pos.x(), qMax(avail.left(), avail.right() - overlay->width() + 1)));
+            pos.setY(qBound(avail.top(), pos.y(), qMax(avail.top(), avail.bottom() - overlay->height() + 1)));
+        }
+        overlay->move(pos);
         overlay->show();
+        overlay->setFocus();
 
-        LOG_INFO("TranslateOverlayWindow: overlay shown after batch translation");
+        LOG_INFO("TranslateOverlayWindow: result window shown after batch translation");
 
-        // 翻译成功显示 Overlay 后触发回调（如 SnipScreen 退出截图框，类似贴图完成后销毁截图框）
+        // 翻译成功显示窗口后触发回调（如 SnipScreen 退出截图框，类似贴图完成后销毁截图框）
         if (onOverlayShown) {
             onOverlayShown();
         }
@@ -116,20 +307,17 @@ void TranslateOverlayWindow::translateAndShow(QWidget *parent,
  * @brief 构造函数
  * @param pixmap 截图原图
  * @param texts 原文文本列表
- * @param polygons 原文区域多边形
  * @param translatedTexts 译文文本列表
  * @param parent 父对象
  * @author chiangyang
  */
 TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
                                                const QStringList &texts,
-                                               const QVector<QPolygonF> &polygons,
                                                const QStringList &translatedTexts,
                                                QWidget *parent)
     : QWidget(parent)
     , m_pixmap(pixmap)
     , m_texts(texts)
-    , m_polygons(polygons)
     , m_translatedTexts(translatedTexts)
     , m_viewMode(Translation) {
     LOG_INFO(QString("TranslateOverlayWindow created, pixmap: %1x%2, segments: %3")
@@ -138,12 +326,136 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
     // 窗口标志：无边框、置顶、工具窗口
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
     setAttribute(Qt::WA_DeleteOnClose);
-    setMouseTracking(true);
     setFocusPolicy(Qt::StrongFocus);
-    setFocus();
 
-    // 窗口初始大小等于原图大小
-    resize(pixmap.size());
+    const TranslatePalette palette = translatePalette();
+    m_windowBg = palette.windowBg;
+    m_borderColor = palette.border;
+
+    // 初始尺寸：原图宽度 + 右侧文本栏宽度，并限制在屏幕可用区域内
+    const int headerHeight = 42;
+    const int textPanelWidth = qBound(320, pixmap.width() / 2, 480);
+    int windowWidth = pixmap.width() + textPanelWidth;
+    int windowHeight = pixmap.height() + headerHeight;
+    if (QScreen *screen = QGuiApplication::primaryScreen()) {
+        const QRect available = screen->availableGeometry();
+        windowWidth = qMin(windowWidth, int(available.width() * 0.85));
+        windowHeight = qMin(windowHeight, int(available.height() * 0.85));
+    }
+    resize(qMax(640, windowWidth), qMax(400, windowHeight));
+
+    TranslationManager *tm = TranslationManager::instance();
+
+    QVBoxLayout *rootLayout = new QVBoxLayout(this);
+    rootLayout->setContentsMargins(1, 1, 1, 1);
+    rootLayout->setSpacing(0);
+
+    // ============ 标题栏 ============
+    TranslateTitleBar *titleBar = new TranslateTitleBar(this, this);
+    titleBar->setObjectName("translateTitleBar");
+    titleBar->setFixedHeight(headerHeight);
+    titleBar->setStyleSheet(QString(
+        "QWidget#translateTitleBar{background:%1;border-bottom:1px solid %2;}")
+        .arg(palette.headerBg.name(), palette.divider.name()));
+
+    QHBoxLayout *titleLayout = new QHBoxLayout(titleBar);
+    titleLayout->setContentsMargins(14, 0, 8, 0);
+    titleLayout->setSpacing(8);
+
+    QLabel *titleLabel = new QLabel(tm->get("translate.resultTitle", "Translation"), titleBar);
+    titleLabel->setStyleSheet(QString("background:transparent;color:%1;font-size:10pt;font-weight:600;")
+                                  .arg(palette.textColor.name()));
+    titleLayout->addWidget(titleLabel);
+    titleLayout->addStretch();
+
+    QToolButton *closeButton = new QToolButton(titleBar);
+    closeButton->setIcon(StyleManager::loadSvgIcon(":/icons/close.svg", QSize(14, 14), palette.subText));
+    closeButton->setIconSize(QSize(14, 14));
+    closeButton->setFixedSize(28, 28);
+    closeButton->setCursor(Qt::PointingHandCursor);
+    closeButton->setToolTip(tm->get("cancel", "Cancel"));
+    closeButton->setStyleSheet(
+        "QToolButton{background:transparent;border:none;border-radius:4px;}"
+        "QToolButton:hover{background:rgba(235, 87, 87, 0.16);}");
+    connect(closeButton, &QToolButton::clicked, this, &QWidget::close);
+    titleLayout->addWidget(closeButton, 0, Qt::AlignVCenter);
+
+    rootLayout->addWidget(titleBar);
+
+    // ============ 主体：左侧原图 / 右侧译文 ============
+    QSplitter *splitter = new QSplitter(Qt::Horizontal, this);
+    splitter->setObjectName("translateSplitter");
+    splitter->setHandleWidth(1);
+    splitter->setChildrenCollapsible(false);
+    splitter->setStyleSheet(QString("QSplitter#translateSplitter::handle{background:%1;}")
+                                .arg(palette.divider.name()));
+    rootLayout->addWidget(splitter, 1);
+
+    m_imageView = new TranslateImageView(pixmap, palette.imageBg, splitter);
+    m_imageView->setMinimumWidth(120);
+    m_imageView->installEventFilter(this);
+
+    QWidget *textPanel = new QWidget(splitter);
+    textPanel->setObjectName("translateTextPanel");
+    textPanel->setMinimumWidth(240);
+    textPanel->setStyleSheet(QString("QWidget#translateTextPanel{background:%1;}")
+                                 .arg(palette.windowBg.name()));
+
+    QVBoxLayout *textLayout = new QVBoxLayout(textPanel);
+    textLayout->setContentsMargins(0, 0, 0, 0);
+    textLayout->setSpacing(0);
+
+    m_textView = new QTextEdit(textPanel);
+    m_textView->setReadOnly(true);
+    m_textView->setFrameShape(QFrame::NoFrame);
+    m_textView->setTextInteractionFlags(Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
+    m_textView->setStyleSheet(QString("QTextEdit{background:%1;border:none;color:%2;font-size:11pt;}")
+                                  .arg(palette.windowBg.name(), palette.textColor.name()));
+    m_textView->document()->setDocumentMargin(18);
+    m_textView->viewport()->installEventFilter(this);
+    textLayout->addWidget(m_textView, 1);
+
+    QFrame *separator = new QFrame(textPanel);
+    separator->setFixedHeight(1);
+    separator->setStyleSheet(QString("background:%1;").arg(palette.divider.name()));
+    textLayout->addWidget(separator);
+
+    // 底部操作栏：复制全文 / 另存为图片 / 右下角缩放抓手
+    QWidget *actionBar = new QWidget(textPanel);
+    actionBar->setStyleSheet(QString("background:%1;").arg(palette.windowBg.name()));
+    QHBoxLayout *actionLayout = new QHBoxLayout(actionBar);
+    actionLayout->setContentsMargins(12, 6, 6, 6);
+    actionLayout->setSpacing(6);
+    actionLayout->addStretch();
+
+    QToolButton *copyButton = createActionButton(
+        ":/icons/copy.svg", tm->get("translate.copyAll", "Copy All"), palette, actionBar);
+    connect(copyButton, &QToolButton::clicked, this, &TranslateOverlayWindow::copyTranslation);
+    actionLayout->addWidget(copyButton);
+
+    QToolButton *saveButton = createActionButton(
+        ":/icons/save.svg", tm->get("translate.saveAsImage", "Save as Image"), palette, actionBar);
+    connect(saveButton, &QToolButton::clicked, this, &TranslateOverlayWindow::saveAsImage);
+    actionLayout->addWidget(saveButton);
+
+    QSizeGrip *sizeGrip = new QSizeGrip(actionBar);
+    sizeGrip->setFixedSize(16, 16);
+    actionLayout->addWidget(sizeGrip, 0, Qt::AlignRight | Qt::AlignBottom);
+
+    textLayout->addWidget(actionBar);
+
+    splitter->setStretchFactor(0, 1);
+    splitter->setStretchFactor(1, 0);
+    splitter->setSizes(QList<int>() << qMax(120, width() - textPanelWidth - 2)
+                                    << textPanelWidth);
+
+    // 右侧文本按当前视图模式填充
+    updateTextContent();
+
+    // ESC 关闭（无论焦点在窗口还是文本编辑框都生效）
+    QShortcut *escShortcut = new QShortcut(QKeySequence(Qt::Key_Escape), this);
+    escShortcut->setContext(Qt::WidgetWithChildrenShortcut);
+    connect(escShortcut, &QShortcut::activated, this, &QWidget::close);
 }
 
 /**
@@ -154,7 +466,7 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
 void TranslateOverlayWindow::setViewMode(ViewMode mode) {
     if (m_viewMode == mode) return;
     m_viewMode = mode;
-    update();
+    updateTextContent();
     LOG_INFO(QString("TranslateOverlayWindow: view mode changed to %1").arg(static_cast<int>(mode)));
 }
 
@@ -168,346 +480,61 @@ TranslateOverlayWindow::ViewMode TranslateOverlayWindow::viewMode() const {
 }
 
 /**
- * @brief 切换文字选择模式
- *
- * 开启时创建一个覆盖整个窗口的只读 QTextEdit，包含所有译文文本，
- * 用户可自由跨行跨段选择文字并 Ctrl+C 复制。
- * 关闭时移除编辑器，恢复 QPainter 绘制。
- * @param enabled true 进入选择模式，false 退出
+ * @brief 根据当前视图模式刷新右侧文本内容
  * @author chiangyang
  */
-void TranslateOverlayWindow::setTextSelectionMode(bool enabled) {
-    if (m_textSelectionMode == enabled) return;
+void TranslateOverlayWindow::updateTextContent() {
+    if (!m_textView) return;
 
-    m_textSelectionMode = enabled;
+    const TranslatePalette palette = translatePalette();
 
-    if (enabled) {
-        // Original 模式下没有译文可选，自动切换到 Translation 模式
-        if (m_viewMode == Original) {
-            m_viewMode = Translation;
+    switch (m_viewMode) {
+    case Original:
+        m_textView->setPlainText(m_texts.join("\n\n"));
+        break;
+    case Both: {
+        // 对照模式：按段显示"原文（灰色小字）+ 译文（深色正文）"
+        QString html;
+        const int count = qMax(m_texts.size(), m_translatedTexts.size());
+        for (int i = 0; i < count; ++i) {
+            QString original = i < m_texts.size() ? m_texts.at(i) : QString();
+            QString translated = i < m_translatedTexts.size() ? m_translatedTexts.at(i) : QString();
+            // 先转义 HTML 特殊字符，再把换行替换为 <br/>，避免换行标记被转义
+            original = original.toHtmlEscaped();
+            original.replace('\n', "<br/>");
+            translated = translated.toHtmlEscaped();
+            translated.replace('\n', "<br/>");
+            if (!original.isEmpty()) {
+                html += QString("<p style=\"margin:0 0 4px 0;color:%1;font-size:9pt;\">%2</p>")
+                            .arg(palette.subText.name(), original);
+            }
+            if (!translated.isEmpty()) {
+                html += QString("<p style=\"margin:0 0 16px 0;color:%1;font-size:11pt;\">%2</p>")
+                            .arg(palette.textColor.name(), translated);
+            }
         }
-
-        // 创建覆盖整个窗口的只读 QTextEdit，所有译文合在一起，支持跨段选择
-        m_selectEditor = new QTextEdit(this);
-        m_selectEditor->setReadOnly(true);
-        m_selectEditor->setTextInteractionFlags(
-            Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
-        m_selectEditor->setFocusPolicy(Qt::StrongFocus);
-        m_selectEditor->setGeometry(rect());
-        // 安装事件过滤器：拦截 QTextEdit viewport 的右键菜单，转发本窗口的完整右键菜单
-        // （QAbstractScrollArea 的右键事件发送给 viewport() 而非 QTextEdit 本身，
-        //  否则进入选字模式后无法呼出"退出选字模式"选项）
-        m_selectEditor->viewport()->installEventFilter(this);
-
-        // 所有译文按段拼接，段间空行分隔
-        m_selectEditor->setPlainText(m_translatedTexts.join("\n\n"));
-
-        // 半透明白色背景 + 深色文字
-        // padding 用 em、font-size 用 pt，随屏幕 DPI 自动缩放
-        m_selectEditor->setStyleSheet(
-            "QTextEdit { background-color: rgba(255, 255, 255, 230); "
-            "color: rgb(30, 30, 30); border: none; padding: 0.5em; "
-            "font-size: 11pt; }");
-
-        m_selectEditor->show();
-        m_selectEditor->setFocus();
-
-        LOG_INFO(QString("TranslateOverlayWindow: text selection mode enabled, %1 segments")
-                     .arg(m_translatedTexts.size()));
-    } else {
-        if (m_selectEditor) {
-            m_selectEditor->hide();
-            m_selectEditor->deleteLater();
-            m_selectEditor = nullptr;
-        }
-
-        LOG_INFO("TranslateOverlayWindow: text selection mode disabled");
+        m_textView->setHtml(html);
+        break;
     }
-
-    update();
-}
-
-/**
- * @brief 更新选择模式编辑器的大小（窗口缩放后调用）
- * @author chiangyang
- */
-void TranslateOverlayWindow::updateSelectEditorGeometry() {
-    if (m_selectEditor) {
-        m_selectEditor->setGeometry(rect());
+    case Translation:
+    default:
+        m_textView->setPlainText(m_translatedTexts.join("\n\n"));
+        break;
     }
 }
 
 /**
- * @brief 窗口大小变化事件：重新定位选择模式标签
- * @param event 大小变化事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::resizeEvent(QResizeEvent *event) {
-    QWidget::resizeEvent(event);
-    updateSelectEditorGeometry();
-}
-
-/**
- * @brief 绘制事件：绘制原图与译文叠加层
+ * @brief 绘制事件：绘制窗口背景与边框
  * @param event 绘制事件
  * @author chiangyang
  */
 void TranslateOverlayWindow::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
-    painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    // 将坐标系缩放到 pixmap 坐标系，使 polygon 坐标可直接使用
-    const qreal sx = qreal(width()) / qreal(m_pixmap.width());
-    const qreal sy = qreal(height()) / qreal(m_pixmap.height());
-
-    painter.save();
-    painter.scale(sx, sy);
-    // 绘制原图
-    painter.drawPixmap(0, 0, m_pixmap);
-    // 选择模式下由 QLabel 显示译文，跳过 QPainter 叠加层
-    if (!m_textSelectionMode) {
-        drawOverlay(painter);
-    }
-    painter.restore();
-
-    // 绘制边框（窗口坐标系，不缩放）
-    QPen borderPen(QColor(100, 149, 237), 2);
-    painter.setPen(borderPen);
+    painter.fillRect(rect(), m_windowBg);
+    painter.setPen(QPen(m_borderColor, 1));
     painter.setBrush(Qt::NoBrush);
-    QRect borderRect = rect().adjusted(1, 1, -1, -1);
-    if (borderRect.width() > 0 && borderRect.height() > 0) {
-        painter.drawRect(borderRect);
-    }
-
-    // 绘制右下角调整大小手柄
-    painter.setPen(QPen(Qt::white, 2));
-    painter.drawLine(width() - 10, height(), width(), height() - 10);
-    painter.drawLine(width() - 5, height(), width(), height() - 5);
-}
-
-/**
- * @brief 绘制译文叠加层（根据当前视图模式）
- * @param painter 画笔（需已设置到 pixmap 坐标系）
- * @author chiangyang
- */
-void TranslateOverlayWindow::drawOverlay(QPainter &painter) {
-    if (m_viewMode == Original) {
-        // 原文模式：仅显示原图，不叠加
-        return;
-    }
-
-    const int count = qMin(m_polygons.size(), m_translatedTexts.size());
-    for (int i = 0; i < count; ++i) {
-        const QRectF br = m_polygons[i].boundingRect();
-        if (br.isEmpty()) continue;
-
-        if (m_viewMode == Translation) {
-            // 译文模式：在原文位置遮盖并显示译文（可向下扩展容纳长译文）
-            drawTranslatedText(painter, m_translatedTexts[i], br, m_pixmap.height());
-        } else if (m_viewMode == Both) {
-            // 对照模式：在原文下方追加译文块，扩展下界受下一段原文约束，
-            // 避免长译文的白色背景盖住下一段原文
-            const qreal limit = nextBlockTopLimit(i, br);
-            QRectF target = br.translated(0, br.height() + 2);
-            target.setHeight(qMax(qreal(8), limit - target.top()));
-            drawTranslatedText(painter, m_translatedTexts[i], target, limit);
-        }
-    }
-}
-
-/**
- * @brief 计算对照模式下译文块向下扩展的下界
- *
- * 取横向与当前块有交叠的下一个原文块顶部 -2 与图片底边的较小者，
- * 保证译文块扩展时不会盖住下一段原文的文字。
- * @author chiangyang
- */
-qreal TranslateOverlayWindow::nextBlockTopLimit(int index, const QRectF &br) const {
-    qreal limit = m_pixmap.height();
-    const int count = qMin(m_polygons.size(), m_translatedTexts.size());
-    for (int j = index + 1; j < count; ++j) {
-        const QRectF nb = m_polygons[j].boundingRect();
-        if (nb.isEmpty()) continue;
-        // 只约束横向有交叠、且位于当前块下方的相邻块
-        if (nb.top() >= br.bottom() && nb.left() < br.right() && nb.right() > br.left()) {
-            limit = qMin(limit, nb.top() - 2);
-        }
-    }
-    return limit;
-}
-
-/**
- * @brief 在指定矩形区域绘制译文（半透明背景 + 自动换行 + 字号自适应）
- *
- * 字号从基准值（按区域高度估算）逐级向下试探，取能完整容纳译文的最大字号；
- * 最小字号（8px）仍放不下时向下扩展矩形到 maxBottom，宁可轻微覆盖下方
- * 内容也不截断译文（截断是这类叠加 UI 最影响可读性的问题）。
- * @author chiangyang
- */
-void TranslateOverlayWindow::drawTranslatedText(QPainter &painter, const QString &text,
-                                                QRectF rect, qreal maxBottom) {
-    if (text.isEmpty() || rect.isEmpty()) return;
-
-    // 译文文字：深色；内边距稍宽避免文字贴边
-    const qreal padX = 3, padY = 2;
-    QRectF textRect = rect.adjusted(padX, padY, -padX, -padY);
-
-    // 字号自适应：从基准字号（按区域高度估算，夹取 8~22）向下试探，
-    // 取"换行排版后能完整容纳"的最大字号
-    QFont font = painter.font();
-    const int baseSize = qBound(8, int(rect.height() * 0.75), 22);
-    int size = baseSize;
-    QRectF br;
-    while (true) {
-        font.setPixelSize(size);
-        QFontMetricsF fm(font);
-        br = fm.boundingRect(textRect, Qt::TextWrapAnywhere | Qt::AlignCenter, text);
-        if (br.height() <= textRect.height() || size <= 8) {
-            break;
-        }
-        --size;
-    }
-    painter.setFont(font);
-
-    // 最小字号仍放不下：向下扩展矩形（不超过 maxBottom），再按扩展后的
-    // 区域重排一次；扩展后仍放不下则尽力绘制（底部裁剪）
-    if (br.height() > textRect.height()) {
-        const qreal avail = maxBottom - rect.top() - padY * 2;
-        if (avail > textRect.height()) {
-            rect.setHeight(avail + padY * 2);
-            textRect = rect.adjusted(padX, padY, -padX, -padY);
-            br = QFontMetricsF(font).boundingRect(
-                textRect, Qt::TextWrapAnywhere | Qt::AlignCenter, text);
-        }
-    }
-
-    // 半透明白色背景遮盖原文（在最终矩形上绘制，扩展部分同样有背景）
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(QColor(255, 255, 255, 230));
-    painter.drawRoundedRect(rect, 3, 3);
-
-    // 在矩形内居中绘制，按词边界自动换行（CJK 长串可在任意字符处断行）
-    painter.setPen(QColor(30, 30, 30));
-    QTextOption option;
-    option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
-    option.setAlignment(Qt::AlignCenter);
-    painter.drawText(textRect, text, option);
-}
-
-/**
- * @brief 检查鼠标是否在右下角调整大小区域内
- * @param pos 鼠标位置（相对窗口）
- * @return 是否在调整大小区域内
- * @author chiangyang
- */
-bool TranslateOverlayWindow::isInResizeArea(const QPoint &pos) const {
-    return (pos.x() >= width() - 15 && pos.y() >= height() - 15);
-}
-
-/**
- * @brief 鼠标按下事件：开始拖动或调整大小
- * @param event 鼠标事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::mousePressEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        setFocus();
-        if (isInResizeArea(event->pos())) {
-            m_isResizing = true;
-        } else if (!m_textSelectionMode) {
-            // 选择模式下不启动窗口拖动，让 QLabel 处理鼠标事件
-            m_isMoving = true;
-            m_dragPosition = event->globalPosition().toPoint() - frameGeometry().topLeft();
-        }
-    }
-}
-
-/**
- * @brief 鼠标移动事件：拖动窗口或调整大小
- * @param event 鼠标事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::mouseMoveEvent(QMouseEvent *event) {
-    const QPoint pos = event->pos();
-
-    // 更新鼠标光标
-    if (isInResizeArea(pos)) {
-        setCursor(getCursorByLocation(ResizerLocation::BR_ANCHOR));
-    } else {
-        setCursor(getCursorByLocation(ResizerLocation::EMPTY_INSIDE));
-    }
-
-    if (m_isResizing) {
-        const int newWidth = qMax(50, pos.x());
-        const int newHeight = qMax(50, pos.y());
-        resize(newWidth, newHeight);
-    } else if (m_isMoving) {
-        move(event->globalPosition().toPoint() - m_dragPosition);
-    }
-}
-
-/**
- * @brief 鼠标释放事件：结束拖动或调整大小
- * @param event 鼠标事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::mouseReleaseEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        m_isMoving = false;
-        m_isResizing = false;
-    }
-}
-
-/**
- * @brief 鼠标双击事件：关闭窗口
- * @param event 鼠标事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::mouseDoubleClickEvent(QMouseEvent *event) {
-    if (event->button() == Qt::LeftButton) {
-        event->accept();
-        hide();
-        QTimer::singleShot(50, this, &TranslateOverlayWindow::close);
-    }
-}
-
-/**
- * @brief 鼠标滚轮事件：缩放窗口
- * @param event 滚轮事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::wheelEvent(QWheelEvent *event) {
-    const double scaleFactor = 1.1;
-
-    if (event->angleDelta().y() > 0) {
-        resize(int(width() * scaleFactor), int(height() * scaleFactor));
-    } else {
-        int newWidth = int(width() / scaleFactor);
-        int newHeight = int(height() / scaleFactor);
-        newWidth = qMax(50, newWidth);
-        newHeight = qMax(50, newHeight);
-        resize(newWidth, newHeight);
-    }
-    // 缩放后更新选择模式编辑器大小（resizeEvent 也会触发，此处冗余但确保即时更新）
-    updateSelectEditorGeometry();
-}
-
-/**
- * @brief 键盘按键事件：ESC 关闭窗口
- * @param event 键盘事件
- * @author chiangyang
- */
-void TranslateOverlayWindow::keyPressEvent(QKeyEvent *event) {
-    if (event->key() == Qt::Key_Escape) {
-        if (m_textSelectionMode) {
-            // 选择模式下 ESC 先退出选择模式，不关闭窗口
-            setTextSelectionMode(false);
-        } else {
-            close();
-        }
-    }
+    painter.drawRect(rect().adjusted(0, 0, -1, -1));
 }
 
 /**
@@ -516,6 +543,15 @@ void TranslateOverlayWindow::keyPressEvent(QKeyEvent *event) {
  * @author chiangyang
  */
 void TranslateOverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
+    showContextMenu(event->globalPos());
+}
+
+/**
+ * @brief 弹出窗口右键菜单
+ * @param globalPos 菜单弹出位置（全局坐标）
+ * @author chiangyang
+ */
+void TranslateOverlayWindow::showContextMenu(const QPoint &globalPos) {
     TranslationManager *tm = TranslationManager::instance();
 
     QMenu menu(this);
@@ -523,7 +559,7 @@ void TranslateOverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
     menu.setAttribute(Qt::WA_TranslucentBackground);
     menu.setStyleSheet(StyleManager::getMenuStyle());
 
-    // 视图模式切换（单选）
+    // 视图模式切换（单选，仅影响右侧文本内容）
     QMenu *viewMenu = menu.addMenu(tm->get("translate.viewMode", "View"));
     QActionGroup *viewGroup = new QActionGroup(&menu);
     viewGroup->setExclusive(true);
@@ -549,16 +585,6 @@ void TranslateOverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
 
     menu.addSeparator();
 
-    // 选择文字模式（可勾选）
-    QAction *selectTextAction = menu.addAction(tm->get("translate.selectText", "Select Text"));
-    selectTextAction->setCheckable(true);
-    selectTextAction->setChecked(m_textSelectionMode);
-    connect(selectTextAction, &QAction::triggered, this, [this](bool checked) {
-        setTextSelectionMode(checked);
-    });
-
-    menu.addSeparator();
-
     // 复制原文
     QAction *copyOriginalAction = menu.addAction(tm->get("translate.copyOriginal", "Copy Original"));
     connect(copyOriginalAction, &QAction::triggered, this, &TranslateOverlayWindow::copyOriginal);
@@ -577,63 +603,22 @@ void TranslateOverlayWindow::contextMenuEvent(QContextMenuEvent *event) {
     QAction *closeAction = menu.addAction(tm->get("cancel"));
     connect(closeAction, &QAction::triggered, this, &QWidget::close);
 
-    menu.exec(event->globalPos());
+    menu.exec(globalPos);
 }
 
 /**
- * @brief 事件过滤器：为选择模式编辑器的右键菜单做本地化并追加退出选项
- *
- * 选字模式下覆盖窗口的 QTextEdit 默认右键菜单只有 Copy/Select All（且跟随
- * Qt 框架语言，可能显示英文），缺少退出选字模式的入口。由于 QTextEdit 继承
- * 自 QAbstractScrollArea，右键事件发送给其 viewport() 而非 QTextEdit 本身，
- * 因此过滤器需安装在 viewport() 上。此处拦截 QEvent::ContextMenu，基于
- * createStandardContextMenu() 保留原生 Copy/Select All（可复制用户选中的文字）
- * 并按快捷键识别这两项做本地化替换，再追加"文字选择模式"勾选项（取消勾选
- * 退出选字模式回到 Overlay 绘制界面）和"取消"项（退出选字模式并关闭 Overlay）。
- * @param watched 被监听的对象（m_selectEditor->viewport()）
+ * @brief 事件过滤器：把原图与文本区域的右键事件转发给本窗口
+ * @param watched 被监听的对象（原图控件或文本编辑框 viewport）
  * @param event 事件
  * @return true 表示已处理（仅对 ContextMenu 事件），false 表示继续传递
  * @author chiangyang
  */
 bool TranslateOverlayWindow::eventFilter(QObject *watched, QEvent *event) {
-    if (m_selectEditor && watched == m_selectEditor->viewport()
-        && event->type() == QEvent::ContextMenu) {
+    if (event->type() == QEvent::ContextMenu
+        && (watched == m_imageView
+            || (m_textView && watched == m_textView->viewport()))) {
         auto *contextEvent = static_cast<QContextMenuEvent *>(event);
-        // 基于 QTextEdit 标准菜单（Copy/Select All 等，可复制用户选中的文字）
-        QMenu *menu = m_selectEditor->createStandardContextMenu();
-        menu->setStyleSheet(StyleManager::getMenuStyle());
-        TranslationManager *tm = TranslationManager::instance();
-
-        // 按快捷键识别 Copy / Select All 并替换为本地化文本
-        const QKeySequence copySeq(QKeySequence::Copy);
-        const QKeySequence selectAllSeq(QKeySequence::SelectAll);
-        for (QAction *a : menu->actions()) {
-            const QKeySequence sc = a->shortcut();
-            if (sc.matches(copySeq) == QKeySequence::ExactMatch) {
-                a->setText(tm->get("translate.copy", "Copy"));
-            } else if (sc.matches(selectAllSeq) == QKeySequence::ExactMatch) {
-                a->setText(tm->get("translate.selectAll", "Select All"));
-            }
-        }
-
-        // 追加"文字选择模式"勾选项，取消勾选即退出选字模式回到 Overlay 绘制界面
-        menu->addSeparator();
-        QAction *selectTextAction = menu->addAction(tm->get("translate.selectText", "Text Selection Mode"));
-        selectTextAction->setCheckable(true);
-        selectTextAction->setChecked(true);  // 当前处于选字模式
-        connect(selectTextAction, &QAction::triggered, this, [this](bool checked) {
-            setTextSelectionMode(checked);
-        });
-
-        // 追加"取消"项，退出选字模式并关闭翻译 Overlay 窗口
-        QAction *cancelAction = menu->addAction(tm->get("cancel", "Cancel"));
-        connect(cancelAction, &QAction::triggered, this, [this]() {
-            setTextSelectionMode(false);
-            close();
-        });
-
-        menu->exec(contextEvent->globalPos());
-        delete menu;
+        showContextMenu(contextEvent->globalPos());
         return true;
     }
     return QWidget::eventFilter(watched, event);
@@ -660,23 +645,15 @@ void TranslateOverlayWindow::copyTranslation() {
 }
 
 /**
- * @brief 另存为图片文件
+ * @brief 另存原图为图片文件
  * @author chiangyang
  */
 void TranslateOverlayWindow::saveAsImage() {
-    // 将当前视图（含叠加层）渲染到 pixmap
-    QPixmap result(m_pixmap.size());
-    result.fill(Qt::transparent);
-    QPainter painter(&result);
-    painter.setRenderHint(QPainter::Antialiasing);
-    painter.drawPixmap(0, 0, m_pixmap);
-    drawOverlay(painter);
-    painter.end();
-
     const QString defaultName = QString("QuickShot_Translate_%1.png")
                                     .arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
 
     TranslationManager *tm = TranslationManager::instance();
+    QPixmap result = m_pixmap;
     // 过滤器与 SnipScreen/HistoryWindow 的保存对话框保持一致
     Utils::savePixmapToFile(
         this, [result]() -> QPixmap { return result; }, defaultName,

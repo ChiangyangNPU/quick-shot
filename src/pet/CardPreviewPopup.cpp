@@ -235,7 +235,7 @@ void CardPreviewPopup::contextMenuEvent(QContextMenuEvent *event) {
                     if (!hostGuard) return;
                     const QPoint pos = centerGlobal - QPoint(image.width() / 2, image.height() / 2);
                     TranslateOverlayWindow::translateAndShow(
-                        hostGuard, image, result.texts, result.polygons, pos, QRect(pos, image.size()));
+                        hostGuard, image, result.texts, pos, QRect(pos, image.size()));
                 });
             } else {
                 // 文本：直接调用翻译服务，译文复用识别结果对话框展示

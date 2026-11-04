@@ -392,6 +392,8 @@
   "translate.viewOriginal": "Original",
   "translate.viewTranslation": "Translation",
   "translate.viewBoth": "Side by Side",
+  "translate.resultTitle": "Translation",
+  "translate.copyAll": "Copy All",
   "translate.errNetwork": "Network connection failed, please check your network and retry.",
   "translate.errSsl": "SSL/TLS is not configured properly, cannot establish encrypted connection. Please check TLS plugin deployment.",
   "translate.errSameLang": "Source and target languages are the same, please change the target language.",

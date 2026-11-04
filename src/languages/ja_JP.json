@@ -392,6 +392,8 @@
   "translate.viewOriginal": "原文",
   "translate.viewTranslation": "翻訳",
   "translate.viewBoth": "比較",
+  "translate.resultTitle": "翻訳結果",
+  "translate.copyAll": "全文をコピー",
   "translate.errNetwork": "ネットワーク接続に失敗しました。ネットワークを確認して再試行してください。",
   "translate.errSsl": "SSL/TLS が正しく設定されておらず、暗号化接続を確立できません。TLS プラグインの配置を確認してください。",
   "translate.errSameLang": "元の言語と対象言語が同じです。対象言語を変更してください。",

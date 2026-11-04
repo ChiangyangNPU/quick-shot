@@ -392,6 +392,8 @@
   "translate.viewOriginal": "원문",
   "translate.viewTranslation": "번역문",
   "translate.viewBoth": "나란히 보기",
+  "translate.resultTitle": "번역 결과",
+  "translate.copyAll": "전체 복사",
   "translate.errNetwork": "네트워크 연결에 실패했습니다. 네트워크를 확인하고 다시 시도하세요.",
   "translate.errSsl": "SSL/TLS가 올바르게 구성되지 않아 암호화 연결을 설정할 수 없습니다. TLS 플러그인 배포를 확인하세요.",
   "translate.errSameLang": "원본 언어와 대상 언어가 같습니다. 대상 언어를 변경하세요.",
