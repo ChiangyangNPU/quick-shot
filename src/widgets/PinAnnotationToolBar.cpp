@@ -30,7 +30,11 @@ void PinAnnotationToolBar::setupUi() {
 
     // 独立顶层窗口：工具类型、无边框、置顶，与 PinWindow 同级显示。
     // 窗口属性与两级布局（三个工具栏子类共用的外壳）
-    initShell(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+    // NoDropShadowWindowHint：macOS 的顶层窗口默认带系统投影阴影，而子工具栏
+    // 是紧贴在本工具栏下边缘的另一个顶层窗口，两者的阴影会互相投到对方边缘，
+    // 视觉上像两栏重叠；Windows 的顶层窗口没有系统阴影，故无此现象。
+    initShell(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint
+              | Qt::NoDropShadowWindowHint);
 #ifdef Q_OS_MACOS
     // macOS 上 Qt::Tool 窗口默认随应用失活隐藏；标注中途切到其他应用再切回时
     // 工具栏不应消失，与贴图本体保持一致

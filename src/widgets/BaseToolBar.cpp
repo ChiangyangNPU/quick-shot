@@ -356,7 +356,11 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
     data.window = new QWidget(parentWidget());
     if (parentWidget() == nullptr) {
         // Pin 场景：独立顶层窗口 + 置顶 + 透明背景（圆角需要）
-        data.window->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint);
+        // NoDropShadowWindowHint：子工具栏紧贴主工具栏下边缘，而 macOS 顶层窗口
+        // 默认带系统投影阴影，阴影会投到主工具栏上形成一条压痕暗带，看起来像
+        // 两级工具栏重叠；Windows 无系统阴影，故无此现象
+        data.window->setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint
+                                    | Qt::NoDropShadowWindowHint);
         data.window->setAttribute(Qt::WA_TranslucentBackground, true);
     } else {
         // 截图/录屏场景：父窗口内嵌子控件
