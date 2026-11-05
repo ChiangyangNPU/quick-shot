@@ -574,6 +574,18 @@ void ScrollCaptureSession::createHintBar() {
     m_statusLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(m_statusLabel, 0, Qt::AlignVCenter);
 
+    // 方向切换按钮：点击在垂直/水平之间来回切换（文案在 updateHintText 中按当前方向刷新）
+    m_orientationBtn = new ScrollHintButton(QString(), container);
+    m_orientationBtn->setObjectName(QStringLiteral("ScrollHintButton"));
+    m_orientationBtn->setFixedHeight(hintRowHeight);
+    m_orientationBtn->setFocusPolicy(Qt::NoFocus);
+    connect(m_orientationBtn, &QAbstractButton::clicked, this, [this]() {
+        setOrientation(m_stitcher.orientation() == ScrollStitcher::Orientation::Vertical
+                           ? ScrollStitcher::Orientation::Horizontal
+                           : ScrollStitcher::Orientation::Vertical);
+    });
+    layout->addWidget(m_orientationBtn, 0, Qt::AlignVCenter);
+
     m_finishBtn = new ScrollHintButton(scrollText("scroll.finish", "Finish"), container);
     m_finishBtn->setObjectName(QStringLiteral("ScrollHintButton"));
     m_finishBtn->setFixedHeight(hintRowHeight);
@@ -627,6 +639,7 @@ void ScrollCaptureSession::destroyHintBar() {
     m_hintBar->deleteLater();
     m_hintBar = nullptr;
     m_statusLabel = nullptr;
+    m_orientationBtn = nullptr;
     m_finishBtn = nullptr;
     m_cancelBtn = nullptr;
 }
@@ -689,6 +702,14 @@ void ScrollCaptureSession::updateHintText() {
     if (titleLabel) {
         titleLabel->setText(vertical ? scrollText("scroll.vertical", "Vertical Scroll Capture")
                                      : scrollText("scroll.horizontal", "Horizontal Scroll Capture"));
+    }
+    // 方向按钮文案展示当前方向，点击后切换到另一方向
+    if (m_orientationBtn) {
+        m_orientationBtn->setText(vertical
+            ? scrollText("scroll.mode.vertical", "Vertical")
+            : scrollText("scroll.mode.horizontal", "Horizontal"));
+        // 自绘按钮不随 setText 自动重绘，需显式刷新
+        m_orientationBtn->update();
     }
     if (m_statusLabel) {
         if (m_showResyncNotice) {

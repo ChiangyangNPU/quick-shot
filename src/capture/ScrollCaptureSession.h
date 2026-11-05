@@ -197,6 +197,7 @@ private:
     QPointer<QWidget> m_hintBar;         ///< 提示条窗口
     QPointer<QWidget> m_frameOverlay;    ///< 选区参考框窗口（悬浮在选区位）
     QLabel *m_statusLabel = nullptr;     ///< 提示条状态文字
+    QAbstractButton *m_orientationBtn = nullptr; ///< 滚动方向切换按钮（垂直/水平）
     QAbstractButton *m_finishBtn = nullptr;  ///< 完成按钮
     QAbstractButton *m_cancelBtn = nullptr;  ///< 取消按钮
     QRect m_captureRect;                 ///< 选区（全局坐标，已内缩避开边框）

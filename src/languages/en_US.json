@@ -454,6 +454,8 @@
   "scroll.button": "Scroll Capture",
   "scroll.vertical": "Vertical Scroll Capture",
   "scroll.horizontal": "Horizontal Scroll Capture",
+  "scroll.mode.vertical": "Vertical",
+  "scroll.mode.horizontal": "Horizontal",
   "scroll.status": "Captured %1 px",
   "scroll.finish": "Finish",
   "scroll.cancel": "Cancel",

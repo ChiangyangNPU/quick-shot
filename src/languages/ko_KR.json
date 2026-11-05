@@ -454,6 +454,8 @@
   "scroll.button": "긴 스크린샷",
   "scroll.vertical": "세로 스크롤 캡처",
   "scroll.horizontal": "가로 스크롤 캡처",
+  "scroll.mode.vertical": "세로",
+  "scroll.mode.horizontal": "가로",
   "scroll.status": "%1 px 연결됨",
   "scroll.finish": "완료",
   "scroll.cancel": "취소",

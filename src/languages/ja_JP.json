@@ -454,6 +454,8 @@
   "scroll.button": "長いスクリーンショット",
   "scroll.vertical": "縦スクロール撮影",
   "scroll.horizontal": "横スクロール撮影",
+  "scroll.mode.vertical": "縦",
+  "scroll.mode.horizontal": "横",
   "scroll.status": "%1 px 連結済み",
   "scroll.finish": "完了",
   "scroll.cancel": "キャンセル",

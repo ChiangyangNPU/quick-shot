@@ -454,6 +454,8 @@
   "scroll.button": "长截图",
   "scroll.vertical": "垂直滚动截图",
   "scroll.horizontal": "水平滚动截图",
+  "scroll.mode.vertical": "垂直",
+  "scroll.mode.horizontal": "水平",
   "scroll.status": "已拼接 %1 px",
   "scroll.finish": "完成",
   "scroll.cancel": "取消",
