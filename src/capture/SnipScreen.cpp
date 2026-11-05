@@ -744,8 +744,12 @@ void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToS
     pinWindow->setGeometry(targetRect);
 
     // 延迟显示，确保事件循环稳定后再展示
-    QTimer::singleShot(0, pinWindow, [pinWindow]() {
+    // macOS：贴图窗口使用非激活 NSPanel，show() 过程中 AppKit 可能把尚未显示
+    // 的窗口 frame 重置为 Qt 默认尺寸（640x480），导致图片被拉伸变形；
+    // 显示后再应用一次几何，保证窗口尺寸与图片逻辑尺寸一致
+    QTimer::singleShot(0, pinWindow, [pinWindow, targetRect]() {
         pinWindow->show();
+        pinWindow->setGeometry(targetRect);
         pinWindow->raise();
     });
 }
@@ -846,10 +850,12 @@ void SnipScreen::pinClipboard() {
     }
     QRect targetRect(pos, displaySize);
     pinWindow->setGeometry(targetRect);
-    QTimer::singleShot(0, pinWindow, [pinWindow]() {
+    QTimer::singleShot(0, pinWindow, [pinWindow, targetRect]() {
         // 全局热键触发时应用多处于未激活状态：不能用 raise()（macOS 上会激活
         // 整个应用，把被盖住的设置窗口等整体抬到前台），只把贴图提到可见位置
         Utils::showFrontNoActivate(pinWindow);
+        // macOS 下 show 阶段可能把窗口尺寸重置为默认值，显示后重新应用几何
+        pinWindow->setGeometry(targetRect);
     });
 
     // 更新跟踪状态
