@@ -1653,8 +1653,8 @@ void SnipScreen::calculateToolbarPositions(QWidget *toolbar, QWidget *subToolbar
                 scrMove(subToolbar, scrX(toolbar), currentBottom);
                 currentBottom += subToolbarHeight;
             } else {
-                // 下方空间不足，子工具栏放在一级工具栏上方
-                int subY = toolbarY - subToolbarHeight - 2;
+                // 下方空间不足，子工具栏放在一级工具栏上方（紧贴，无缝隙）
+                int subY = toolbarY - subToolbarHeight;
                 scrMove(subToolbar, scrX(toolbar), subY);
             }
         }
@@ -1664,30 +1664,30 @@ void SnipScreen::calculateToolbarPositions(QWidget *toolbar, QWidget *subToolbar
             if (subToolbar && subToolbar->isVisible()) {
                 bool subAboveMain = (scrY(subToolbar) < toolbarY);
                 if (subAboveMain) {
-                    // 子工具栏在上方，控制栏放在子工具栏上方
-                    int controlY = scrY(subToolbar) - controlHeight - 2;
+                    // 子工具栏在上方，控制栏紧贴在子工具栏上方
+                    int controlY = scrY(subToolbar) - controlHeight;
                     scrMove(recordingControl,toolbarX, controlY);
                 } else {
-                    // 子工具栏在下方，控制栏放在子工具栏下方
+                    // 子工具栏在下方，控制栏紧贴在子工具栏下方
                     int spaceBelowControl = screenGeometry.bottom() - currentBottom;
                     if (spaceBelowControl >= controlHeight + 10) {
-                        scrMove(recordingControl,toolbarX, currentBottom + 2);
+                        scrMove(recordingControl,toolbarX, currentBottom);
                     } else {
                         // 下方空间不足，控制栏放在一级工具栏上方（或子工具栏上方）
-                        int controlY = toolbarY - controlHeight - 2;
+                        int controlY = toolbarY - controlHeight;
                         if (subToolbar && subToolbar->isVisible() && scrY(subToolbar) < toolbarY) {
-                            controlY = scrY(subToolbar) - controlHeight - 2;
+                            controlY = scrY(subToolbar) - controlHeight;
                         }
                         scrMove(recordingControl,toolbarX, controlY);
                     }
                 }
             } else {
-                // 没有子工具栏，控制栏放在一级工具栏下方（空间足够）或上方（空间不足）
+                // 没有子工具栏，控制栏紧贴一级工具栏下方（空间足够）或上方（空间不足）
                 int spaceBelowControl = screenGeometry.bottom() - currentBottom;
                 if (spaceBelowControl >= controlHeight + 10) {
-                    scrMove(recordingControl,toolbarX, currentBottom + 2);
+                    scrMove(recordingControl,toolbarX, currentBottom);
                 } else {
-                    scrMove(recordingControl,toolbarX, toolbarY - controlHeight - 2);
+                    scrMove(recordingControl,toolbarX, toolbarY - controlHeight);
                 }
             }
         }
@@ -1702,12 +1702,12 @@ void SnipScreen::calculateToolbarPositions(QWidget *toolbar, QWidget *subToolbar
         // 子工具栏位置
         if (subToolbar && subToolbar->isVisible()) {
             if (spaceAboveToolbar >= subToolbarHeight + 10) {
-                // 上方空间足够，子工具栏放在一级工具栏上方
-                int subY = toolbarY - subToolbarHeight - 2;
+                // 上方空间足够，子工具栏紧贴一级工具栏上方
+                int subY = toolbarY - subToolbarHeight;
                 scrMove(subToolbar, toolbarX, subY);
             } else {
-                // 上方空间不足，子工具栏放在一级工具栏下方
-                int subY = toolbarY + toolbarHeight + 2;
+                // 上方空间不足，子工具栏紧贴一级工具栏下方
+                int subY = toolbarY + toolbarHeight;
                 scrMove(subToolbar, toolbarX, subY);
             }
         }
@@ -1717,20 +1717,20 @@ void SnipScreen::calculateToolbarPositions(QWidget *toolbar, QWidget *subToolbar
             if (subToolbar && subToolbar->isVisible()) {
                 bool subAboveMain = (scrY(subToolbar) < toolbarY);
                 if (subAboveMain) {
-                    // 子工具栏在上方，控制栏放在子工具栏上方
-                    int controlY = scrY(subToolbar) - controlHeight - 2;
+                    // 子工具栏在上方，控制栏紧贴在子工具栏上方
+                    int controlY = scrY(subToolbar) - controlHeight;
                     scrMove(recordingControl,toolbarX, controlY);
                 } else {
-                    // 子工具栏在下方，控制栏放在子工具栏下方
-                    int controlY = scrY(subToolbar) + subToolbarHeight + 2;
+                    // 子工具栏在下方，控制栏紧贴在子工具栏下方
+                    int controlY = scrY(subToolbar) + subToolbarHeight;
                     scrMove(recordingControl,toolbarX, controlY);
                 }
             } else {
-                // 没有子工具栏，控制栏放在一级工具栏上方（空间足够）或下方（空间不足）
+                // 没有子工具栏，控制栏紧贴一级工具栏上方（空间足够）或下方（空间不足）
                 if (spaceAboveToolbar >= controlHeight + 10) {
-                    scrMove(recordingControl,toolbarX, toolbarY - controlHeight - 2);
+                    scrMove(recordingControl,toolbarX, toolbarY - controlHeight);
                 } else {
-                    scrMove(recordingControl,toolbarX, toolbarY + toolbarHeight + 2);
+                    scrMove(recordingControl,toolbarX, toolbarY + toolbarHeight);
                 }
             }
         }
