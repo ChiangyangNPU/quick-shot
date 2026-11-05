@@ -68,16 +68,15 @@ void ScreenshotToolBar::setupUi() {
  */
 void ScreenshotToolBar::createActionButtons() {
     LOG_INFO("ScreenshotToolBar: Creating action buttons");
-    auto *tm = TranslationManager::instance();
 
-    // 撤销按钮
-    m_undoBtn = new QPushButton(tm->get("undo"), this);
-    StyleManager::applyActionButtonStyle(m_undoBtn);
-    m_undoBtn->setEnabled(false);
-    connect(m_undoBtn, &QPushButton::clicked, [this]() {
+    // 撤销按钮：与其他操作按钮一样走基类注册表，
+    // 否则文字/图标模式切换时它不换图标（图标模式下仍是文字），
+    // 且重翻译不会更新它的文案与提示
+    m_undoBtn = makeActionButton({&m_undoBtn, "undo", ":/icons/undo.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Undo requested");
         emit undoRequested();
     });
+    m_undoBtn->setEnabled(false);
     m_primaryLayout->addWidget(m_undoBtn);
 
     // 通用操作按钮：创建/样式/翻译走基类注册表（spec 表），信号在此显式发射

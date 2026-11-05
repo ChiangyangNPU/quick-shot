@@ -750,27 +750,38 @@ QString StyleManager::getSubToolbarStyle() {
 }
 
 QString StyleManager::getToolButtonStyle() {
+        // 禁用态：文字降低不透明度 + 禁用底色，让不可点击的按钮（撤销/重做等）
+        // 在浅色/深色主题下都能与可用态明显区分
+        QColor disabledText = color(StyleColorId::ToolbarText);
+        disabledText.setAlpha(110);
         return QString(
                     "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }"
                     "QPushButton:hover { background-color: %3; transform: scale(1.05); }"
+                    "QPushButton:disabled { color: %5; background-color: %6; }"
                     "QPushButton::icon { color: %4; }"
                 ).arg(qssColor(color(StyleColorId::ToolbarText)))
                 .arg(qssColor(color(StyleColorId::ToolbarBtn)))
                 .arg(qssColor(color(StyleColorId::ToolbarButtonHover)))
-                .arg(qssColor(color(StyleColorId::ToolbarBtn)));
+                .arg(qssColor(color(StyleColorId::ToolbarBtn)))
+                .arg(qssColor(disabledText))
+                .arg(qssColor(color(StyleColorId::ToolbarButtonDisabled)));
 }
 
 QString StyleManager::getActionButtonStyle() {
+        // 禁用态文字同样降低不透明度，与 getToolButtonStyle 保持一致
+        QColor disabledText = color(StyleColorId::ToolbarText);
+        disabledText.setAlpha(110);
         return QString(
             "QPushButton { color: %1; background-color: %2; padding: 0.24em; border: none; border-radius: 0.24em; transition: all 0.2s ease; }"
             "QPushButton:checked { background-color: %3; }"
             "QPushButton:hover { background-color: %4; transform: scale(1.05); }"
-            "QPushButton:disabled { color: %1; background-color: %5; }"
+            "QPushButton:disabled { color: %5; background-color: %6; }"
             "QPushButton::icon { color: %1; }"
         ).arg(qssColor(color(StyleColorId::ToolbarText)))
          .arg(qssColor(color(StyleColorId::ToolbarBtn)))
          .arg(qssColor(color(StyleColorId::ToolbarButtonChecked)))
          .arg(qssColor(color(StyleColorId::ToolbarButtonHover)))
+         .arg(qssColor(disabledText))
          .arg(qssColor(color(StyleColorId::ToolbarButtonDisabled)));
 }
 
