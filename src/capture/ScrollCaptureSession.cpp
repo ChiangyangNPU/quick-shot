@@ -7,13 +7,13 @@
 #include "../utils/Utils.h"
 
 #include <QAbstractButton>
-#include <QFontMetrics>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QPainter>
 #include <QPen>
+#include <QPushButton>
 #include <QScreen>
 #include <QTimer>
 #include <QWidget>
@@ -47,6 +47,20 @@ constexpr int kNoMatchResetThreshold = 8;
 constexpr int kResyncNoticeMs = 2500;
 ///< 选区参考框向外扩展的像素：让边框整体落在抓帧区域之外，避免被拍进长图
 constexpr int kFrameOverlayOutset = 2;
+
+/**
+ * @brief 生成 QSS 颜色文本（带透明度时用 rgba()，否则用 #RRGGBB）
+ * @param c 颜色
+ * @return QSS 颜色文本
+ * @author chiangyang
+ */
+QString hintQssColor(const QColor &c) {
+    if (c.alpha() < 255) {
+        return QStringLiteral("rgba(%1,%2,%3,%4)")
+            .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha());
+    }
+    return c.name();
+}
 
 #ifdef Q_OS_MACOS
 /**
@@ -104,53 +118,6 @@ protected:
                             StyleManager::SNIP_BORDER_WIDTH));
         // 内缩 1px 绘制：2px 宽的边框整体落在窗口外缘，即选区外侧
         painter.drawRect(rect().adjusted(1, 1, -1, -1));
-    }
-};
-
-/**
- * @brief 提示条按钮
- *
- * 提示条窗口虽然不做全局样式作用域隔离，但 QPushButton 仍会命中 app.qss 中的
- * `QPushButton { height: 1.0em; }`：样式表的盒模型与 setFixedHeight 冲突，
- * 会让按钮在布局中整体偏下，上下留白不对称。改用自绘按钮绕开 QSS 尺寸规则，
- * 保证边框与文字严格垂直居中。
- * @author chiangyang
- */
-class ScrollHintButton : public QAbstractButton {
-public:
-    explicit ScrollHintButton(const QString &text, QWidget *parent = nullptr)
-        : QAbstractButton(parent) {
-        setText(text);
-        setFocusPolicy(Qt::NoFocus);
-        setCursor(Qt::PointingHandCursor);
-        setAttribute(Qt::WA_Hover, true);
-    }
-
-    QSize sizeHint() const override {
-        QFont boldFont = font();
-        boldFont.setBold(true);
-        const QFontMetrics fm(boldFont);
-        // 左右各 14px 内边距 + 1px 描边，与原 QSS 按钮尺寸一致
-        return QSize(fm.horizontalAdvance(text()) + 30, qMax(26, minimumHeight()));
-    }
-
-protected:
-    /**
-     * @brief 绘制圆角半透明按钮，悬停时提亮
-     * @author chiangyang
-     */
-    void paintEvent(QPaintEvent *) override {
-        QPainter painter(this);
-        painter.setRenderHint(QPainter::Antialiasing, true);
-        const bool hovered = underMouse();
-        painter.setPen(QPen(QColor(255, 255, 255, hovered ? 170 : 125), 1));
-        painter.setBrush(QColor(255, 255, 255, hovered ? 78 : 48));
-        painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), 5, 5);
-        QFont boldFont = font();
-        boldFont.setBold(true);
-        painter.setFont(boldFont);
-        painter.setPen(Qt::white);
-        painter.drawText(rect(), Qt::AlignCenter, text());
     }
 };
 
@@ -545,24 +512,14 @@ void ScrollCaptureSession::createHintBar() {
     container->setAttribute(Qt::WA_StyledBackground, true);
     outerLayout->addWidget(container);
 
+    // 内边距与间距对齐工具栏（BaseToolBar::initShell 为 8,4,8,4 + spacing 4），
+    // 保证提示条高度与工具栏一致
     auto *layout = new QHBoxLayout(container);
-    layout->setContentsMargins(14, 8, 10, 8);
-    layout->setSpacing(12);
-
-    /**
-     * @brief 行高跟随字体/DPI 缩放
-     *
-     * 全局样式表字体为 10.5pt；固定 26px 在 150%~200% 缩放下会贴边甚至
-     * 裁字。这里显式设置同一字号并按字体度量留出上下留白。
-     */
-    QFont hintFont = m_hintBar->font();
-    hintFont.setPointSizeF(10.5);
-    m_hintBar->setFont(hintFont);
-    const int hintRowHeight = qMax(26, QFontMetrics(hintFont).height() + 10);
+    layout->setContentsMargins(8, 4, 8, 4);
+    layout->setSpacing(6);
 
     auto *titleLabel = new QLabel(container);
     titleLabel->setObjectName(QStringLiteral("ScrollHintTitle"));
-    titleLabel->setFixedHeight(hintRowHeight);
     titleLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(titleLabel, 0, Qt::AlignVCenter);
 
@@ -570,15 +527,29 @@ void ScrollCaptureSession::createHintBar() {
     m_statusLabel->setObjectName(QStringLiteral("ScrollHintStatus"));
     // 固定最小宽度：拼接长度变化时不引起提示条宽度抖动
     m_statusLabel->setMinimumWidth(190);
-    m_statusLabel->setFixedHeight(hintRowHeight);
     m_statusLabel->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     layout->addWidget(m_statusLabel, 0, Qt::AlignVCenter);
 
+    /**
+     * @brief 创建提示条按钮（与工具栏按钮完全同款）
+     *
+     * 直接使用 QPushButton + StyleManager::applyActionButtonStyle，与
+     * ScreenshotToolBar 的操作按钮走同一套 QSS（内边距 0.24em、圆角 0.24em、
+     * ToolbarBtn/ToolbarButtonHover/ToolbarText 配色），按钮高度与观感和
+     * 工具栏一致，主题切换同步生效。不设固定高度，由按钮自身的 QSS 决定。
+     * @author chiangyang
+     */
+    auto makeHintButton = [container](const QString &text) {
+        auto *btn = new QPushButton(text, container);
+        btn->setObjectName(QStringLiteral("ScrollHintButton"));
+        // 按钮不抢焦点：Enter/Esc 始终由提示条窗口的 eventFilter 统一处理
+        btn->setFocusPolicy(Qt::NoFocus);
+        StyleManager::applyActionButtonStyle(btn);
+        return btn;
+    };
+
     // 方向切换按钮：点击在垂直/水平之间来回切换（文案在 updateHintText 中按当前方向刷新）
-    m_orientationBtn = new ScrollHintButton(QString(), container);
-    m_orientationBtn->setObjectName(QStringLiteral("ScrollHintButton"));
-    m_orientationBtn->setFixedHeight(hintRowHeight);
-    m_orientationBtn->setFocusPolicy(Qt::NoFocus);
+    m_orientationBtn = makeHintButton(QString());
     connect(m_orientationBtn, &QAbstractButton::clicked, this, [this]() {
         setOrientation(m_stitcher.orientation() == ScrollStitcher::Orientation::Vertical
                            ? ScrollStitcher::Orientation::Horizontal
@@ -586,38 +557,31 @@ void ScrollCaptureSession::createHintBar() {
     });
     layout->addWidget(m_orientationBtn, 0, Qt::AlignVCenter);
 
-    m_finishBtn = new ScrollHintButton(scrollText("scroll.finish", "Finish"), container);
-    m_finishBtn->setObjectName(QStringLiteral("ScrollHintButton"));
-    m_finishBtn->setFixedHeight(hintRowHeight);
-    // 按钮不抢焦点：Enter/Esc 始终由提示条窗口的 eventFilter 统一处理
-    m_finishBtn->setFocusPolicy(Qt::NoFocus);
+    m_finishBtn = makeHintButton(scrollText("scroll.finish", "Finish"));
     connect(m_finishBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::finish);
     layout->addWidget(m_finishBtn, 0, Qt::AlignVCenter);
 
-    m_cancelBtn = new ScrollHintButton(scrollText("scroll.cancel", "Cancel"), container);
-    m_cancelBtn->setObjectName(QStringLiteral("ScrollHintButton"));
-    m_cancelBtn->setFixedHeight(hintRowHeight);
-    m_cancelBtn->setFocusPolicy(Qt::NoFocus);
+    m_cancelBtn = makeHintButton(scrollText("scroll.cancel", "Cancel"));
     connect(m_cancelBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::cancel);
     layout->addWidget(m_cancelBtn, 0, Qt::AlignVCenter);
 
     /**
-     * @brief 提示条样式：接近实色的深色 HUD
+     * @brief 提示条样式：与工具栏统一
      *
-     * 容器底板 248/255 不透明，加 1px 亮边与页面内容分离；状态文字由
-     * 灰色提升为高亮半粗体，按钮填充/描边同步增强，避免在浅色或复杂
-     * 页面上看起来像半透明、看不清。
-     * 按钮外观由 ScrollHintButton 自绘，避免继承 app.qss 的按钮高度规则。
+     * 底板复用工具栏背景色（ToolbarBg + 0.3em 圆角），标题/状态文字用工具栏
+     * 文字色；按钮由 makeHintButton 应用工具栏按钮样式，三者随深浅主题同步。
      */
-    container->setStyleSheet(QStringLiteral(
-        "QWidget#ScrollHintContainer {"
-        "  background-color: rgba(22, 22, 26, 248);"
-        "  border: 1px solid rgba(255, 255, 255, 55);"
-        "  border-radius: 8px; }"
-        "QLabel#ScrollHintTitle {"
-        "  color: #ffffff; font-weight: bold; padding: 0; margin: 0; }"
-        "QLabel#ScrollHintStatus {"
-        "  color: #f2f2f2; font-weight: bold; padding: 0; margin: 0; }"));
+    const QString toolbarBg = hintQssColor(StyleManager::color(StyleManager::StyleColorId::ToolbarBg));
+    const QString toolbarText = hintQssColor(StyleManager::color(StyleManager::StyleColorId::ToolbarText));
+    container->setStyleSheet(
+        QStringLiteral(
+            "QWidget#ScrollHintContainer {"
+            "  background-color: %1; border-radius: 0.3em; }"
+            "QLabel#ScrollHintTitle {"
+            "  color: %2; font-weight: bold; padding: 0; margin: 0; }"
+            "QLabel#ScrollHintStatus {"
+            "  color: %2; padding: 0; margin: 0; }")
+            .arg(toolbarBg, toolbarText));
 
     updateHintText();
     m_hintBar->adjustSize();
@@ -708,8 +672,6 @@ void ScrollCaptureSession::updateHintText() {
         m_orientationBtn->setText(vertical
             ? scrollText("scroll.mode.vertical", "Vertical")
             : scrollText("scroll.mode.horizontal", "Horizontal"));
-        // 自绘按钮不随 setText 自动重绘，需显式刷新
-        m_orientationBtn->update();
     }
     if (m_statusLabel) {
         if (m_showResyncNotice) {
