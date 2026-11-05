@@ -576,9 +576,12 @@ void SettingsWindow::applyTabHeight(bool animated) {
             tabHeight = contentHeight + tabScrollArea->frameWidth() * 2;
         }
     }
-    // tab 栏高度补偿：固定像素值，用于 tab 栏自身高度之外的多余空间
-    // （tab 栏 padding 已由全局 qss 用 em 单位随字体/DPI 缩放）
-    int tabBarExtra = 50;
+    // tab 栏高度补偿：直接取 QTabBar 的 sizeHint 高度，不再用固定像素值。
+    // 固定值（曾为 50）与实际 tab 栏高度（10.5pt 字体下约 31px）不匹配，
+    // 多出的十几像素会被页面末尾的 addStretch 吃掉，表现为常规/关于页
+    // 底部留白明显大于顶部 10px 边距；sizeHint 随 qss 的 em padding 与
+    // DPI 自动缩放，各档缩放下都能精确贴合。
+    int tabBarExtra = tabWidget->tabBar()->sizeHint().height();
     int targetHeight = tabHeight + tabBarExtra;
 
     // 窗口高度封顶：基准 640px（96 DPI），随逻辑 DPI 按比例放大并限制在
