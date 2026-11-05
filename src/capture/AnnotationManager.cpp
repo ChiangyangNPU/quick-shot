@@ -196,6 +196,28 @@ void AnnotationManager::clear() {
         m_clearRedoSnapshot.valid = false;
 }
 
+void AnnotationManager::reset() {
+        ++m_contentVersion;
+        ++m_mosaicVersion;
+        m_undoStack.clear();
+        m_redoStack.clear();
+        m_annotationSeqs.clear();
+        m_redoAnnotationSeqs.clear();
+        m_eraserGroups.clear();
+        m_mosaicGroups.clear();
+        m_redoEraserGroups.clear();
+        m_redoMosaicGroups.clear();
+        m_activeEraserStroke.clear();
+        m_activeMosaicStroke.clear();
+        m_undoMoveState = MoveRecord{};
+        m_redoMoveState = MoveRecord{};
+        m_moveIsLatestOp = false;
+        // 会话边界丢弃清除快照，避免上一会话的标注在新会话中仍可被撤销恢复
+        m_clearUndoSnapshot = ClearSnapshot{};
+        m_clearRedoSnapshot = ClearSnapshot{};
+        m_nextOpSeq = 0;
+}
+
 void AnnotationManager::scaleAll(double sx, double sy) {
         if (sx == 1.0 && sy == 1.0) return;
         ++m_contentVersion;

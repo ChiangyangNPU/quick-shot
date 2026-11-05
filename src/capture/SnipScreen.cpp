@@ -210,9 +210,11 @@ void SnipScreen::connectSelectorSignals()
     // 选区开始时隐藏工具栏，重置标注状态
     connect(m_selector, &Selector::selecting, [this]() {
         hideToolBar();
-        m_annotationHandler->manager().clear();
+        m_annotationHandler->manager().reset();
         m_annotationHandler->exitAnnotation();
         m_recordingSession->uncheckAllAnnotationBtns();
+        // 新一轮选区开始：撤销/重做回到不可用状态
+        updateToolBarState(false, false);
     });
 
     // 选区完成时显示工具栏
@@ -458,14 +460,15 @@ void SnipScreen::startCapture(bool recording) {
     // 设置模式
     m_recordingSession->setMode(recording);
 
-    // 清理标注状态
-    m_annotationHandler->manager().clear();
+    // 清理标注状态（reset 会丢弃上一会话留下的撤销历史与清除快照）
+    m_annotationHandler->manager().reset();
     m_annotationHandler->exitAnnotation();
     m_annotationHandler->setShapeType(1);
     m_annotationToolSelected = false;
     m_selector->setAnnotationMode(false);
     m_toolbar->uncheckAllAnnotationBtns();
     m_recordingSession->uncheckAllAnnotationBtns();
+    updateToolBarState(false, false);
 
 #ifdef Q_OS_MACOS
     // macOS Sidecar/AirPlay 副屏不支持跨多屏的透明窗口：
@@ -567,11 +570,13 @@ void SnipScreen::exit() {
     m_recordingSession->uncheckAllAnnotationBtns();
     hideToolBar();
 
-    // 清理标注
-    m_annotationHandler->manager().clear();
+    // 清理标注（reset 会丢弃本会话撤销历史与清除快照，避免带到下一次会话）
+    m_annotationHandler->manager().reset();
     m_annotationHandler->exitAnnotation();
     m_annotationToolSelected = false;
     m_recordingSession->setMode(false);
+    // 会话结束：工具栏撤销/重做恢复为不可用态，下次显示时不会残留旧状态
+    updateToolBarState(false, false);
     unsetCursor();
 
     // 关闭选区
