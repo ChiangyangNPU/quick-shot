@@ -172,6 +172,7 @@ classDiagram
         +void undo()
         +void redo()
         +void clear()
+        +void reset()
         +void draw(QPainter&)
         +void drawMosaic(QPainter&, QPixmap, int, QPoint)
         +void drawControlPoints(QPainter&)
@@ -327,6 +328,7 @@ classDiagram
 | 橡皮擦笔迹 | `eraserGroups` / `redoEraserGroups`（按 Stroke 分组） | `endEraserStroke()` |
 | 马赛克笔迹 | `mosaicGroups` / `redoMosaicGroups`（按 Stroke 分组） | `endMosaicStroke()` |
 | 整体清除 | `clearUndoSnapshot` / `clearRedoSnapshot`（完整快照） | `clear()` |
+| 会话边界重置 | —（直接丢弃全部历史与清除快照，不产生可撤销快照） | `reset()`（SnipScreen 跨会话复用，防止上一会话标注残留与撤销状态泄漏） |
 
 #### undo() 决策流程图
 

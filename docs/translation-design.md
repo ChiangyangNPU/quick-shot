@@ -8,7 +8,7 @@ QuickShot 的翻译功能基于截图 OCR 识别结果，将识别出的文字�
 | 形式 | 说明 | 使用场景 |
 |---|---|---|
 | OCR 结果弹窗翻译 | 在 OCR 识别结果弹窗底部点击「翻译」，弹窗内切换原文/译文/对照 | 查看 OCR 结果时顺带翻译 |
-| 译文叠加显示 | 在截图工具栏 / 录屏工具栏 / 钉图窗口右键点击「翻译」，弹出独立窗口将译文叠加到原图位置 | 对比阅读，保留版式 |
+| 翻译结果窗口（左图右文分栏） | 在截图工具栏 / 录屏工具栏 / 钉图窗口右键点击「翻译」，弹出独立窗口：左侧显示原图、右侧显示可选中可滚动的译文 | 对比阅读，译文可自由选择复制 |
 
 ### 1.1 技术栈
 
@@ -28,9 +28,8 @@ QuickShot 的翻译功能基于截图 OCR 识别结果，将识别出的文字�
 - **默认开箱即用**：MyMemory 引擎免注册，首次使用弹出隐私提示
 - **多引擎可切换**：设置页提供百度/DeepL/LibreTranslate 自填 Key 入口
 - **弹窗内三态对照**：OcrResultDialog 内切换原文/译文/对照
-- **译文位置叠加**：译文按 OCR polygons 位置叠加回原图
-- **独立叠加窗口**：TranslateOverlayWindow 支持三态切换、滚轮缩放、拖动、另存、复制原文/译文
-- **文字选择模式**：叠加窗口内勾选「选择文字」，可自由跨段拖选复制
+- **左图右文分栏结果窗口**：TranslateOverlayWindow 左侧等比显示原图、右侧文本区可自由选中并滚动，视图模式仅切换右侧内容
+- **窗口操作齐全**：标题栏拖动/双击关闭、右下角缩放抓手、ESC 关闭、复制全文/另存为图片、右键菜单复制原文/译文
 - **错误码本地化**：9 种错误分类 → 查翻译键显示，「详细信息」保留原始报错
 - **公共方法复用**：TranslateService 统一前置检查 + 错误消息；TranslateOverlayWindow::translateAndShow 封装批量翻译全流程
 
@@ -71,9 +70,9 @@ flowchart LR
 
     subgraph 结果展示层
         J["OcrResultDialog 三态视图"]
-        K["TranslateOverlayWindow"]
-        K1["QPainter 绘制译文"]
-        K2["文字选择 QTextEdit"]
+        K["TranslateOverlayWindow 左图右文分栏"]
+        K1["左栏 TranslateImageView 原图"]
+        K2["右栏只读 QTextEdit 译文"]
     end
 
     subgraph 配置层
@@ -95,7 +94,7 @@ flowchart LR
     E -->|finished| J
     E -->|batchFinished| K
     K --> K1
-    K -->|"选择文字模式"| K2
+    K -->|"视图模式切换右栏内容"| K2
     L --> E
     M --> L
 ```
@@ -105,7 +104,7 @@ flowchart LR
 - **入口层**：覆盖所有触发点
 - **翻译服务层**：`TranslateService` 单例，统一管理引擎实例、配置加载、批量翻译状态机、公共静态方法
 - **引擎实现层**：抽象 `TranslateEngine` 接口 + 4 种具体实现
-- **结果展示层**：`OcrResultDialog`（三态视图）与 `TranslateOverlayWindow`（译文叠加 + 文字选择）
+- **结果展示层**：`OcrResultDialog`（三态视图）与 `TranslateOverlayWindow`（左图右文分栏结果窗口）
 - **配置层**：`ConfigManager` 管理配置；`SettingsWindow` 提供 UI
 
 ---
@@ -214,20 +213,19 @@ classDiagram
     class TranslateOverlayWindow {
         -m_pixmap QPixmap
         -m_texts QStringList
-        -m_polygons QVector<QPolygonF>
         -m_translatedTexts QStringList
         -m_viewMode ViewMode
-        -m_textSelectionMode bool
-        -m_selectEditor QTextEdit*
+        -m_imageView TranslateImageView*
+        -m_textView QTextEdit*
         +setViewMode(mode) void
-        +setTextSelectionMode(enabled) void
-        +translateAndShow(parent, pixmap, texts, polygons, overlayPos, labelRect, onOverlayShown) void$
+        +viewMode() ViewMode
+        +translateAndShow(parent, pixmap, texts, overlayPos, labelRect, onOverlayShown) void$
         +eventFilter(watched, event) bool
         +copyOriginal() void
         +copyTranslation() void
         +saveAsImage() void
-        +drawOverlay(painter) void
-        +drawTranslatedText(painter, text, rect) void
+        +showContextMenu(globalPos) void
+        +updateTextContent() void
     }
 
     class OcrResultDialog {
@@ -440,7 +438,7 @@ stateDiagram-v2
 
 ---
 
-## 7. 形式二：译文叠加显示
+## 7. 形式二：翻译结果窗口（左图右文分栏）
 
 ### 7.1 四处入口
 
@@ -490,12 +488,12 @@ flowchart TD
     Fail --> End3(["结束"])
 
     subgraph 用户操作
-        U1(["切换视图"])
-        U2(["勾选选择文字 鼠标拖选 Ctrl+C"])
+        U1(["切换视图 仅影响右栏文本"])
+        U2(["右侧文本区自由选中复制"])
         U3(["右键菜单 复制原文或译文"])
-        U4(["右键 另存为图片"])
-        U5(["拖动 滚轮缩放"])
-        U6(["ESC 先退出选择模式 再按关闭窗口"])
+        U4(["底部操作栏 复制全文 另存为图片"])
+        U5(["标题栏拖动 右下角缩放抓手"])
+        U6(["ESC 关闭 标题栏双击关闭"])
     end
     UserOper --> U1
     UserOper --> U2
@@ -535,7 +533,7 @@ sequenceDiagram
     alt texts 为空
         S->>S: 显示「未识别到文字」3秒临时标签
     else texts 非空
-        S->>OW: translateAndShow(this, pixmap, texts, polygons, selPos, labelRect, onOverlayShown=exit)
+        S->>OW: translateAndShow(this, pixmap, texts, selPos, labelRect, onOverlayShown=exit)
         Note over OW: 创建翻译中标签 连接 batchFinished 和 failed（一次性）
         OW->>TS: translateBatch(texts)
 
@@ -549,7 +547,7 @@ sequenceDiagram
             TS-->>OW: batchFinished(译文列表)
             OW->>OW: 关闭翻译中标签
             OW->>OW: new TranslateOverlayWindow 定位到 selPos
-            OW-->>U: 显示叠加窗口
+            OW-->>U: 显示结果窗口
             OW->>S: onOverlayShown 回调
             S->>S: exit 退出截图框和工具栏
         else 引擎未配置等全局失败
@@ -559,18 +557,15 @@ sequenceDiagram
         end
     end
 
-    Note over U,OW: === 叠加窗口后续交互 ===
-    U->>OW: 右键菜单 → 勾选文字选择模式
-    OW->>OW: setTextSelectionMode(true) 创建全屏 QTextEdit 包含全部译文
-    U->>OW: 鼠标跨段拖选 + Ctrl+C
+    Note over U,OW: === 结果窗口后续交互 ===
+    U->>OW: 右键菜单 → 视图 仅原文/仅译文/对照
+    OW->>OW: setViewMode 仅刷新右栏文本内容
+    U->>OW: 右栏文本区鼠标/键盘选中 + Ctrl+C
     OW-->>U: 复制到剪贴板
-    U->>OW: 选字模式内右键
-    OW->>OW: eventFilter 拦截 Copy 全选 本地化 + 追加文字选择模式 + 取消
-    U->>OW: 取消勾选文字选择模式
-    OW->>OW: setTextSelectionMode(false) 回到 Overlay 绘制
+    U->>OW: 底部「复制全文」/「另存为图片」
+    OW->>OW: copyTranslation 复制译文全文 / saveAsImage 保存原图
+    U->>OW: 标题栏拖动移动 / 双击关闭 / 右下角缩放抓手
     U->>OW: ESC
-    OW->>OW: 先退出选择模式
-    U->>OW: 再按 ESC
     OW-->>U: 关闭窗口
 ```
 
@@ -601,42 +596,32 @@ QString m_batchTargetLang;      // 批量目标语言（进入批量时快照，
 
 另有 `currentEngineChanged(name)` 信号：`setCurrentEngine()` 切换并重建当前引擎后发出（TranslateService.cpp:233）。
 
-### 7.5 TranslateOverlayWindow 渲染与文字选择
+### 7.5 TranslateOverlayWindow 分栏布局与视图切换
 
 ```mermaid
 flowchart TB
-    subgraph 渲染模式判定
-        R["paintEvent 入口"] --> C1{"viewMode 等于 Original?"}
-        C1 -->|"是"| R1["仅画原图"]
-        C1 -->|"否"| C2{"textSelectionMode?"}
-        C2 -->|"是"| R1
-        C2 -->|"否"| R2["画原图 加 drawOverlay 每个多边形画半透明背景 加自动换行缩放字号的译文"]
-    end
-
-    subgraph 文字选择模式
-        S0["setTextSelectionMode true"] --> S1["new QTextEdit 覆盖全屏 ReadOnly 加 TextSelectableByMouse"]
-        S1 --> S1b["viewport installEventFilter 拦截右键"]
-        S1b --> S2["setPlainText translatedTexts 按段拼接"]
-        S2 --> S3["半透明白背景 加 深色文字"]
-        S3 --> S4["用户交互"]
-        S4 --> S5{"ESC?"}
-        S5 -->|"是"| S6["setTextSelectionMode false deleteLater QTextEdit"]
-        S4 --> S7{"右键?"}
-        S7 -->|"是"| S9["eventFilter 拦截 viewport ContextMenu"]
-        S9 --> S10["createStandardContextMenu 保留 Copy 全选 本地化替换"]
-        S10 --> S11["追加 文字选择模式勾选 加 取消 两项"]
-        S11 --> S12{"用户选择"}
-        S12 -->|"取消勾选文字选择模式"| S6
-        S12 -->|"取消"| S13["setTextSelectionMode false 加 close Overlay"]
-        S12 -->|"Copy 或 全选"| S8["QTextEdit 原生处理 到 剪贴板"]
-        S4 --> S14{"Ctrl+C"}
-        S14 -->|"是"| S8
+    subgraph 窗口结构
+        W["TranslateOverlayWindow"] --> TB["标题栏 标题 加 关闭按钮<br/>TranslateTitleBar 拖动移动 双击关闭"]
+        W --> SP["QSplitter 水平 分栏线可拖动"]
+        SP --> IV["左栏 TranslateImageView<br/>原图等比缩放 最小宽 120"]
+        SP --> TP["右栏 textPanel 最小宽 240"]
+        TP --> TV["只读 QTextEdit TextSelectableByMouse 加 Keyboard"]
+        TP --> AB["底部操作栏 复制全文 加 另存为图片 加 QSizeGrip"]
     end
 
     subgraph 视图切换
-        V1["setViewMode"] --> V2{"textSelectionMode?"}
-        V2 -->|"是"| V3["重新创建 QTextEdit 更新 geometry"]
-        V2 -->|"否"| V4["update 触发 drawOverlay 重绘"]
+        V1["setViewMode"] --> V2["updateTextContent 按模式刷新右栏"]
+        V2 -->|"Original"| V3["右栏显示 OCR 原文"]
+        V2 -->|"Translation 默认"| V4["右栏显示译文"]
+        V2 -->|"Both"| V5["右栏按段显示原文 加 译文对照"]
+    end
+
+    subgraph 右键菜单
+        R0["eventFilter 拦截原图控件与文本 viewport 的 ContextMenu"] --> R1["showContextMenu 统一弹出"]
+        R1 --> R2["视图 仅原文/仅译文/对照"]
+        R1 --> R3["复制原文 / 复制译文"]
+        R1 --> R4["另存为图片"]
+        R1 --> R5["关闭"]
     end
 ```
 
@@ -706,7 +691,7 @@ flowchart LR
 |---|---|---|
 | `TranslateService::checkEnabledAndPrivacyAsync(parent, centerRect, onDecided) → void` | TranslateService 静态 | OcrResultDialog、SnipScreen、PinWindow 3 处各自实现的启用检查 + 隐私提示弹窗（异步回调式：非模态弹窗 + finished 回调 onDecided，未启用/无需提示时同步回调） |
 | `TranslateService::errorMessage(code) → QString` | TranslateService 静态 | 3 处入口各自实现的 TranslateError → 本地化 switch-case（各 8 个 case） |
-| `TranslateOverlayWindow::translateAndShow(parent, pixmap, texts, polygons, overlayPos, labelRect, onOverlayShown) → void` | TranslateOverlayWindow 静态 | SnipScreen、PinWindow 两处翻译流程中的：标签创建与居中、batchFinished + failed 一次性信号连接、Overlay 创建与定位、错误临时提示标签、翻译完成后回调（SnipScreen 退出截图框） |
+| `TranslateOverlayWindow::translateAndShow(parent, pixmap, texts, overlayPos, labelRect, onOverlayShown) → void` | TranslateOverlayWindow 静态 | SnipScreen、PinWindow 两处翻译流程中的：标签创建与居中、batchFinished + failed 一次性信号连接、结果窗口创建与定位、错误临时提示标签、翻译完成后回调（SnipScreen 退出截图框） |
 
 ---
 
@@ -722,7 +707,7 @@ flowchart LR
 | `src/translate/DeepLEngine.h/.cpp` | DeepL（用户自填 Key） |
 | `src/translate/LibreTranslateEngine.h/.cpp` | LibreTranslate（自托管 URL） |
 | `src/translate/TranslateService.h/.cpp` | 单例 + 批量状态机 + checkEnabledAndPrivacyAsync + errorMessage |
-| `src/widgets/TranslateOverlayWindow.h/.cpp` | 叠加窗口 + 文字选择 + translateAndShow + onOverlayShown 回调 |
+| `src/widgets/TranslateOverlayWindow.h/.cpp` | 翻译结果窗口（左图右文分栏）+ translateAndShow + onOverlayShown 回调 |
 | `icons/translate.svg` | 翻译按钮图标（「文/A」设计） |
 
 ### 10.2 修改文件
@@ -795,5 +780,5 @@ flowchart LR
 | MyMemory 额度耗尽 | 高频用户超额 | 设置引导填 email 提升额度；超额提示切换引擎 |
 | 在线翻译隐私泄露 | 敏感文本外泄 | 首次隐私提示 + LibreTranslate 自托管引导 |
 | 批量翻译请求多 | 慢速 + 高额度消耗 | 逐段顺序 + 失败回退原文；未来可优化短文本合并 |
-| 译文长度与原文差异大 | 叠加排版错乱 | 自动换行 + 字号缩放 + 对照模式兜底 |
+| 译文长度与原文差异大 | 右栏内容过长 | 右栏可滚动查看；对照模式逐段对应兜底 |
 | 网络 API 变更 | 引擎失效 | 抽象接口隔离，单引擎失效不影响整体 |

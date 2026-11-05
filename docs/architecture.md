@@ -33,13 +33,13 @@ QuickShot 是一款跨平台的截图与录屏工具，基于 **Qt 6.10.2** 框�
 - **实时录屏**：支持区域录制和窗口录制，带实时标注（录屏时 SnipScreen 使用 WDA_EXCLUDEFROMCAPTURE 排除捕获，避免标注重复；overlay 坐标与 captureRect 对齐消除偏移）
 - **音频录制**：系统音频 + 麦克风
 - **OCR 识别**：中英文、英文、日文、韩文识别，支持贴图窗口识别
-- **文字翻译**：OCR 结果弹窗内对照翻译、截图/录屏/贴图工具栏一键译文叠加显示，支持 4 种引擎
+- **文字翻译**：OCR 结果弹窗内对照翻译、四处入口一键打开翻译结果窗口（左图右文分栏），支持 4 种引擎
 - **贴图窗口标注模式**：PinWindow 右键进入标注模式，支持 8 种标注工具与 Shift/Alt 约束，独立工具栏
 - **贴图历史分页（Alt+P）**：首次按下以鼠标屏幕为中心显示最新截图，后续按时间倒序循环显示历史截图，位置依次偏移 (24,24)
 - **可配置全局热键**：9 个可自定义全局热键（截图/录屏/历史/贴图/全屏/活动窗口/录屏暂停/录屏停止/隐藏贴图），通过 ShortcutManager 集中管理
 - **标注快捷键统一**：SnipScreen 与 PinWindow 通过 AnnotationShortcutController + QShortcut 统一注册标注快捷键（数字键1-8切换工具、[/]调笔宽、Tab循环颜色等），文本编辑框获得焦点时自动禁用裸键避免输入冲突
 - **历史记录**：截图与剪贴板文本历史记录，支持多选、批量删除、搜索、自动清理
-- **桌面宠物**：16 种外观（经典 4 种：猫/熊猫/企鹅/青蛙 + 十二生肖 12 种：鼠牛虎兔龙蛇马羊猴鸡狗猪，兔/狗复用原兔子/柴犬造型）常驻桌宠，支持自定义图片/GIF 外观与装饰（小花/草帽/墨镜/皇冠/节日帽）；晾衣绳历史快捷面板（最近 12 条记录卡片、悬停放大预览、右键复制/标注/OCR/翻译），触发方式可配置（点击宠物/主屏顶边热区/两者）；陪伴功能：右击宠物待办清单气泡 + 头顶红点角标、番茄钟工作/休息提醒卡（墙钟锚定）、待机打盹与双击摸头、CPU/内存/电量系统状态（过载冒汗、低电量角标）、节日彩蛋与生日；截图复制/贴图/快照与文本复制/剪贴触发投喂飞入动画
+- **桌面宠物**：16 种代码造型外观（经典 4 种：猫/熊猫/企鹅/青蛙 + 十二生肖 12 种：鼠牛虎兔龙蛇马羊猴鸡狗猪，兔/狗复用原兔子/柴犬造型）+ 2 种图片型特殊样式（鲸鱼娘/鲸鱼娘 2）常驻桌宠，支持自定义图片/GIF 外观与装饰（小花/草帽/墨镜/皇冠/节日帽）；晾衣绳历史快捷面板（最近 12 条记录卡片、悬停放大预览、右键复制/标注/OCR/翻译），触发方式可配置（点击宠物/主屏顶边热区/两者）；陪伴功能：右击宠物待办清单气泡 + 头顶红点角标、番茄钟工作/休息提醒卡（墙钟锚定）、待机打盹与双击摸头、CPU/内存/电量系统状态（过载冒汗、低电量角标）、节日彩蛋与生日；截图复制/贴图/快照与文本复制/剪贴触发投喂飞入动画
 - **多语言界面**：简体中文、繁体中文（台湾）、繁体中文（香港）、英文、日文、韩文
 - **单实例互斥**：QLockFile 锁（应用数据目录，按用户隔离）；第二实例弹本地化提示后立即退出，避免热键静默失效、剪贴板历史重复记录与配置/数据库双写；崩溃残留死锁按 PID 存活自动清理，锁文件不可写时降级为无防护继续运行
 - **跨平台**：Windows、macOS、Linux
@@ -61,7 +61,7 @@ graph TB
         D[OcrResultDialog OCR结果]
         E[RecordingControlWindow 录制控制]
         F2[HistoryWindow 历史记录窗口]
-        TW[TranslateOverlayWindow 译文叠加窗口]
+        TW[TranslateOverlayWindow 翻译结果窗口]
         PET[PetWindow 宠物 / ClotheslineWindow 晾衣绳 / TodoWindow 待办气泡 / PomodoroCard 番茄钟卡]
     end
 
@@ -2270,19 +2270,25 @@ cmbTheme 切换 → SettingsStyleTab::onThemeChanged
 - `BaseToolBar::updateBackgroundStyle()` 遍历全部已构建子工具栏变体刷背景与形状下拉框，未激活变体再次弹出也呈现新主题。
 - 「恢复默认」路径（`SettingsStyleTab::onResetStyle`）同步复位主题下拉框到浅色、重填全局 qss 并广播 `themeChanged`。
 
-### 6.17 翻译 Overlay 交互优化
+### 6.17 翻译结果窗口（左图右文分栏）
 
-**6.17.1 翻译完成后退出截图框**
-- `TranslateOverlayWindow::translateAndShow` 新增可选 `onOverlayShown` 回调参数（`std::function<void()>`）
-- SnipScreen 翻译成功显示 Overlay 后调用 `exit()` 退出截图框和工具栏，与贴图完成后销毁截图框的行为一致
+**6.17.1 分栏布局**
+- `TranslateOverlayWindow` 采用「左原图、右译文」左右分栏布局（QSplitter，分栏线可拖动调整两栏宽度，均设最小宽度防挤压归零）
+- 左侧 `TranslateImageView` 等比缩放显示截图原图；右侧只读 QTextEdit 可自由选中（`TextSelectableByMouse | TextSelectableByKeyboard`）并滚动，不再需要单独的"文字选择模式"开关
+- 视图模式（Original/Translation/Both）仅影响右侧文本内容，默认译文；`updateTextContent()` 按模式填充原文 / 译文 / 原文+译文 HTML 对照
+- 初始尺寸 = 原图宽度 + 右栏宽度（320–480px 夹取），并限制在屏幕可用区域的 85% 以内
+- 背景与边框色经 `translatePalette()` 跟随应用浅色/深色主题
+
+**6.17.2 窗口操作与右键菜单**
+- 标题栏（TranslateTitleBar）支持拖动移动窗口、双击关闭，右侧关闭按钮；右下角 QSizeGrip 缩放；ESC 经 `WidgetWithChildrenShortcut` 生效（焦点在文本框内也能关闭）
+- 底部操作栏：「复制全文」（复制译文全文）与「另存为图片」按钮 + QSizeGrip
+- 右键菜单：视图切换（仅原文/仅译文/对照）、复制原文、复制译文、另存为图片、关闭；原图控件与文本编辑框 `viewport()` 会吞掉 `contextMenuEvent`，`eventFilter` 统一拦截 `QEvent::ContextMenu` 交给 `showContextMenu` 处理
+
+**6.17.3 翻译完成后退出截图框**
+- `TranslateOverlayWindow::translateAndShow` 提供可选 `onOverlayShown` 回调参数（`std::function<void()>`）
+- SnipScreen 翻译成功显示结果窗口后调用 `exit()` 退出截图框和工具栏，与贴图完成后销毁截图框的行为一致
 - PinWindow 不传回调，翻译后保持贴图窗口继续显示
-- Overlay 是无 parent 的独立窗口（`WA_DeleteOnClose`），`exit()` 关闭 SnipScreen 不影响 Overlay
-
-**6.17.2 选字模式右键菜单**
-- 进入选字模式后创建覆盖窗口的只读 QTextEdit（m_selectEditor），用户可跨段拖选文字
-- QTextEdit 继承自 QAbstractScrollArea，右键事件发送给 `viewport()` 而非控件本身，事件过滤器需安装在 `viewport()` 上
-- `eventFilter` 拦截 `QEvent::ContextMenu`，基于 `createStandardContextMenu()` 保留原生 Copy/Select All（可复制用户选中的文字），按快捷键（Ctrl+C/Ctrl+A）识别这两项并替换为本地化文本
-- 追加"文字选择模式"勾选项（取消勾选退出选字模式回到 Overlay 绘制界面）和"取消"项（退出选字模式并关闭 Overlay 窗口）
+- 结果窗口是无 parent 的独立窗口（`WA_DeleteOnClose`），`exit()` 关闭 SnipScreen 不影响结果窗口
 
 ### 6.18 自动更新机制
 
@@ -2336,7 +2342,7 @@ UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`in
 
 滚动截图由会话编排层与纯算法层分离实现：
 
-- **ScrollCaptureSession**：选区完成后隐藏 SnipScreen 与工具栏，按 150ms 间隔抓取选区；提示条显示方向、已拼接长度，并提供完成/取消/方向切换。Windows 只对选区矩形做 BitBlt（`Utils::grabScreenRegionPixmap`），避免每次抓取整块虚拟桌面；macOS 使用 `QScreen::grabWindow` 后按 DPR 裁剪。提示条使用 `WA_MacAlwaysShowToolWindow`，防止用户切到浏览器滚动后提示条随应用失活隐藏。
+- **ScrollCaptureSession**：选区完成后隐藏 SnipScreen 与工具栏，按 150ms 间隔抓取选区；提示条显示方向、已拼接长度，并提供完成/取消/方向切换按钮（点击在垂直/水平间来回切换，文案随当前方向刷新，快捷键 H/V 不变）；`setOrientation()` 切换方向即清空已拼接内容，以新方向的首帧重新开始。滚动期间用独立的透明鼠标穿透窗口绘制选区边框（画在选区外侧，不会被抓帧拍到），供用户确认截取范围。提示条样式与工具栏统一（ToolbarBg/ToolbarText + 操作按钮同一套 QSS，随深浅主题切换）。Windows 只对选区矩形做 BitBlt（`Utils::grabScreenRegionPixmap`），避免每次抓取整块虚拟桌面；macOS 使用 `QScreen::grabWindow` 后按 DPR 裁剪。提示条使用 `WA_MacAlwaysShowToolWindow`，防止用户切到浏览器滚动后提示条随应用失活隐藏。
 - **ScrollStitcher**：每帧灰度化并按行生成 64 位指纹，只有前后两帧都唯一出现的行参与位移投票，得票最多的位移再回代校验（≥60% 一致）后才追加新内容。水平方向通过转置 90° 复用垂直算法。
 - **固定页脚**：帧底部连续静止且不是页面背景留白的区域识别为页脚，追加时排除，并在确认后裁掉首帧底部对应行；纯色留白不会被误判为页脚，避免白底页面丢正文。
 - **异常恢复**：连续 8 帧（约 1.2 秒）无法定位时，以当前帧重设匹配基准并显示「已重新对齐」，避免页面跳转或快速滚动后永久卡住。
@@ -2347,7 +2353,7 @@ UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`in
 宠物模块由管理器单例 + 5 个窗口/控件 + 5 个 QObject 服务 + 主题色板与持久化存储组成，全部按屏幕 DPI 缩放（PetUiScale，系数 = 主屏 logicalDotsPerInch/96，夹取 1.0–3.0）：
 
 - **DesktopPetManager（单例）**：管理 `pet/enabled`、`pet/posX`、`pet/posY`、`pet/style`、`pet/clotheslineTrigger` 等 15 个 pet/* 配置键的持久化与启动恢复；提供截图 `feed()`（复制/贴图/快照流程显式调用）与文本 `feedText()`（监听 `HistoryManager::itemAdded` 非截图记录自动触发，即"文字复制投喂"）两种投喂入口；管理晾衣绳窗口显隐切换（触发方式由 `pet/clotheslineTrigger` 配置：宠物点击/主屏顶边热区/两者，热区经 `startHotEdgeWatch()` 以 60ms 轮询主屏上边界触发带）；同时是待办提醒、番茄钟、待机状态机、系统监控、节日定时器的装配与调度中枢。
-- **PetWindow**：无边框透明置顶窗口，纯 QPainter 绘制 16 种外观样式（经典 4 种 + 十二生肖 12 种，`PetSpec` 数据驱动共享形体骨架，样式差异在配色/耳形/尾巴/特征部件）；共用闭嘴/张嘴/咀嚼三态动画 + 待机随机眨眼 + 咀嚼后左眼闪星星；拖动结束发射 `dragFinished` 持久化位置，单击（与拖动按移动距离区分）经防抖定时器延迟发射 `clicked` 驱动晾衣绳开关（双击窗口期内来 `doubleClicked` 则取消，摸头不误触），`pressed` 信号在按下即唤醒打盹并重置待机计时；待机打盹 `setSleeping()`（呼吸挤压 + 上下浮动循环动画，PetStateMachine 驱动），双击摸头 `playJump()`；`paintSysAlert()` 绘制系统状态角标（CPU/内存过载冒汗、低电量电池图标），`Accessory` 装饰绘制（小红花/草帽/墨镜/皇冠/圣诞帽/南瓜帽/派对帽）与节日彩蛋帽；`renderStylePreview()` 供设置页生成样式预览图。
+- **PetWindow**：无边框透明置顶窗口，绘制 18 种内置样式——16 种代码造型（经典 4 种 + 十二生肖 12 种，`PetSpec` 数据驱动共享形体骨架，样式差异在配色/耳形/尾巴/特征部件；样式定义拆分于 `pets/` 下独立源文件，一文件一样式，`PetSpec` 结构位于 `pets/PetStyles.h`）+ 2 种图片型特殊样式（鲸鱼娘/鲸鱼娘 2，素材打包进 Qt 资源，宠物窗口与设置页预览复用同一等比 contain 绘制路径）；共用闭嘴/张嘴/咀嚼三态动画 + 待机随机眨眼 + 咀嚼后左眼闪星星；拖动结束发射 `dragFinished` 持久化位置，单击（与拖动按移动距离区分）经防抖定时器延迟发射 `clicked` 驱动晾衣绳开关（双击窗口期内来 `doubleClicked` 则取消，摸头不误触），`pressed` 信号在按下即唤醒打盹并重置待机计时；待机打盹 `setSleeping()`（呼吸挤压 + 上下浮动循环动画，PetStateMachine 驱动），双击摸头 `playJump()`；`paintSysAlert()` 绘制系统状态角标（CPU/内存过载冒汗、低电量电池图标），`Accessory` 装饰绘制（小红花/草帽/墨镜/皇冠/圣诞帽/南瓜帽/派对帽）与节日彩蛋帽；`renderStylePreview()` 供设置页生成样式预览图。
 - **ClotheslineWindow**：按 `pet/clotheslineTrigger` 配置的触发方式（宠物点击/主屏顶边热区/两者）弹出的历史快捷面板——铺满主屏宽度、顶部往下 1/10 高度处，显隐带整体滑动动画（下滑挂入/上滑滑出），悬链线（二次贝塞尔）绳上挂最近 12 条历史记录卡片（截图缩略图 / 文本摘要），带摆动与逐张入场动画；卡片悬停弹出 `CardPreviewPopup`，单击卡片复制到剪贴板（文本先 `markTextAsRecorded` 去重）；支持拖动与边缘/四角调整大小；关闭途径：右上角 ×、双击空白、Esc、再次按触发方式操作；经 `itemAdded`/`itemRemoved`/`cleared` 信号实时刷新。**应用内窗口点击不关闭**：全局事件过滤器只会在点击无法映射回 QWidget 的窗口（原生对话框等）时关闭——鼠标点击桌面/其他应用的事件不会进入本进程事件循环，"点窗外关闭"实际只能由本应用自己的顶层窗口触发，而这些交互（截图/录屏/设置/历史/贴图/标注/OCR/翻译）一律保持打开；注意顶层窗口的鼠标事件先派发给其 QWidgetWindow（QWindow），需经 `QWidget::find` 映射回 widget 再判断。
 - **CardPreviewPopup**：悬停放大预览弹窗——图片加载原图（按 DPR 从原图出图保证清晰）并支持滚轮 0.2–10 倍缩放，文本自动换行；右键菜单接入复制 / 标注（创建 PinWindow 并直接进入标注模式）/ 文字识别 / 翻译。
 - **FlyAnimationWidget**：透明、鼠标穿透的置顶动画窗口，携带截图从来源区域沿曲线缩小飞到宠物嘴部坐标，到达后发射 `arrived()` 并自毁。
@@ -3467,7 +3473,8 @@ src/
 │   └── OcrResultDialog.h/cpp     # 结果弹窗（拖拽、调整大小、翻译按钮、原文/译文/对照三态视图）
 ├── pet/                  # 桌面宠物模块
 │   ├── DesktopPetManager.h/cpp   # 宠物管理器（单例：开关/位置/外观/行为持久化、投喂入口、晾衣绳显隐与热区 watch、陪伴功能调度中枢）
-│   ├── PetWindow.h/cpp           # 宠物窗口（QPainter 绘制 16 种外观、张嘴/咀嚼/眨眼动画、拖动/防抖单击、打盹/摸头/系统角标/装饰/节日彩蛋）
+│   ├── PetWindow.h/cpp           # 宠物窗口（绘制 16 种代码造型 + 2 种图片型特殊样式、张嘴/咀嚼/眨眼动画、拖动/防抖单击、打盹/摸头/系统角标/装饰/节日彩蛋）
+│   ├── pets/                     # 内置样式定义（一文件一样式：PetStyles.h 为 PetSpec 结构与聚合表，BunnyPet/CatPet/… 按生肖与经典组拆分；鲸鱼娘素材打包进 Qt 资源）
 │   ├── ClotheslineWindow.h/cpp   # 晾衣绳窗口（悬链绳挂历史卡片、摆动与滑动动画、触发方式可配置、点窗外关闭豁免）
 │   ├── CardPreviewPopup.h/cpp    # 卡片悬停放大预览弹窗（原图+滚轮缩放、右键复制/标注/OCR/翻译）
 │   ├── FlyAnimationWidget.h/cpp  # 飞入宠物动画窗口（透明、鼠标穿透、到达自毁）
@@ -3509,7 +3516,7 @@ src/
 ├── update/              # 自动更新功能
 │   ├── UpdateManager.h/cpp             # 更新管理器（多渠道回退、下载校验、安装替换，Windows 平台）
 ├── utils/                # 工具函数
-│   └── Utils.h/cpp       # 通用工具（savePixmapToFile、桌面路径等）
+│   └── Utils.h/cpp       # 通用工具（savePixmapToFile、桌面路径、macOS 窗口层级辅助 showFrontNoActivate/activateIfAppActive/clearNSPanelUtilityStyle/setWindowNormalLevel 等）
 ├── widgets/              # 通用组件
 │   ├── BaseToolBar.h/cpp  # 基础工具栏核心骨架（布局、子工具栏变体系统、定位、eventFilter）
 │   ├── BaseToolBarActions.cpp # 基础工具栏动作与样式层（动作按钮注册表、ToolDef元数据表、按钮样式、画笔/颜色/形状操作、状态切换）
@@ -3527,13 +3534,13 @@ src/
 │   │   ├── SettingsStyleTab.h/cpp      # 样式（主题/21色自定义）
 │   │   ├── SettingsTranslateTab.h/cpp  # 翻译（引擎/目标语言/Key）
 │   │   ├── SettingsHistoryTab.h/cpp    # 历史记录（开关/保留/清理/统计）
-│   │   ├── SettingsPetTab.h/cpp        # 宠物（四分组：基本/样式 16 外观+装饰/自定义宠物/行为：晾衣绳触发、待办提醒、番茄钟、打盹、系统状态、节日、生日）
+│   │   ├── SettingsPetTab.h/cpp        # 宠物（五分组：基本/宠物样式 16 外观+装饰/特殊样式 2 图片型/自定义宠物/行为：晾衣绳触发、待办提醒、番茄钟、打盹、系统状态、节日、生日）
 │   │   └── SettingsAboutTab.h/cpp      # 关于（版本/官网）
 │   ├── SettingsWindow.h/cpp   # 设置窗口（拖拽移动、7个选项卡、DPI适配、21种颜色数据驱动配置、主题切换）
 │   ├── HistoryWindow.h/cpp    # 历史记录窗口（截图+剪贴板分类、多选批量、搜索、实时刷新）
 │   ├── RecordingControlWindow.h/cpp  # 录制控制栏（暂停/继续/停止）
 │   ├── MessageBox.h/cpp       # 自定义消息框（统一样式：QMessageBox替代，自动翻译按钮+居中定位+Yes/No便捷方法）
-│   └── TranslateOverlayWindow.h/cpp  # 译文叠加窗口（OCR多边形位置渲染、原文/译文/对照三态视图、文字选择、复制、保存图片、翻译完成退出截图框）
+│   └── TranslateOverlayWindow.h/cpp  # 翻译结果窗口（左图右文分栏、原文/译文/对照三态视图、复制全文/另存为图片、翻译完成退出截图框）
 ├── resources/            # 资源目录
 │   └── stylesheets/
 │       └── app.qss       # 全局QSS样式表（DPI变化时通过reapplyGlobalStyleSheet重新加载）
@@ -3571,7 +3578,7 @@ src/
 | `src/core/ConfigManager.h` | 配置管理（单例、QSettings 持久化封装、默认值播种） |
 | `src/core/StyleManager.h` | 样式管理（颜色主题、QSS 样式、DPI 重新加载全局样式表） |
 | `src/core/TranslationManager.h` | UI 界面多语言（JSON 翻译文件、tm->get() 统一入口，区别于文本翻译服务） |
-| `src/utils/Utils.h` | 工具类（savePixmapToFile、桌面路径等） |
+| `src/utils/Utils.h` | 工具类（savePixmapToFile、桌面路径、macOS 窗口层级辅助 showFrontNoActivate/activateIfAppActive 等） |
 | `src/widgets/BaseToolBar.h` | 基础工具栏（布局、子工具栏防闪烁、信号统一定义） |
 | `src/widgets/ScreenshotToolBar.h` | 截图工具栏（copy/save/pin/close 自有信号） |
 | `src/widgets/RecordingToolBar.h` | 录屏工具栏（计时控制、快照按钮、GIF 按钮、showControlRequested） |
@@ -3590,7 +3597,7 @@ src/
 | `src/translate/TranslateEngine.h` | 翻译引擎抽象接口 + TranslateError 错误码枚举 |
 | `src/translate/TranslateService.h` | 翻译服务单例（多引擎切换、批量翻译状态机、checkEnabledAndPrivacy、错误消息本地化） |
 | `src/core/SecretStore.h` | 凭据安全存储（百度/DeepL Key 经 DPAPI/Keychain 加密，readWithLegacyMigration 自动迁移旧明文） |
-| `src/widgets/TranslateOverlayWindow.h` | 译文叠加窗口（OCR 多边形位置渲染、三态视图、文字选择复制、保存图片、翻译完成退出截图框） |
+| `src/widgets/TranslateOverlayWindow.h` | 翻译结果窗口（左图右文分栏、三态视图、复制全文/保存图片、翻译完成退出截图框） |
 | `src/translate/MyMemoryEngine.h` | MyMemory 引擎（默认免注册、国内直连、50000 词/天 email 提额） |
 | `src/translate/BaiduTranslateEngine.h` | 百度翻译引擎（用户自填 AppId + Key，200 万字符/月免费） |
 | `src/translate/DeepLEngine.h` | DeepL 引擎（用户自填 Key、高质量翻译） |
