@@ -73,6 +73,20 @@ public:
     void updateToolBarState(bool hasSelection, bool canUndo, bool canRedo);
     bool isMouseInToolbars(const QPoint &globalPos) const;  ///< 鼠标是否在录屏工具栏/子工具栏/控制栏上
 
+    /**
+     * @brief 统一录屏工具栏、子工具栏、控制栏的高度（控制栏可见时调用）
+     *
+     * 控制栏内含 QComboBox/QCheckBox，自然高度通常高于工具栏按钮；以两者
+     * 较高者为基准同时固定三栏高度，消除堆叠时的高度差。图标模式下工具栏
+     * 更高时取工具栏高度，避免被压缩裁切。
+     */
+    void syncBarHeights();
+
+    /**
+     * @brief 解除 syncBarHeights() 设置的固定高度，恢复各栏自然尺寸
+     */
+    void resetBarHeights();
+
     // ---------- 工具栏显隐 ----------
     void showToolBar();               ///< 显示录屏工具栏（选区旁定位）
     void hideToolBar();               ///< 隐藏录屏工具栏、子工具栏与控制栏

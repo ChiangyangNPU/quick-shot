@@ -218,11 +218,15 @@ void RecordingSession::connectSignals() {
             m_control->updateButtonStyles();
             m_control->show();
             m_control->raise();
-            // 使用统一位置计算方法
+            // 控制栏可见时三栏统一高度，再使用统一位置计算方法
+            syncBarHeights();
             m_host->updateMenuPosition();
             updateInputMask();
         } else {
             m_control->hide();
+            // 控制栏隐藏后恢复各栏自然高度，并重新定位（高度变化会影响堆叠位置）
+            resetBarHeights();
+            m_host->updateMenuPosition();
             updateInputMask();
         }
     });
@@ -308,10 +312,55 @@ void RecordingSession::refreshTheme() {
         m_control->updateBackgroundStyle();
         m_control->updateButtonStyles();
     }
+    // 控制栏可见时样式刷新可能改变自然高度，重新统一三栏高度并定位
+    if (m_control && m_control->isVisible()) {
+        syncBarHeights();
+        m_host->updateMenuPosition();
+    }
 }
 
 void RecordingSession::updateToolBarState(bool hasSelection, bool canUndo, bool canRedo) {
     if (m_toolbar) m_toolbar->updateState(hasSelection, canUndo, canRedo);
+}
+
+void RecordingSession::syncBarHeights() {
+    if (!m_toolbar || !m_control || !m_control->isVisible()) {
+        return;
+    }
+
+    // 先解除此前可能设置的固定高度，取各栏的自然高度
+    m_toolbar->setMinimumHeight(0);
+    m_toolbar->setMaximumHeight(QWIDGETSIZE_MAX);
+    m_toolbar->adjustSize();
+    m_control->setMinimumHeight(0);
+    m_control->setMaximumHeight(QWIDGETSIZE_MAX);
+    m_control->adjustSize();
+
+    // 取较高者为统一高度：文字模式下控制栏（下拉框 1.2em）通常更高，
+    // 图标模式下工具栏更高，取 max 可同时避免任何一栏被压缩裁切
+    const int target = qMax(m_toolbar->height(), m_control->height());
+    m_toolbar->setFixedHeight(target);
+    m_control->setFixedHeight(target);
+    if (QWidget *subToolbar = m_toolbar->getSubToolbarWindow()) {
+        subToolbar->setFixedHeight(target);
+    }
+    LOG_INFO(QString("[RecordingSession] Bar heights unified to %1").arg(target));
+}
+
+void RecordingSession::resetBarHeights() {
+    if (m_toolbar) {
+        m_toolbar->setMinimumHeight(0);
+        m_toolbar->setMaximumHeight(QWIDGETSIZE_MAX);
+        m_toolbar->adjustSize();
+        if (QWidget *subToolbar = m_toolbar->getSubToolbarWindow()) {
+            subToolbar->setFixedHeight(m_toolbar->height());
+        }
+    }
+    if (m_control) {
+        m_control->setMinimumHeight(0);
+        m_control->setMaximumHeight(QWIDGETSIZE_MAX);
+        m_control->adjustSize();
+    }
 }
 
 bool RecordingSession::isMouseInToolbars(const QPoint &globalPos) const {
@@ -379,6 +428,7 @@ void RecordingSession::showControlForGif() {
     m_control->updateButtonStyles();
     m_control->show();
     m_control->raise();
+    syncBarHeights();
     m_host->updateMenuPosition();
     updateInputMask();
     LOG_INFO("[SnipScreen] GIF recording control opened");
@@ -398,6 +448,8 @@ void RecordingSession::hideToolBar() {
     }
     if (m_control) {
         m_control->hide();
+        // 控制栏随工具栏一起隐藏：恢复工具栏/子工具栏自然高度
+        resetBarHeights();
     }
     updateInputMask();
 }
