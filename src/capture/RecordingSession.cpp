@@ -338,9 +338,10 @@ void RecordingSession::syncBarHeights() {
     m_control->setMaximumHeight(QWIDGETSIZE_MAX);
     m_control->adjustSize();
 
-    // 取较高者为统一高度：文字模式下控制栏（下拉框 1.2em）通常更高，
-    // 图标模式下工具栏更高，取 max 可同时避免任何一栏被压缩裁切
-    const int target = qMax(m_toolbar->height(), m_control->height());
+    // 始终以一级工具栏的自然高度为基准：控制栏打开时三栏不再整体变高，
+    // 也就不会出现一次视觉跳变；控制栏只比工具栏高约 3px，固定到该高度后
+    // 布局会收紧下边距，控件本身不会被裁切
+    const int target = m_toolbar->height();
     m_toolbar->setFixedHeight(target);
     m_control->setFixedHeight(target);
     if (QWidget *subToolbar = m_toolbar->getSubToolbarWindow()) {
