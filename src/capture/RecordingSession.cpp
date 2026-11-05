@@ -158,6 +158,8 @@ void RecordingSession::connectSignals() {
         // 录制出错，重新启用截图按钮
         m_toolbar->setScreenshotButtonEnabled(true);
         m_toolbar->setGifButtonEnabled(true);
+        // 录制结束/出错后解除选区锁定，保证仍可切回截图模式
+        unlockSelectionAfterRecording();
     });
 
     // ---------- 录屏工具栏：标注工具 ----------
@@ -505,6 +507,16 @@ void RecordingSession::resetUi() {
     m_control->setRecording(false);
     m_control->setPaused(false);
     m_control->hide();
+    // 取消/结束录制后恢复选区状态，否则选区一直停留在 Locked，
+    // switchToScreenshotMode 会因状态不是 Captured 而不显示截图工具栏
+    unlockSelectionAfterRecording();
+}
+
+void RecordingSession::unlockSelectionAfterRecording() {
+    Selector *sel = m_host->selector();
+    if (sel && sel->status() == SelectorStatus::Locked) {
+        sel->setStatus(SelectorStatus::Captured);
+    }
 }
 
 // ============================================================

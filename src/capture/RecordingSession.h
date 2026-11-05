@@ -87,6 +87,15 @@ public:
      */
     void resetBarHeights();
 
+    /**
+     * @brief 录制结束/取消后解除选区锁定（Locked → Captured）
+     *
+     * 录制开始会把选区锁定为 Locked（禁止移动/调整）；若不恢复，之后切换
+     * 到截图模式时状态不是 Captured，截图工具栏不会被显示，表现为工具栏
+     * 全部消失、只剩选区框。
+     */
+    void unlockSelectionAfterRecording();
+
     // ---------- 工具栏显隐 ----------
     void showToolBar();               ///< 显示录屏工具栏（选区旁定位）
     void hideToolBar();               ///< 隐藏录屏工具栏、子工具栏与控制栏
