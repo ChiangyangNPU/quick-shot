@@ -249,6 +249,11 @@ void SettingsHistoryTab::refreshStyles() {
     const QString comboStyle = StyleManager::getSettingsComboBoxStyle();
     if (cmbRetentionDays) cmbRetentionDays->setStyleSheet(comboStyle);
     if (cmbMaxItems) cmbMaxItems->setStyleSheet(comboStyle);
+
+    // 按钮配色随主题刷新：构造时已按当时的主题取色，切换主题后需重设
+    const QString buttonStyle = StyleManager::getSettingsButtonStyle();
+    if (btnCleanHistory) btnCleanHistory->setStyleSheet(buttonStyle);
+    if (btnClearHistory) btnClearHistory->setStyleSheet(buttonStyle);
 }
 
 void SettingsHistoryTab::applyTabBackground(const QColor &color) {

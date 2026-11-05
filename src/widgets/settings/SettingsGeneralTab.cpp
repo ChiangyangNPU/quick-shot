@@ -401,6 +401,18 @@ void SettingsGeneralTab::refreshStyles() {
     if (editCaptureSaveDir) editCaptureSaveDir->setStyleSheet(editStyle);
     if (editRecordSaveDir) editRecordSaveDir->setStyleSheet(editStyle);
     if (lblConfigFileName) lblConfigFileName->setStyleSheet(editStyle);
+
+    // 按钮配色随主题刷新：本页按钮构造时已按当时的主题取色，
+    // 深浅主题切换后若不重设会保留旧主题的底色/文字色
+    const QString buttonStyle = StyleManager::getSettingsButtonStyle();
+    if (btnOpenLogFile) btnOpenLogFile->setStyleSheet(buttonStyle);
+    if (btnClearLogFile) btnClearLogFile->setStyleSheet(buttonStyle);
+    if (btnCaptureChooseDir) btnCaptureChooseDir->setStyleSheet(buttonStyle);
+    if (btnCaptureResetDir) btnCaptureResetDir->setStyleSheet(buttonStyle);
+    if (btnRecordChooseDir) btnRecordChooseDir->setStyleSheet(buttonStyle);
+    if (btnRecordResetDir) btnRecordResetDir->setStyleSheet(buttonStyle);
+    if (btnOpenConfigDir) btnOpenConfigDir->setStyleSheet(buttonStyle);
+    if (btnChangeConfig) btnChangeConfig->setStyleSheet(buttonStyle);
 }
 
 void SettingsGeneralTab::applyTabBackground(const QColor &color) {

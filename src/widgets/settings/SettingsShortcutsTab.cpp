@@ -281,10 +281,15 @@ void SettingsShortcutsTab::refreshStyles() {
     if (m_shortcutGroupAnnotation) m_shortcutGroupAnnotation->setStyleSheet(style);
     if (m_shortcutGroupPinWindow) m_shortcutGroupPinWindow->setStyleSheet(style);
 
-    // 快捷键输入框配色随主题刷新（主题切换时经 SettingsWindow::refreshAllStyles 调用）
+    // 快捷键输入框与行内按钮配色随主题刷新
+    // （主题切换时经 SettingsWindow::refreshAllStyles 调用）
     const QString editStyle = StyleManager::getKeySequenceEditStyle();
+    const QString buttonStyle = StyleManager::getSettingsButtonStyle();
     for (const auto &row : std::as_const(m_extraShortcutRows)) {
         if (row.edit) row.edit->setStyleSheet(editStyle);
+        if (row.btnOk) row.btnOk->setStyleSheet(buttonStyle);
+        if (row.btnCancel) row.btnCancel->setStyleSheet(buttonStyle);
+        if (row.btnReset) row.btnReset->setStyleSheet(buttonStyle);
     }
     for (const auto &row : std::as_const(m_fixedShortcutRows)) {
         if (row.edit) row.edit->setStyleSheet(editStyle);
