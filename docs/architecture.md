@@ -2309,8 +2309,11 @@ UpdateManager 渠道顺序按地区动态排序（启动时按时区判定，`in
 #### 6.18.3 下载与校验
 
 - 基于 QNetworkAccessManager 实现 HTTP/HTTPS 下载，支持进度回调和取消
-- 30 秒无数据超时保护
-- 下载完成后进行 SHA256 校验，与 version.json 中的 checksum 比对
+- 双档超时：等待首字节 30 秒（`DOWNLOAD_FIRST_BYTE_TIMEOUT_MS`），已有数据后断流放宽到 60 秒（`DOWNLOAD_STALL_TIMEOUT_MS`）。公司代理常在中途静默掐断长连接，"无新增字节"才是判据
+- 断点续传：超时/网络错误优先在**同渠道**按已落盘偏移用 `Range: bytes=N-` 续传（单渠道最多 2 次，`MAX_RESUME_RETRIES`），重试用尽后才切换渠道；换渠道时同样保留已落盘偏移（安装包总大小已知时）。服务器忽略 `Range` 返回 200 会自动清零重写，返回 416 则清零重来，UI 进度按绝对字节数计算不会倒退
+- 写盘在独立工作线程（`DownloadFileWriter`）：主线程只抽取 `QNetworkReply` 缓冲并投递数据块，避免同步 `QFile::write`（杀毒实时扫描、慢盘）阻塞事件循环造成超时误报；积压达 8MB 高水位即停止抽取，配合 `setReadBufferSize` 与 TCP 反压把内存封顶
+- 半截包在续传/换渠道之间保留，只有取消、全部渠道失败或本机写盘/校验失败时才删除
+- 下载完成后进行 SHA256 校验，与 version.json 中的 checksum 比对；release API 渠道 checksum 为空，以 fileSize 精确匹配作为完整性防线
 - 文件名从 downloadUrl 路径推断扩展名
 
 #### 6.18.4 安装替换（Windows）

@@ -7,6 +7,90 @@
 #include <QFile>
 #include <QTimer>
 #include <QList>
+#include <QThread>
+
+/**
+ * @brief 下载文件写入器（运行在独立工作线程）
+ *
+ * 主线程把数据块投递进来，由本对象负责打开、续写、关闭和删除安装包文件。
+ * 单独成线程的原因：同步 QFile::write 落在 GUI 线程时会阻塞事件循环
+ * （杀毒实时扫描大文件、机械盘、索引服务等场景尤甚），期间下载超时定时器
+ * 事件积压，回到事件循环后立刻触发，表现为"下载正常却报超时"。
+ *
+ * 代次（generation）用于丢弃过期数据：切换渠道、续传重试、取消时递增，
+ * 旧代次排队中的写命令在执行时被忽略，避免把上一轮数据写进新文件。
+ * @author chiangyang
+ */
+class DownloadFileWriter : public QObject {
+    Q_OBJECT
+
+public:
+    explicit DownloadFileWriter(QObject *parent = nullptr);
+
+public slots:
+    /**
+     * @brief 打开写盘句柄
+     * @param generation 写入代次
+     * @param path 目标文件路径
+     * @param appendOffset 续传起始偏移；0 表示清空重写，>0 时截断到该偏移后追加
+     * @author chiangyang
+     */
+    void openForWrite(int generation, const QString &path, qint64 appendOffset);
+
+    /**
+     * @brief 追加一个数据块
+     * @param generation 写入代次（不匹配则丢弃）
+     * @param data 数据块
+     * @author chiangyang
+     */
+    void appendChunk(int generation, const QByteArray &data);
+
+    /**
+     * @brief 关闭文件并落盘
+     * @param generation 写入代次
+     * @author chiangyang
+     */
+    void closeFile(int generation);
+
+    /**
+     * @brief 关闭并删除半截文件（取消或最终失败时清理）
+     * @param generation 写入代次
+     * @param path 文件路径
+     * @author chiangyang
+     */
+    void discardFile(int generation, const QString &path);
+
+signals:
+    /**
+     * @brief 文件打开结果
+     * @param generation 写入代次
+     * @param success 是否成功
+     * @param error 失败原因
+     * @author chiangyang
+     */
+    void opened(int generation, bool success, const QString &error);
+
+    /**
+     * @brief 数据块落盘完成
+     * @param generation 写入代次
+     * @param bytes 本次写入字节数
+     * @author chiangyang
+     */
+    void written(int generation, qint64 bytes);
+
+    /**
+     * @brief 文件关闭结果
+     * @param generation 写入代次
+     * @param success 是否成功
+     * @param error 失败原因
+     * @author chiangyang
+     */
+    void closed(int generation, bool success, const QString &error);
+
+private:
+    QFile m_file;           ///< 当前写盘句柄
+    int m_generation = 0;   ///< 当前代次
+};
 
 /**
  * @brief 更新管理器
@@ -98,7 +182,11 @@ public:
      * 从检查成功的渠道起步（其版本信息与附件地址已验证可用），失败后按
      * 渠道顺序回退。每个渠道的下载地址按该渠道重建：附件地址只在与检查
      * 响应同源的渠道上使用，跨渠道按版本号模板拼接，保证回退真正换主机。
-     * 每个渠道有 30 秒无数据传输超时。
+     *
+     * 断流处理：首次等待首字节 30 秒；已有数据后无新增字节放宽到 60 秒
+     * （公司代理常在中途静默掐断长连接）。超时/网络错误优先在同渠道用
+     * HTTP Range 从已落盘位置续传，重试次数用尽后才切换渠道，切换渠道
+     * 时同样按已落盘偏移续传（安装包总大小已知时），避免每次从 0 重下。
      * @param info 版本信息
      * @param downloadDir 下载目录
      * @author chiangyang
@@ -190,6 +278,17 @@ signals:
                           UpdateManager::Channel to,
                           const QString &reason);
 
+    /**
+     * @brief 写盘线程请求信号（内部使用，外部请勿连接）
+     *
+     * 数据块经排队连接投递到 DownloadFileWriter，避免同步写盘阻塞 GUI 线程。
+     * @author chiangyang
+     */
+    void writeOpenRequested(int generation, const QString &path, qint64 appendOffset);
+    void writeAppendRequested(int generation, const QByteArray &data);
+    void writeCloseRequested(int generation);
+    void writeDiscardRequested(int generation, const QString &path);
+
 public slots:
     /**
      * @brief 安装下载的更新
@@ -225,10 +324,60 @@ private slots:
 
     /**
      * @brief 下载超时处理
-     * 下载无数据传输超时，尝试切换到下一个渠道
+     * 下载无数据传输超时，优先同渠道续传，重试用尽后切换渠道
      * @author chiangyang
      */
     void onDownloadTimeout();
+
+    /**
+     * @brief 下载响应头处理
+     *
+     * 判定 200/206/416：206 续传确认偏移，200 表示服务器忽略 Range 需从头写，
+     * 416 表示续传偏移越界需清零重来。
+     * @author chiangyang
+     */
+    void onDownloadMetaData();
+
+    /**
+     * @brief 下载数据到达处理
+     *
+     * 主线程只负责抽空 QNetworkReply 的缓冲并把数据块投递给写盘线程，
+     * 累计积压超过高水位时暂停抽取，靠 Qt 读缓冲与 TCP 反压限制内存。
+     * @author chiangyang
+     */
+    void onDownloadReadyRead();
+
+    /**
+     * @brief 下载进度处理
+     *
+     * 换算为"含续传偏移"的绝对进度，并按是否已有数据切换超时档位。
+     * @param received 本次请求已接收字节数
+     * @param total 本次请求总字节数（仅剩余部分，未知为 0/-1）
+     * @author chiangyang
+     */
+    void onDownloadProgressData(qint64 received, qint64 total);
+
+    /**
+     * @brief 写盘文件打开结果
+     * @author chiangyang
+     */
+    void onWriteOpened(int generation, bool success, const QString &error);
+
+    /**
+     * @brief 写盘数据块落盘完成
+     * @param generation 写入代次
+     * @param bytes 本次落盘字节数
+     * @author chiangyang
+     */
+    void onWriteAppended(int generation, qint64 bytes);
+
+    /**
+     * @brief 写盘文件关闭结果
+     *
+     * 关闭成功且正处于收尾阶段时，进入大小/校验和验证。
+     * @author chiangyang
+     */
+    void onWriteClosed(int generation, bool success, const QString &error);
 
 private:
     /**
@@ -251,6 +400,53 @@ private:
      * @author chiangyang
      */
     void tryNextDownloadChannel();
+
+    /**
+     * @brief 按已落盘偏移发起下载请求
+     *
+     * 有可续传数据时附带 Range 头，同渠道续传与换渠道都走这里，
+     * 保证"从头下载"只在偏移为 0 时发生。
+     * @author chiangyang
+     */
+    void startDownloadRequest();
+
+    /**
+     * @brief 收尾验证
+     *
+     * 落盘完成后检查文件大小（唯一廉价的完整性防线）与校验和，
+     * 偏短且未超重试预算时继续续传补齐。
+     * @author chiangyang
+     */
+    void finishDownloadVerification();
+
+    /**
+     * @brief 本地上报致命失败（写盘/校验失败，换渠道无意义）
+     * @param message 错误描述
+     * @author chiangyang
+     */
+    void failDownloadFatal(const QString &message);
+
+    /**
+     * @brief 丢弃半截安装包并重置进度状态
+     * @author chiangyang
+     */
+    void discardPartialDownload();
+
+    /**
+     * @brief 判断网络错误是否值得同渠道续传
+     * @param error 网络错误码
+     * @return true 表示可续传重试
+     * @author chiangyang
+     */
+    static bool isRetryableDownloadError(QNetworkReply::NetworkError error);
+
+    /**
+     * @brief 从 Content-Range 头解析文件总大小
+     * @param contentRange 形如 "bytes 100-200/300"
+     * @return 总大小；无法解析返回 0
+     * @author chiangyang
+     */
+    static qint64 contentRangeTotal(const QByteArray &contentRange);
 
     /**
      * @brief 切换到下一个渠道
@@ -293,11 +489,13 @@ private:
     /**
      * @brief 下载渠道失败处理
      *
-     * 有剩余渠道则切换重试，否则上报最终错误。
+     * 先在当前渠道按已落盘偏移续传，重试预算用尽后再切换渠道重试，
+     * 所有渠道都失败才上报最终错误。
      * @param message 失败原因（既是切换原因，也是最终错误信息）
+     * @param retryable 是否值得同渠道续传（HTTP 4xx/5xx 等直接换渠道）
      * @author chiangyang
      */
-    void handleDownloadFailure(const QString &message);
+    void handleDownloadFailure(const QString &message, bool retryable);
 
     /**
      * @brief 获取渠道名称
@@ -397,7 +595,18 @@ private:
     VersionInfo m_currentDownloadInfo;
 
     QNetworkReply *m_currentReply;
-    QFile m_downloadFile;   ///< 流式下载：当前写盘句柄（边下边写，避免整包进内存）
+    QThread *m_writeThread = nullptr;           ///< 写盘工作线程
+    DownloadFileWriter *m_writer = nullptr;     ///< 写盘写入器（运行于工作线程）
+    int m_writeGeneration = 0;                  ///< 写盘代次（丢弃过期数据块）
+    qint64 m_writtenBytes = 0;                  ///< 已确认落盘的字节数（续传偏移依据）
+    qint64 m_pendingWriteBytes = 0;             ///< 已投递但尚未确认落盘的字节数
+    qint64 m_rangeOffset = 0;                   ///< 本次请求的续传起始偏移
+    qint64 m_totalBytes = 0;                    ///< 安装包总大小（0 表示未知）
+    int m_resumeRetries = 0;                    ///< 当前渠道已用的续传重试次数
+    bool m_awaitingVerification = false;        ///< 已发出关闭命令，等待落盘后验证
+    bool m_responseHandled = false;             ///< 当前请求的响应头是否已处理
+    QString m_currentDownloadUrl;               ///< 当前请求的下载地址
+
     QTimer m_checkTimer;
     QTimer m_downloadTimer;
 
@@ -408,7 +617,11 @@ private:
     bool m_cancelled;
 
     static const int CHECK_TIMEOUT_MS = 10000;
-    static const int DOWNLOAD_TIMEOUT_MS = 30000;
+    static const int DOWNLOAD_FIRST_BYTE_TIMEOUT_MS = 30000; ///< 等待首字节
+    static const int DOWNLOAD_STALL_TIMEOUT_MS = 60000;      ///< 已有数据后断流
+    static const int MAX_RESUME_RETRIES = 2;                 ///< 单渠道续传重试上限
+    static const qint64 MAX_PENDING_WRITE_BYTES = 8 * 1024 * 1024; ///< 写盘积压高水位
+    static const qint64 RECV_BUFFER_BYTES = 4 * 1024 * 1024;      ///< Reply 读缓冲上限
 
     static const QStringList s_channelNames;
 };

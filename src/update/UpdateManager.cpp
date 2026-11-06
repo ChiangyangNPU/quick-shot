@@ -37,9 +37,114 @@ UpdateManager::Channel UpdateManager::sourceChannel(Channel channel) {
 }
 
 /**
+ * @brief 下载文件写入器构造函数
+ * @param parent 父对象
+ * @author chiangyang
+ */
+DownloadFileWriter::DownloadFileWriter(QObject *parent)
+    : QObject(parent) {
+}
+
+/**
+ * @brief 打开写盘句柄
+ *
+ * appendOffset > 0 时按续传处理：先截断到该偏移再追加，确保"投递时未确认
+ * 落盘的数据块"不会在文件中留下超出偏移的残留字节。
+ * @author chiangyang
+ */
+void DownloadFileWriter::openForWrite(int generation, const QString &path, qint64 appendOffset) {
+    // 过期代次的命令直接丢弃：排队顺序保证它总在更新的 open 之前执行
+    if (generation < m_generation) {
+        return;
+    }
+    m_generation = generation;
+
+    if (m_file.isOpen()) {
+        m_file.close();
+    }
+
+    if (appendOffset > 0) {
+        m_file.setFileName(path);
+        if (!m_file.open(QIODevice::ReadWrite)) {
+            emit opened(generation, false, m_file.errorString());
+            return;
+        }
+        if (!m_file.resize(appendOffset) || !m_file.seek(appendOffset)) {
+            const QString error = m_file.errorString();
+            m_file.close();
+            emit opened(generation, false, error);
+            return;
+        }
+    } else {
+        m_file.setFileName(path);
+        if (!m_file.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            emit opened(generation, false, m_file.errorString());
+            return;
+        }
+    }
+    emit opened(generation, true, QString());
+}
+
+/**
+ * @brief 追加数据块到安装包文件
+ * @author chiangyang
+ */
+void DownloadFileWriter::appendChunk(int generation, const QByteArray &data) {
+    if (generation != m_generation || !m_file.isOpen()) {
+        return;
+    }
+    const qint64 bytesWritten = m_file.write(data);
+    if (bytesWritten != data.size()) {
+        // 磁盘满/IO 错误：静默丢数据会让安装包损坏，必须上报失败
+        const QString error = m_file.errorString();
+        m_file.close();
+        emit closed(generation, false, error);
+        return;
+    }
+    emit written(generation, bytesWritten);
+}
+
+/**
+ * @brief 关闭文件并落盘
+ * @author chiangyang
+ */
+void DownloadFileWriter::closeFile(int generation) {
+    if (generation < m_generation) {
+        return;
+    }
+    m_generation = generation;
+    if (!m_file.isOpen()) {
+        emit closed(generation, true, QString());
+        return;
+    }
+    // flush 后 close：缓冲真正落盘，磁盘满等错误在这里浮出
+    const bool flushed = m_file.flush();
+    const QString error = m_file.errorString();
+    m_file.close();
+    emit closed(generation, flushed, flushed ? QString() : error);
+}
+
+/**
+ * @brief 关闭并删除半截文件
+ * @author chiangyang
+ */
+void DownloadFileWriter::discardFile(int generation, const QString &path) {
+    if (generation < m_generation) {
+        return;
+    }
+    m_generation = generation;
+    if (m_file.isOpen()) {
+        m_file.close();
+    }
+    if (!path.isEmpty()) {
+        QFile::remove(path);
+    }
+}
+
+/**
  * @brief 构造函数
  *
- * 初始化网络管理器、状态变量和超时定时器。
+ * 初始化网络管理器、状态变量、超时定时器与写盘工作线程。
  * @param parent 父对象
  * @author chiangyang
  */
@@ -57,16 +162,41 @@ UpdateManager::UpdateManager(QObject *parent)
 
     connect(&m_checkTimer, &QTimer::timeout, this, &UpdateManager::onCheckTimeout);
     connect(&m_downloadTimer, &QTimer::timeout, this, &UpdateManager::onDownloadTimeout);
+
+    // 写盘线程：同步 QFile::write 会阻塞 GUI 事件循环（杀毒实时扫描、慢盘
+    // 尤甚），期间下载超时定时器事件积压，回到事件循环会立刻触发误报超时
+    m_writeThread = new QThread(this);
+    m_writer = new DownloadFileWriter();
+    m_writer->moveToThread(m_writeThread);
+    connect(m_writeThread, &QThread::finished, m_writer, &QObject::deleteLater);
+    connect(this, &UpdateManager::writeOpenRequested,
+            m_writer, &DownloadFileWriter::openForWrite, Qt::QueuedConnection);
+    connect(this, &UpdateManager::writeAppendRequested,
+            m_writer, &DownloadFileWriter::appendChunk, Qt::QueuedConnection);
+    connect(this, &UpdateManager::writeCloseRequested,
+            m_writer, &DownloadFileWriter::closeFile, Qt::QueuedConnection);
+    connect(this, &UpdateManager::writeDiscardRequested,
+            m_writer, &DownloadFileWriter::discardFile, Qt::QueuedConnection);
+    connect(m_writer, &DownloadFileWriter::opened,
+            this, &UpdateManager::onWriteOpened, Qt::QueuedConnection);
+    connect(m_writer, &DownloadFileWriter::written,
+            this, &UpdateManager::onWriteAppended, Qt::QueuedConnection);
+    connect(m_writer, &DownloadFileWriter::closed,
+            this, &UpdateManager::onWriteClosed, Qt::QueuedConnection);
+    m_writeThread->start();
 }
 
 /**
  * @brief 析构函数
  *
- * 取消当前操作并清理资源。
+ * 取消当前操作、等待写盘线程处理完队列后退出。
  * @author chiangyang
  */
 UpdateManager::~UpdateManager() {
     cancel();
+    // quit 事件在已排队的写命令之后处理，残留数据块不会跨线程悬空
+    m_writeThread->quit();
+    m_writeThread->wait();
 }
 
 /**
@@ -275,6 +405,12 @@ void UpdateManager::downloadUpdate(const VersionInfo &info, const QString &downl
     m_cancelled = false;
     m_currentDownloadInfo = info;
     m_downloadDir = downloadDir;
+    m_writtenBytes = 0;
+    m_pendingWriteBytes = 0;
+    m_rangeOffset = 0;
+    m_totalBytes = info.fileSize;
+    m_resumeRetries = 0;
+    m_awaitingVerification = false;
     initChannelOrder();
     // 从检查成功的渠道起步（其版本信息与附件地址已验证可用），而非固定从
     // 首选渠道重来——检查阶段已确认该渠道可达，避免在已知不可达的渠道上
@@ -346,56 +482,88 @@ void UpdateManager::tryNextDownloadChannel() {
     // 无附件时由 getDownloadUrl 返回 Gitee 模板；测试覆盖（QUICKSHOT_UPDATE_URL）
     // 下 getDownloadUrl 本身即返回清单里的 downloadUrl
 
+    m_currentDownloadUrl = downloadUrl;
+    m_totalBytes = m_currentDownloadInfo.fileSize;
+
     LOG_INFO(QString("UpdateManager: downloading from: %1").arg(downloadUrl));
 
-    QNetworkRequest request{QUrl(downloadUrl)};
-    request.setHeader(QNetworkRequest::UserAgentHeader, "QuickShot-UpdateDownloader/1.0");
-    request.setRawHeader("Accept", "application/octet-stream");
+    startDownloadRequest();
+}
 
-    m_currentReply = m_networkManager->get(request);
-
-    // 流式下载：打开写盘句柄，readyRead 增量写入（避免整包读入内存，
-    // Windows 包 ~100MB 时内存峰值从同量级降为常量）
-    m_downloadFile.setFileName(m_tempFilePath);
-    if (!m_downloadFile.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        LOG_ERROR(QString("UpdateManager: failed to open temp file: %1").arg(m_tempFilePath));
-        m_currentReply->deleteLater();
-        m_currentReply = nullptr;
-        ErrorInfo error;
-        error.channel = m_currentChannel;
-        error.message = TranslationManager::instance()->get("update.writeTempFileFailed", "Failed to write temporary file");
-        setStatus(Status::Error);
-        emit downloadFinished(false, QString(), error);
+/**
+ * @brief 按已落盘偏移发起下载请求
+ *
+ * 已落盘字节数 > 0 且总大小已知时附带 Range 头续传；否则从头下载。
+ * 主线程只负责把数据抽出来投递给写盘线程，落盘不在 GUI 线程进行。
+ * @author chiangyang
+ */
+void UpdateManager::startDownloadRequest() {
+    if (m_cancelled) {
+        setStatus(Status::Idle);
         return;
     }
-    connect(m_currentReply, &QNetworkReply::readyRead, this, [this]() {
-        if (!m_downloadFile.isOpen()) return;
-        const QByteArray data = m_currentReply->readAll();
-        // 磁盘满/IO 错误时 write 返回值会小于数据长度，静默丢数据会导致
-        // 安装包损坏，必须中止请求转入统一失败处理（切渠道重试）
-        if (m_downloadFile.write(data) != data.size()) {
-            LOG_ERROR(QString("UpdateManager: failed to write download data: %1")
-                          .arg(m_downloadFile.errorString()));
-            m_currentReply->abort();
-        }
-    });
 
-    // 转发下载进度，并在有数据到达时重置"无数据传输"超时
-    connect(m_currentReply, &QNetworkReply::downloadProgress, this,
-            [this](qint64 received, qint64 total) {
-                m_downloadTimer.start(DOWNLOAD_TIMEOUT_MS);
-                int percent = (total > 0) ? static_cast<int>(received * 100 / total) : 0;
-                emit downloadProgress(received, total, percent);
-            });
-    connect(m_currentReply, &QNetworkReply::finished, this, &UpdateManager::onDownloadFinished, Qt::UniqueConnection);
+    // 续传偏移只认"已确认落盘"的字节数：投递了但还没写完的数据块不能计入，
+    // 否则 Range 起点会越过文件实际长度
+    qint64 offset = 0;
+    if (m_writtenBytes > 0 && m_totalBytes > 0 && m_writtenBytes < m_totalBytes) {
+        offset = m_writtenBytes;
+    } else if (m_totalBytes > 0 && m_writtenBytes >= m_totalBytes) {
+        // 全部字节已落盘却在中途报错（例如收尾阶段连接被重置）：直接进入校验，
+        // 不再重复请求整包
+        LOG_INFO(QString("UpdateManager: all %1 bytes already written, verifying")
+                     .arg(m_writtenBytes));
+        m_awaitingVerification = true;
+        emit writeCloseRequested(m_writeGeneration);
+        return;
+    }
 
-    m_downloadTimer.start(DOWNLOAD_TIMEOUT_MS);
+    m_rangeOffset = offset;
+    m_pendingWriteBytes = 0;
+    m_responseHandled = false;
+    ++m_writeGeneration;
+    if (offset == 0) {
+        // 从头写入：openForWrite 会截断文件，累计落盘计数必须同步清零，
+        // 否则续传偏移会越过文件实际长度
+        m_writtenBytes = 0;
+    }
+    setStatus(Status::Downloading);
+
+    if (offset > 0) {
+        LOG_INFO(QString("UpdateManager: resuming download from byte %1/%2 on %3")
+                     .arg(offset).arg(m_totalBytes).arg(channelName(m_currentChannel)));
+    }
+    emit writeOpenRequested(m_writeGeneration, m_tempFilePath, offset);
+
+    QNetworkRequest request{QUrl(m_currentDownloadUrl)};
+    request.setHeader(QNetworkRequest::UserAgentHeader, "QuickShot-UpdateDownloader/1.0");
+    request.setRawHeader("Accept", "application/octet-stream");
+    if (offset > 0) {
+        request.setRawHeader("Range", QByteArray("bytes=") + QByteArray::number(offset) + '-');
+    }
+
+    m_currentReply = m_networkManager->get(request);
+    // 限制 Qt 内部读缓冲：主线程来不及抽数据时靠它 + TCP 反压把内存封顶，
+    // 同时避免整包进内存
+    m_currentReply->setReadBufferSize(RECV_BUFFER_BYTES);
+
+    connect(m_currentReply, &QNetworkReply::metaDataChanged,
+            this, &UpdateManager::onDownloadMetaData, Qt::UniqueConnection);
+    connect(m_currentReply, &QNetworkReply::readyRead,
+            this, &UpdateManager::onDownloadReadyRead, Qt::UniqueConnection);
+    connect(m_currentReply, &QNetworkReply::downloadProgress,
+            this, &UpdateManager::onDownloadProgressData, Qt::UniqueConnection);
+    connect(m_currentReply, &QNetworkReply::finished,
+            this, &UpdateManager::onDownloadFinished, Qt::UniqueConnection);
+
+    m_downloadTimer.start(DOWNLOAD_FIRST_BYTE_TIMEOUT_MS);
 }
 
 /**
  * @brief 下载完成处理
  *
- * 保存下载文件并进行校验。
+ * 网络请求结束后不直接校验：数据块可能还排在写盘线程队列里，先发关闭命令，
+ * 由 onWriteClosed 确认全部落盘后再交给 finishDownloadVerification 验证。
  * @author chiangyang
  */
 void UpdateManager::onDownloadFinished() {
@@ -415,51 +583,226 @@ void UpdateManager::onDownloadFinished() {
     if (reply->error() != QNetworkReply::NoError) {
         // HTTP 状态一并记录（403 = 被限流/拒绝，便于与网络故障区分）
         const QVariant httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute);
-        LOG_WARNING(QString("UpdateManager: download failed on %1: %2 (http=%3)")
+        const int status = httpStatus.toInt();
+        LOG_WARNING(QString("UpdateManager: download failed on %1: %2 (http=%3, received=%4/%5)")
             .arg(channelName(m_currentChannel), reply->errorString())
-            .arg(httpStatus.isValid() ? httpStatus.toString() : QStringLiteral("n/a")));
+            .arg(httpStatus.isValid() ? httpStatus.toString() : QStringLiteral("n/a"))
+            .arg(m_writtenBytes).arg(m_totalBytes));
+        // HTTP 4xx/5xx 是服务端明确拒绝，换渠道才有意义；网络层错误先同渠道续传
+        const bool retryable = status < 400 && isRetryableDownloadError(reply->error());
+        const QString errorString = reply->errorString();
         reply->deleteLater();
-        handleDownloadFailure(reply->errorString());
+        handleDownloadFailure(errorString, retryable);
         return;
     }
 
+    // 背压期间可能停止过抽取，网络结束时缓冲区里仍可能有未取走的字节，
+    // 必须先抽干再关闭，否则会把安装包尾部截断（此处不受高水位限制）
+    while (reply->bytesAvailable() > 0) {
+        const QByteArray data = reply->readAll();
+        if (data.isEmpty()) break;
+        m_pendingWriteBytes += data.size();
+        emit writeAppendRequested(m_writeGeneration, data);
+    }
     reply->deleteLater();
 
-    // 流式下载：数据已在 readyRead 中写盘，此处收尾句柄并检查落盘结果
-    // （close 返回后缓冲才真正落盘，磁盘满等错误在这里浮出）
-    m_downloadFile.close();
-    if (m_downloadFile.error() != QFileDevice::NoError) {
-        LOG_ERROR(QString("UpdateManager: failed to flush download file: %1")
-                      .arg(m_downloadFile.errorString()));
-        handleDownloadFailure(TranslationManager::instance()->get("update.writeTempFileFailed", "Failed to write temporary file"));
+    // 收尾：关闭命令排在所有已投递数据块之后，落盘完成后才能做大小/校验和验证
+    m_awaitingVerification = true;
+    emit writeCloseRequested(m_writeGeneration);
+}
+
+/**
+ * @brief 下载响应头处理
+ * @author chiangyang
+ */
+void UpdateManager::onDownloadMetaData() {
+    if (!m_currentReply || m_responseHandled) return;
+
+    const int status = m_currentReply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    const QVariant contentLengthHeader = m_currentReply->header(QNetworkRequest::ContentLengthHeader);
+
+    // 3xx 重定向由 QNetworkAccessManager 内部跟随，最终响应会再次触发
+    // metaDataChanged。这里若提前锁定响应头，重定向丢弃 Range 后返回 200
+    // 的场景就识别不到，会把整包内容接在半截文件后面
+    if (status >= 300 && status < 400) {
+        return;
+    }
+    m_responseHandled = true;
+
+    if (status == 416) {
+        // 续传偏移越界（服务器上的文件比本地半截包短）：清零后同渠道重来
+        LOG_WARNING(QString("UpdateManager: range not satisfiable at byte %1, restarting from 0")
+                        .arg(m_rangeOffset));
+        m_writtenBytes = 0;
+        m_rangeOffset = 0;
+        ++m_writeGeneration;
+        m_pendingWriteBytes = 0;
+        emit writeOpenRequested(m_writeGeneration, m_tempFilePath, 0);
+
+        QNetworkReply *reply = m_currentReply;
+        m_currentReply = nullptr;
+        reply->abort();
+        reply->deleteLater();
+        startDownloadRequest();
         return;
     }
 
-    QFile file(m_tempFilePath);
-    const qint64 downloadedBytes = QFileInfo(file).size();
+    if (status == 200 && m_rangeOffset > 0) {
+        // 服务器/代理未实现 Range（忽略请求头返回完整包）：必须清空重写，
+        // 否则会把整包内容接在半截包后面
+        LOG_WARNING("UpdateManager: server ignored Range header, restarting from 0");
+        m_writtenBytes = 0;
+        m_rangeOffset = 0;
+        ++m_writeGeneration;
+        m_pendingWriteBytes = 0;
+        emit writeOpenRequested(m_writeGeneration, m_tempFilePath, 0);
+    }
+
+    // 206 的 Content-Range 尾部带文件总大小；200 用 Content-Length 兜底
+    qint64 total = contentRangeTotal(m_currentReply->rawHeader("Content-Range"));
+    if (total <= 0 && status == 200 && contentLengthHeader.isValid()) {
+        total = contentLengthHeader.toLongLong();
+    }
+    if (total > 0) {
+        m_totalBytes = total;
+    }
+}
+
+/**
+ * @brief 下载数据到达处理
+ *
+ * 只做"抽缓冲 + 投递"，不落盘。积压达到高水位时停止抽取，Qt 读缓冲写满后
+ * 自动暂停读 socket，靠 TCP 反压让对端减速，内存占用因此是常量级。
+ * @author chiangyang
+ */
+void UpdateManager::onDownloadReadyRead() {
+    if (!m_currentReply) return;
+
+    // 个别后端可能先发数据后发响应头，这里兜底补一次头处理
+    if (!m_responseHandled) {
+        QNetworkReply *before = m_currentReply;
+        onDownloadMetaData();
+        if (!m_currentReply || m_currentReply != before) {
+            return;  // 416 分支已中止并重发请求
+        }
+    }
+
+    QNetworkReply *reply = m_currentReply;
+    while (m_pendingWriteBytes < MAX_PENDING_WRITE_BYTES && reply->bytesAvailable() > 0) {
+        const QByteArray data = reply->readAll();
+        if (data.isEmpty()) break;
+        m_pendingWriteBytes += data.size();
+        emit writeAppendRequested(m_writeGeneration, data);
+    }
+}
+
+/**
+ * @brief 下载进度处理
+ *
+ * 进度换算为含续传偏移的绝对值，保证续传后 UI 百分比不倒退；同时按
+ * "是否已收到数据"切换超时档位（首字节 30s，断流 60s）。
+ * @author chiangyang
+ */
+void UpdateManager::onDownloadProgressData(qint64 received, qint64 total) {
+    m_downloadTimer.start(received > 0 ? DOWNLOAD_STALL_TIMEOUT_MS
+                                       : DOWNLOAD_FIRST_BYTE_TIMEOUT_MS);
+
+    const qint64 absReceived = m_rangeOffset + received;
+    qint64 absTotal = m_totalBytes;
+    if (absTotal <= 0 && total > 0) {
+        absTotal = m_rangeOffset + total;
+    }
+    const int percent = absTotal > 0
+        ? static_cast<int>(qMin<qint64>(100, absReceived * 100 / absTotal))
+        : 0;
+    emit downloadProgress(absReceived, absTotal > 0 ? absTotal : 0, percent);
+}
+
+/**
+ * @brief 写盘文件打开结果
+ * @author chiangyang
+ */
+void UpdateManager::onWriteOpened(int generation, bool success, const QString &error) {
+    if (generation != m_writeGeneration) return;
+    if (success) return;
+
+    LOG_ERROR(QString("UpdateManager: failed to open temp file: %1 (%2)")
+                  .arg(m_tempFilePath, error));
+    failDownloadFatal(TranslationManager::instance()->get(
+        "update.writeTempFileFailed", "Failed to write temporary file"));
+}
+
+/**
+ * @brief 写盘数据块落盘完成
+ * @author chiangyang
+ */
+void UpdateManager::onWriteAppended(int generation, qint64 bytes) {
+    if (generation != m_writeGeneration) return;
+
+    m_pendingWriteBytes = qMax<qint64>(0, m_pendingWriteBytes - bytes);
+    m_writtenBytes += bytes;
+
+    // 积压降到高水位以下，继续把 QNetworkReply 里缓着的数据抽出来
+    if (m_currentReply && m_pendingWriteBytes < MAX_PENDING_WRITE_BYTES) {
+        onDownloadReadyRead();
+    }
+}
+
+/**
+ * @brief 写盘文件关闭结果
+ * @author chiangyang
+ */
+void UpdateManager::onWriteClosed(int generation, bool success, const QString &error) {
+    if (generation != m_writeGeneration) return;
+
+    if (!success) {
+        LOG_ERROR(QString("UpdateManager: failed to write download data: %1").arg(error));
+        failDownloadFatal(TranslationManager::instance()->get(
+            "update.writeTempFileFailed", "Failed to write temporary file"));
+        return;
+    }
+
+    if (!m_awaitingVerification) return;
+    m_awaitingVerification = false;
+    finishDownloadVerification();
+}
+
+/**
+ * @brief 收尾验证
+ *
+ * 大小校验是渠道侧唯一的完整性防线（checksum 恒为空）；偏短说明代理截断了
+ * 响应体，未超重试预算就按已落盘长度继续续传补齐，而不是整包重下。
+ * @author chiangyang
+ */
+void UpdateManager::finishDownloadVerification() {
+    const qint64 downloadedBytes = QFileInfo(m_tempFilePath).size();
     if (downloadedBytes <= 0) {
         LOG_ERROR(QString("UpdateManager: downloaded file is empty: %1").arg(m_tempFilePath));
-        file.remove();
-        setStatus(Status::Error);
-        ErrorInfo error;
-        error.channel = m_currentChannel;
-        error.message = TranslationManager::instance()->get("update.writeTempFileFailed", "Failed to write temporary file");
-        emit downloadFinished(false, QString(), error);
+        failDownloadFatal(TranslationManager::instance()->get(
+            "update.writeTempFileFailed", "Failed to write temporary file"));
         return;
     }
 
-    // 大小校验：release 附件自带精确大小，不匹配说明拿到了错误页/半截包
-    // （渠道侧 checksum 恒为空，这是唯一廉价的完整性防线）
-    const qint64 expectedBytes = m_currentDownloadInfo.fileSize;
+    const qint64 expectedBytes = m_totalBytes > 0 ? m_totalBytes
+                                                  : m_currentDownloadInfo.fileSize;
     if (expectedBytes > 0 && downloadedBytes != expectedBytes) {
-        LOG_ERROR(QString("UpdateManager: download size mismatch: expected %1, got %2")
-                      .arg(expectedBytes).arg(downloadedBytes));
-        file.remove();
-        handleDownloadFailure(TranslationManager::instance()->get("update.sizeMismatch", "Downloaded file is incomplete"));
+        LOG_ERROR(QString("UpdateManager: download size mismatch: expected %1, got %2 (resume %3/%4)")
+                      .arg(expectedBytes).arg(downloadedBytes)
+                      .arg(m_resumeRetries).arg(MAX_RESUME_RETRIES));
+        if (downloadedBytes < expectedBytes && m_resumeRetries < MAX_RESUME_RETRIES) {
+            m_writtenBytes = downloadedBytes;
+            ++m_resumeRetries;
+            startDownloadRequest();
+            return;
+        }
+        discardPartialDownload();
+        handleDownloadFailure(TranslationManager::instance()->get(
+            "update.sizeMismatch", "Downloaded file is incomplete"), false);
         return;
     }
 
-    LOG_INFO(QString("UpdateManager: download complete: %1 (%2 bytes)").arg(m_tempFilePath).arg(downloadedBytes));
+    LOG_INFO(QString("UpdateManager: download complete: %1 (%2 bytes)")
+                 .arg(m_tempFilePath).arg(downloadedBytes));
 
     setStatus(Status::Verifying);
 
@@ -480,12 +823,8 @@ void UpdateManager::onDownloadFinished() {
 
             if (actualHash.compare(expectedHash, Qt::CaseInsensitive) != 0) {
                 LOG_ERROR("UpdateManager: checksum mismatch");
-                file.remove();
-                setStatus(Status::Error);
-                ErrorInfo error;
-                error.channel = m_currentChannel;
-                error.message = TranslationManager::instance()->get("update.checksumMismatch", "File verification failed, download may be incomplete");
-                emit downloadFinished(false, QString(), error);
+                failDownloadFatal(TranslationManager::instance()->get(
+                    "update.checksumMismatch", "File verification failed, download may be incomplete"));
                 return;
             }
             LOG_INFO(QString("UpdateManager: checksum verified"));
@@ -497,15 +836,104 @@ void UpdateManager::onDownloadFinished() {
 }
 
 /**
+ * @brief 本地上报致命失败
+ *
+ * 写盘/校验失败与网络无关，换渠道没有意义：清理半截包后直接上报错误。
+ * @author chiangyang
+ */
+void UpdateManager::failDownloadFatal(const QString &message) {
+    m_downloadTimer.stop();
+
+    if (m_currentReply) {
+        QNetworkReply *reply = m_currentReply;
+        m_currentReply = nullptr;
+        reply->abort();
+        reply->deleteLater();
+    }
+
+    m_awaitingVerification = false;
+    discardPartialDownload();
+    setStatus(Status::Error);
+
+    ErrorInfo error;
+    error.channel = m_currentChannel;
+    error.message = message;
+    emit downloadFinished(false, QString(), error);
+}
+
+/**
+ * @brief 丢弃半截安装包并重置进度状态
+ * @author chiangyang
+ */
+void UpdateManager::discardPartialDownload() {
+    m_pendingWriteBytes = 0;
+    m_writtenBytes = 0;
+    m_rangeOffset = 0;
+    ++m_writeGeneration;
+    if (!m_tempFilePath.isEmpty()) {
+        // 删除动作交给写盘线程：Windows 下主线程直接删会被打开中的句柄挡住
+        emit writeDiscardRequested(m_writeGeneration, m_tempFilePath);
+    }
+}
+
+/**
+ * @brief 判断网络错误是否值得同渠道续传
+ *
+ * 代理静默掐断、目标端主动断开、超时这类错误续传成本低（已有字节不重下）；
+ * 证书/协议类错误重试无意义，直接换渠道。
+ * @author chiangyang
+ */
+bool UpdateManager::isRetryableDownloadError(QNetworkReply::NetworkError error) {
+    switch (error) {
+    case QNetworkReply::TimeoutError:
+    case QNetworkReply::RemoteHostClosedError:
+    case QNetworkReply::TemporaryNetworkFailureError:
+    case QNetworkReply::NetworkSessionFailedError:
+    case QNetworkReply::ProxyConnectionClosedError:
+    case QNetworkReply::ProxyTimeoutError:
+    case QNetworkReply::UnknownNetworkError:
+        return true;
+    default:
+        return false;
+    }
+}
+
+/**
+ * @brief 从 Content-Range 头解析文件总大小
+ *
+ * 形如 "bytes 100-200/300"，末段为总大小；"*" 表示未知（返回 0）。
+ * @author chiangyang
+ */
+qint64 UpdateManager::contentRangeTotal(const QByteArray &contentRange) {
+    const int slash = contentRange.lastIndexOf('/');
+    if (slash < 0) {
+        return 0;
+    }
+    bool ok = false;
+    const qint64 total = contentRange.mid(slash + 1).trimmed().toLongLong(&ok);
+    return ok ? total : 0;
+}
+
+/**
  * @brief 下载超时处理
  *
- * 下载无数据传输超时则切换到下一个渠道。
+ * 无新增数据超时：优先在同渠道按已落盘偏移续传，重试用尽后切换渠道。
  * @author chiangyang
  */
 void UpdateManager::onDownloadTimeout() {
     if (!m_currentReply) return;
 
-    LOG_WARNING(QString("UpdateManager: download timeout on %1").arg(channelName(m_currentChannel)));
+    // 写盘积压达到高水位时网络会被 TCP 反压顶住，这是磁盘慢而非断网，
+    // 重新计时即可，不能误判为渠道失效
+    if (m_pendingWriteBytes >= MAX_PENDING_WRITE_BYTES) {
+        LOG_INFO("UpdateManager: write backlog full, deferring download timeout");
+        m_downloadTimer.start(DOWNLOAD_STALL_TIMEOUT_MS);
+        return;
+    }
+
+    LOG_WARNING(QString("UpdateManager: download stalled on %1: received=%2 total=%3 offset=%4")
+                    .arg(channelName(m_currentChannel))
+                    .arg(m_writtenBytes).arg(m_totalBytes).arg(m_rangeOffset));
     // 先摘下成员再 abort：abort() 同步触发 onDownloadFinished 重入 → 错误处理
     // 会切渠道并给 m_currentReply 赋新 reply，若沿用旧的"abort 后再 deleteLater"
     // 写法会把新渠道的请求误删（静默杀死重试）
@@ -514,7 +942,7 @@ void UpdateManager::onDownloadTimeout() {
     reply->abort();
     reply->deleteLater();
 
-    handleDownloadFailure(TranslationManager::instance()->get("update.downloadTimeout", "Download timed out"));
+    handleDownloadFailure(TranslationManager::instance()->get("update.downloadTimeout", "Download timed out"), true);
 }
 
 /**
@@ -602,24 +1030,50 @@ void UpdateManager::handleCheckFailure(const QString &message) {
 /**
  * @brief 下载渠道失败处理
  *
- * 有剩余渠道则切换重试，否则上报最终错误。
+ * 先在当前渠道按已落盘偏移续传，重试预算用尽后再切换渠道重试，所有渠道
+ * 都失败才上报最终错误。半截包在续传/换渠道之间保留，不再每次删掉重下。
  * @param message 失败原因（既是切换原因，也是最终错误信息）
+ * @param retryable 是否值得同渠道续传（HTTP 4xx/5xx 等直接换渠道）
  * @author chiangyang
  */
-void UpdateManager::handleDownloadFailure(const QString &message) {
-    // 流式写盘的半截文件：切渠道重下前清理
-    m_downloadFile.close();
-    QFile::remove(m_tempFilePath);
+void UpdateManager::handleDownloadFailure(const QString &message, bool retryable) {
+    m_downloadTimer.stop();
+    m_pendingWriteBytes = 0;
+    m_awaitingVerification = false;
+
+    // 总大小未知时无法判断续传偏移是否安全，清零后从头重下（openForWrite 截断）
+    if (m_totalBytes <= 0) {
+        m_writtenBytes = 0;
+        m_rangeOffset = 0;
+    }
+
+    if (retryable && m_writtenBytes > 0 && m_totalBytes > 0
+        && m_writtenBytes < m_totalBytes && m_resumeRetries < MAX_RESUME_RETRIES) {
+        ++m_resumeRetries;
+        LOG_INFO(QString("UpdateManager: retrying on %1 from byte %2 (attempt %3/%4)")
+                     .arg(channelName(m_currentChannel))
+                     .arg(m_writtenBytes)
+                     .arg(m_resumeRetries)
+                     .arg(MAX_RESUME_RETRIES));
+        startDownloadRequest();
+        return;
+    }
+
+    // 换渠道：已落盘偏移保留——同一版本的安装包由 CI 一次性产出双源分发，
+    // 字节一致，最终仍以 fileSize 校验兜底
+    m_resumeRetries = 0;
     if (advanceChannel(message)) {
         tryNextDownloadChannel();
-    } else {
-        LOG_ERROR("UpdateManager: all download channels exhausted");
-        setStatus(Status::Error);
-        ErrorInfo error;
-        error.channel = m_currentChannel;
-        error.message = message;
-        emit downloadFinished(false, QString(), error);
+        return;
     }
+
+    LOG_ERROR("UpdateManager: all download channels exhausted");
+    discardPartialDownload();
+    setStatus(Status::Error);
+    ErrorInfo error;
+    error.channel = m_currentChannel;
+    error.message = message;
+    emit downloadFinished(false, QString(), error);
 }
 
 /**
@@ -645,13 +1099,10 @@ void UpdateManager::cancel() {
     // 仅下载进行中才清理半截文件；下载已完成（ReadyToInstall 等待用户安装）时
     // 保留已校验的安装包——否则"稍后安装"场景退出应用会经析构→cancel 误删安装包
     if (m_status == Status::Downloading) {
-        if (m_downloadFile.isOpen()) {
-            m_downloadFile.close();
-        }
-        if (!m_tempFilePath.isEmpty()) {
-            QFile::remove(m_tempFilePath);
-        }
+        // 删除交给写盘线程：主线程直接删会被打开中的句柄挡住（Windows）
+        discardPartialDownload();
     }
+    m_awaitingVerification = false;
 
     setStatus(Status::Idle);
 }
