@@ -575,6 +575,13 @@ void StyleManager::applyDarkTitleBar(WId windowId) {
     }
     // [nsWindow setAppearance:appearance]，窗口外观（含标题栏）随主题切换
     ((void (*)(id, SEL, id))objc_msgSend)(nsWindow, sel_registerName("setAppearance:"), appearance);
+
+    // 保持原生标题栏不透明：液态玻璃主题下半透明背景可能使 AppKit 将标题栏
+    // 视为透明区域，导致标题文字左移与红绿灯重叠。在 setStyleSheet 之后
+    // 显式重置，防止被 QSS 应用覆盖。所有主题下标题栏不透明均合理。
+    ((void (*)(id, SEL, BOOL))objc_msgSend)(nsWindow,
+                                            sel_registerName("setTitlebarAppearsTransparent:"),
+                                            NO);
 #else
     Q_UNUSED(windowId);
 #endif

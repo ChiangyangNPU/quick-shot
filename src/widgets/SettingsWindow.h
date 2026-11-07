@@ -124,6 +124,18 @@ protected:
     void showEvent(QShowEvent *event) override;
 
     /**
+     * @brief 自绘背景
+     *
+     * 液态玻璃主题下自绘玻璃面板外观（底色 + 顶部 sheen + 高光描边）。
+     * macOS 下带原生标题栏的窗口不能使用半透明 QSS 背景，否则会触发
+     * Qt 自动启用透明窗口处理，导致标题文字左移与红绿灯重叠，故采用
+     * 不透明背景 + paintEvent 自绘玻璃外观的折中方案。
+     * @param event 绘制事件
+     * @author chiangyang
+     */
+    void paintEvent(QPaintEvent *event) override;
+
+    /**
      * @brief 获取动画高度（Q_PROPERTY的READ方法）
      * @return 当前动画高度
      * @author chiangyang
