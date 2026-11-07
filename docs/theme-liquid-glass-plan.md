@@ -1,8 +1,13 @@
 # 液态玻璃主题设计方案
 
-> 状态：待评审（未实施）
+> 状态：已实施（v0.1.7）
 > 适用范围：QuickShot 桌面端设置窗、工具栏、提示条、历史窗、OCR 结果窗
 > 不适用：截图遮罩、贴图窗口、宠物窗口（理由见 §5）
+>
+> **实施评审结论**（相对初版方案的变更）：
+> 1. 明暗适配：`liquid` 不再固定深色玻璃，而是**跟随系统明暗**实时解析浅色/深色两套玻璃（`themeMode()` 语义改为"外观"，liquid 时取 `QStyleHints::colorScheme()`）——所有既有深浅分支零改动生效；
+> 2. 原生虚化（原 P2）并入本次交付：macOS `NSVisualEffectView` 全形态支持；Windows 仅大面板走 Win11 官方 DWM 亚克力（Win10 尽力用非公开接口），**无边框悬浮工具条在 Windows 上一律不做原生虚化**（layered 窗口与 DWM backdrop 互斥），由色板加浓兜底；
+> 3. 内嵌子控件（截图/录屏工具栏、控制条）玻璃 = 取样父控件绘制内容做降采样磨砂模糊（`GlassPainter::sampleParentBackdrop`），纯 Qt 实现跨平台一致，观感即"对截图内容磨砂"，与 iOS 26 控件玻璃一致。
 
 ## 1. 目标与边界
 
@@ -90,42 +95,34 @@
 
 | 平台 | 背景虚化 | 实现 | 观感 |
 |---|---|---|---|
-| macOS 12+ | 支持 | `NSVisualEffectView`（material `underWindowBackground`、`blendingMode behindWindow`）垫底，窗口 `WA_TranslucentBackground` | 接近系统原版 |
-| Windows 11 22621+ | 支持 | `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW)`，Win11 22H2 前用 `SetWindowCompositionAttribute`（非公开） | 接近磨砂 |
-| Windows 10 | 部分 | 仅非公开 `SetWindowCompositionAttribute` Acrylic；不稳定，默认关闭 | 磨砂偏灰 |
-| Linux | 不支持 | 无系统合成器接口，回退为"纯半透明 + 深色兜底" | 磨砂渐变卡片 |
+| macOS 12+ | 支持 | `NSVisualEffectView`（深色 HUD 用 `HUDWindow`、浅色用 `Popover`，面板用 `UnderWindowBackground`；`blendingMode behindWindow`）垫底，`kCACornerCurveContinuous` 连续圆角 | 接近系统原版 |
+| Windows 11 22621+ | 大面板支持 | `DwmSetWindowAttribute(DWMWA_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW)` + `DwmExtendFrameIntoClientArea` + 系统圆角（悬浮工具条是 layered 窗口，与 DWM backdrop 互斥，不做原生虚化） | 接近磨砂 |
+| Windows 10 | 部分 | 仅大面板尝试非公开 `SetWindowCompositionAttribute` Acrylic；失败即纯色玻璃 | 磨砂偏灰 |
+| Linux | 不支持 | 无系统合成器接口，回退为"纯色玻璃" | 玻璃渐变卡片 |
 
-降级策略：启动时探测能力，不可用则玻璃面自动使用不透明深蓝灰底（P1 的兜底值），保证可读性；在设置页对应主题项下加一行灰色说明文字（如"当前系统不支持背景虚化，已使用纯色玻璃"），不做弹窗。
+降级策略：`GlassBackdrop::blurSupported(Surface)` 按平台×形态探测（大面板/悬浮分开），`StyleManager::liquidPalette()` 据此对无虚化形态的玻璃底色加浓 alpha（≈232）保证可读性；单窗口挂载失败（`attach` 返回 false）时 `glassPanelColor()` 再做单窗口级兜底。不做弹窗提示。
 
-## 7. 分阶段
+## 7. 实施清单（已完成）
 
-### P1：玻璃视觉（不接系统虚化）
+- 颜色表新增 liquid 套（深浅两套玻璃）+ 主题三值化（`s_theme`="liquid"）+ 设置页三选项 + 六语言（`style.theme.liquid`）
+- 外观解析：`StyleManager::systemDark()/syncSystemAppearance()`（`QStyleHints::colorScheme()`，Unknown 回落调色板亮度），`themeMode()` 对 liquid 返回系统外观；`main.cpp` 连接 `colorSchemeChanged` 实现实时跟随
+- 自绘玻璃：`src/widgets/GlassPainter.*`（玻璃底色 + 顶部 sheen + 上亮下暗内描边 + 1/8 降采样磨砂模糊 + `sampleParentBackdrop` 父控件取样）
+- 平台桥：`src/platform/GlassBackdrop.*`（mac `NSVisualEffectView` / Win11 DWM 亚克力 + Win10 非公开接口兜底 / 其他 noop）
+- 窗口接入：`BaseToolBar`（paintEvent 玻璃化 + 顶层 attach + 子工具栏换 `GlassPanelWidget`）、`RecordingControlWindow`、`ScrollCaptureSession` 提示条、`SettingsWindow::updateWindowBackground`、`HistoryWindow::updateWindowColors`、`OcrResultDialog`
+- alpha 修复：`StyleManager::cssColor()` 取代窗口底色处的 `QColor::name()`（后者丢 alpha，玻璃透明度会失效）
+- 单测：`tests/StyleManagerTest.cpp` 新增 liquid 三用例（setTheme 兼容回落、applyTheme 玻璃色板、refreshLiquidPalette 幂等）
 
-- 颜色表新增 liquid 套 + 主题三值化 + 设置页三选项 + 六语言
-- QSS 半透明/圆角/描边改造
-- 自绘面板 helper（圆角 + 描边 + 高光 + 阴影）
-- 验收：三主题切换无残留；玻璃面在浅色/深色/彩色壁纸下文字均可读；贴图、截图遮罩、宠物渲染逐像素无变化（沿用现有 18 样式预览对比脚本）
+## 8. 风险与验证状态
 
-### P2：系统背景虚化
-
-- macOS `NSVisualEffectView` 桥接（项目已有 `objc_msgSend` 先例）
-- Win11 DWM backdrop；Win10/Linux 走降级
-- 仅对设置窗、工具栏、提示条启用，历史窗/OCR 窗按性能实测决定
-- 验收：macOS 设置窗背后可见真实虚化；关闭能力后自动落回 P1 外观；窗口移动/缩放无闪白
-
-### P3：不做
-
-## 8. 风险
-
-1. **性能**：系统虚化本身开销可控，风险在自绘阴影。滚动列表若逐行画阴影会掉帧，方案要求阴影只画在静态容器上，且用预渲染位图而非 `QGraphicsDropShadowEffect`。
+1. **性能**：系统虚化开销可控；自绘磨砂为 1/8 降采样（显示/移动时才重画），无逐行阴影。未采用 `QGraphicsDropShadowEffect`。
 2. **半透明窗口与截图工具叠加**：设置窗开启玻璃时若背后是截图遮罩，虚化结果无意义；不做特殊处理，接受该场景观感下降。
-3. **QSS 与自绘混用**：QSS 的 `background-color` 半透明在 `WA_TranslucentBackground` 下依赖窗口属性，部分已有窗口是 Frameless 不透明窗口，需要逐个确认属性，否则半透明会变黑底。
-4. **配色回归**：颜色表 20 项被多处直接读取，liquid 套若 alpha 过高会导致文字对比度不足，需按 WCAG AA（正文 4.5:1）逐项核对。
-5. **测试覆盖**：14 项单测基本与视觉无关，本主题主要靠人工回归 + 截图对比脚本；需在 P1 交付时附三种壁纸下的实拍截图清单。
+3. **Windows 待实机验证**：Win11 DWM 亚克力 + 系统圆角、Win10 非公开接口、DPI 缩放下观感——CI 构建通过后需实机目检；失败场景自动落纯色玻璃兜底，不黑屏。
+4. **配色回归**：颜色表 21 项被多处直接读取，玻璃色板 alpha 需按 WCAG AA（正文 4.5:1）核对；`MessageBox` 等不接虚化的窗口由 `getMessageBoxStyle` 内部抬升至近实色。
+5. **测试覆盖**：主题管线由单测覆盖（liquid 三用例）；视觉观感靠人工回归——交付附浅色/深色/彩色壁纸三种背景下的实拍截图清单。
 
-## 9. 待评审决策点
+## 9. 决策记录
 
-1. 玻璃主题是否跟随系统浅/深自动切换两套玻璃（方案默认：不跟随，`liquid` 固定深色玻璃）？
-2. 是否接受 Windows 10 / Linux 的"纯色兜底"观感差异？
-3. 历史窗、OCR 结果窗是否纳入玻璃范围（默认纳入 P1，P2 虚化按性能再定）？
-4. P2 是否纳入本次迭代？
+1. 玻璃主题跟随系统浅/深自动切换两套玻璃（**已采纳**，替代初版"固定深色"默认）。
+2. Windows 10 / Linux 的"纯色兜底"观感差异：**接受**（可读性优先）。
+3. 历史窗、OCR 结果窗纳入玻璃范围（**已纳入**）。
+4. 原生虚化（原 P2）**并入本次迭代交付**。

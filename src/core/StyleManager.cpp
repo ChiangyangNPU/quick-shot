@@ -4,13 +4,16 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFile>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QPainter>
+#include <QPalette>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QSpinBox>
 #include <QStyle>
+#include <QStyleHints>
 #include <QAbstractItemView>
 #include <QStyledItemDelegate>
 #include <QTimer>
@@ -22,6 +25,7 @@
 #include <algorithm>
 
 #include "Logger.h"
+#include "../platform/GlassBackdrop.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -45,6 +49,59 @@ int StyleManager::s_defaultPenWidth = 5;                                      //
 int StyleManager::s_defaultFontSize = 28;                                     ///< 文本默认字号
 int StyleManager::s_defaultEraserWidth = 5;                                   ///< 橡皮擦默认粗细
 int StyleManager::s_defaultMosaicSize = 5;                                    ///< 马赛克默认大小
+
+// ============================================================
+// 系统明暗外观检测（液态玻璃主题的外观解析来源）
+// ============================================================
+namespace {
+/**
+ * @brief 从系统读取当前明暗外观
+ *
+ * 优先取 QStyleHints::colorScheme()（Qt 6.5+，macOS 跟随系统外观、
+ * Windows 跟随"使用深色模式"注册表项）；平台未上报（Unknown）时
+ * 回退为按应用调色板窗口色亮度判断。
+ * @author chiangyang
+ */
+bool detectSystemDark() {
+    const Qt::ColorScheme scheme = QGuiApplication::styleHints()->colorScheme();
+    if (scheme != Qt::ColorScheme::Unknown) {
+        return scheme == Qt::ColorScheme::Dark;
+    }
+    return QGuiApplication::palette().color(QPalette::Window).lightness() < 128;
+}
+} // namespace
+
+/**
+ * @brief 系统明暗外观的可写快照（惰性初始化，syncSystemAppearance 时更新）
+ * @author chiangyang
+ */
+static bool& systemDarkStore() {
+    static bool s_dark = detectSystemDark();
+    return s_dark;
+}
+
+/**
+ * @brief 获取系统当前明暗外观（惰性初始化，首次调用时检测）
+ * @author chiangyang
+ */
+bool StyleManager::systemDark() {
+    return systemDarkStore();
+}
+
+/**
+ * @brief 从系统读取明暗外观并更新内部状态
+ * @return 外观是否发生变化
+ * @author chiangyang
+ */
+bool StyleManager::syncSystemAppearance() {
+    const bool dark = detectSystemDark();
+    bool &store = systemDarkStore();
+    const bool changed = (store != dark);
+    if (changed) {
+        store = dark;
+    }
+    return changed;
+}
 
 // 默认颜色
 const QColor StyleManager::DEFAULT_RECORD_BORDER_COLOR = QColor("#4CAF50");   ///< 录屏框默认颜色
@@ -75,8 +132,8 @@ const QString StyleManager::DEFAULT_THEME = "light";                            
  * @brief 颜色转 QSS 字符串（保留 alpha 通道）
  * @param c 颜色
  * @return alpha<255 时输出 rgba(r,g,b,a)，否则输出 #rrggbb
- * @note QColor::name() 会丢弃 alpha，深色主题色板大量依赖半透明色，
- *       所有拼 QSS 处必须经此工具，否则深色样式串失效
+ * @note QColor::name() 会丢弃 alpha，深色主题与液态玻璃色板大量依赖
+ *       半透明色，所有拼 QSS 处必须经此工具，否则样式串透明度失效
  * @author chiangyang
  */
 static QString qssColor(const QColor &c) {
@@ -85,6 +142,34 @@ static QString qssColor(const QColor &c) {
             .arg(c.red()).arg(c.green()).arg(c.blue()).arg(c.alpha());
     }
     return c.name();
+}
+
+/**
+ * @brief 颜色转 QSS 字符串（保留 alpha 通道，公共入口）
+ * @note 供窗口/容器 setStyleSheet 处使用（HistoryWindow/SettingsWindow/
+ *       OcrResultDialog 等原先用 name() 会丢 alpha 的位置）
+ * @author chiangyang
+ */
+QString StyleManager::cssColor(const QColor &c) {
+    return qssColor(c);
+}
+
+/**
+ * @brief 读取玻璃面板底色（无虚化时加浓 alpha 兜底）
+ * @param id 颜色 ID
+ * @param blurBehind 该窗口背后是否有模糊（原生虚化已挂载，或内嵌形态
+ *        可取样父控件自绘模糊）
+ * @return 玻璃底色；blurBehind=false 时 alpha 抬升到至少 232（纯色玻璃）
+ * @note 液态玻璃色板已按平台形态整体加浓，本方法是单窗口级别的精确
+ *       兜底：同平台下个别窗口挂载失败（如透明属性冲突）时不至于透底
+ * @author chiangyang
+ */
+QColor StyleManager::glassPanelColor(StyleColorId id, bool blurBehind) {
+    QColor c = color(id);
+    if (!blurBehind) {
+        c.setAlpha(qMax(c.alpha(), 232));
+    }
+    return c;
 }
 
 // ============ 颜色存取（表驱动） ============
@@ -302,6 +387,68 @@ static std::array<QColor, StyleManager::kStyleColorCount> themePalette(bool dark
 }
 
 /**
+ * @brief 液态玻璃色板（按 StyleColorId 枚举顺序返回 21 项预设颜色）
+ * @param darkAppearance true=深色玻璃（系统深色外观），false=浅色玻璃
+ * @return 21 项颜色的数组
+ * @note 玻璃观感 = 系统原生背景虚化（GlassBackdrop）+ 低不透明度玻璃底色。
+ *       有原生模糊时底色 alpha 取低值让虚化透出；无原生模糊（Win10 降级/
+ *       Linux）时提高 alpha 保证文字可读。截屏/录屏边框、角手柄、关闭按钮
+ *       等屏幕叠加物/红色语义不随主题变化，保持默认色。
+ * @author chiangyang
+ */
+static std::array<QColor, StyleManager::kStyleColorCount> liquidPalette(bool darkAppearance) {
+    using Id = StyleManager::StyleColorId;
+    std::array<QColor, StyleManager::kStyleColorCount> palette{};
+    const auto& table = StyleManager::colorSettingTable();
+    for (int i = 0; i < StyleManager::kStyleColorCount; ++i) {
+        palette[static_cast<size_t>(i)] = table[static_cast<size_t>(i)].defaultColor;
+    }
+
+    // 能力按形态探测：悬浮工具条（ToolbarBg 等）与大面板（TabWidgetBg）
+    // 的虚化能力独立（Windows 悬浮 layered 窗口无 DWM backdrop，见
+    // GlassBackdrop_win 文件头），无虚化的形态加浓底色保证可读性
+    const bool floatBlur = GlassBackdrop::blurSupported(GlassBackdrop::Surface::Floating);
+    const bool panelBlur = GlassBackdrop::blurSupported(GlassBackdrop::Surface::Panel);
+    if (darkAppearance) {
+        // 深色玻璃：暗面板 + 半透明白按钮（在原生模糊上呈"黑色磨砂玻璃"）
+        palette[static_cast<size_t>(Id::ToolbarBg)]       = QColor(24, 24, 28, floatBlur ? 150 : 226);
+        palette[static_cast<size_t>(Id::SubToolbarBg)]    = QColor(24, 24, 28, floatBlur ? 140 : 226);
+        palette[static_cast<size_t>(Id::RecordControlBg)] = QColor(24, 24, 28, floatBlur ? 150 : 226);
+        palette[static_cast<size_t>(Id::ToolbarBtn)]            = QColor(255, 255, 255, 45);
+        palette[static_cast<size_t>(Id::ToolbarText)]           = QColor("#f2f2f2");
+        palette[static_cast<size_t>(Id::ToolbarButtonHover)]    = QColor(255, 255, 255, 72);
+        palette[static_cast<size_t>(Id::ToolbarButtonDisabled)] = QColor(255, 255, 255, 22);
+        // ToolbarButtonChecked 保留 #0078d7（蓝色高亮清晰）
+        palette[static_cast<size_t>(Id::SettingButtonBg)]       = QColor(255, 255, 255, 45);
+        palette[static_cast<size_t>(Id::SettingButtonText)]     = QColor("#f2f2f2");
+        palette[static_cast<size_t>(Id::TabWidgetBg)]           = QColor(24, 24, 30, panelBlur ? 200 : 238);
+        palette[static_cast<size_t>(Id::TabButtonBg)]           = QColor(255, 255, 255, 30);
+        palette[static_cast<size_t>(Id::TabButtonText)]         = QColor("#f2f2f2");
+        palette[static_cast<size_t>(Id::TabButtonSelectedBg)]   = QColor(255, 255, 255, 52);
+        palette[static_cast<size_t>(Id::TabButtonSelectedText)] = QColor("#ffffff");
+    } else {
+        // 浅色玻璃：亮面板 + 白色按钮（在原生模糊上呈"白色磨砂玻璃"）
+        palette[static_cast<size_t>(Id::ToolbarBg)]       = QColor(255, 255, 255, floatBlur ? 125 : 232);
+        palette[static_cast<size_t>(Id::SubToolbarBg)]    = QColor(255, 255, 255, floatBlur ? 118 : 232);
+        palette[static_cast<size_t>(Id::RecordControlBg)] = QColor(255, 255, 255, floatBlur ? 125 : 232);
+        palette[static_cast<size_t>(Id::ToolbarBtn)]            = QColor(255, 255, 255, 165);
+        palette[static_cast<size_t>(Id::ToolbarText)]           = QColor("#1d1d1f");
+        palette[static_cast<size_t>(Id::ToolbarButtonHover)]    = QColor(255, 255, 255, 215);
+        palette[static_cast<size_t>(Id::ToolbarButtonDisabled)] = QColor(255, 255, 255, 120);
+        palette[static_cast<size_t>(Id::SettingButtonBg)]       = QColor(255, 255, 255, 165);
+        palette[static_cast<size_t>(Id::SettingButtonText)]     = QColor("#1d1d1f");
+        palette[static_cast<size_t>(Id::TabWidgetBg)]           = QColor(250, 250, 253, panelBlur ? 205 : 242);
+        palette[static_cast<size_t>(Id::TabButtonBg)]           = QColor(255, 255, 255, 150);
+        palette[static_cast<size_t>(Id::TabButtonText)]         = QColor("#1d1d1f");
+        palette[static_cast<size_t>(Id::TabButtonSelectedBg)]   = QColor("#ffffff");
+        palette[static_cast<size_t>(Id::TabButtonSelectedText)] = QColor("#000000");
+    }
+    // 屏幕叠加物/红色语义不随主题：CaptureBorder/RecordBorder/HandleCircle/
+    // HandleClose/CloseButtonBg/CloseButtonHover 保持默认色
+    return palette;
+}
+
+/**
  * @brief 获取当前主题标识
  * @author chiangyang
  */
@@ -310,19 +457,51 @@ QString StyleManager::theme() {
 }
 
 /**
+ * @brief 当前主题是否为液态玻璃
+ * @author chiangyang
+ */
+bool StyleManager::isLiquid() {
+    return (s_theme == QLatin1String("liquid"));
+}
+
+/**
  * @brief 设置当前主题标识（仅更新标量，不写配置、不铺色板）
  * @author chiangyang
  */
 void StyleManager::setTheme(const QString &theme) {
-    s_theme = (theme == QLatin1String("dark")) ? QStringLiteral("dark") : DEFAULT_THEME;
+    if (theme == QLatin1String("dark")) {
+        s_theme = QStringLiteral("dark");
+    } else if (theme == QLatin1String("liquid")) {
+        s_theme = QStringLiteral("liquid");
+    } else {
+        s_theme = DEFAULT_THEME;
+    }
 }
 
 /**
- * @brief 获取当前主题模式枚举
+ * @brief 获取当前外观模式枚举（液态玻璃按系统明暗解析）
  * @author chiangyang
  */
 StyleManager::ThemeMode StyleManager::themeMode() {
+    if (isLiquid()) {
+        return systemDark() ? ThemeMode::Dark : ThemeMode::Light;
+    }
     return (s_theme == QLatin1String("dark")) ? ThemeMode::Dark : ThemeMode::Light;
+}
+
+/**
+ * @brief 按当前系统外观重铺液态玻璃色板（运行时刷新，不持久化）
+ * @author chiangyang
+ */
+void StyleManager::refreshLiquidPalette() {
+    if (!isLiquid()) {
+        return;
+    }
+    const auto palette = liquidPalette(systemDark());
+    const auto& table = colorSettingTable();
+    for (int i = 0; i < kStyleColorCount; ++i) {
+        table[static_cast<size_t>(i)].setter(palette[static_cast<size_t>(i)]);
+    }
 }
 
 /**
@@ -330,10 +509,13 @@ StyleManager::ThemeMode StyleManager::themeMode() {
  * @author chiangyang
  */
 void StyleManager::applyTheme(const QString &theme, ConfigManager* cm) {
-    const bool dark = (theme == QLatin1String("dark"));
-    s_theme = dark ? QStringLiteral("dark") : DEFAULT_THEME;
+    const bool liquid = (theme == QLatin1String("liquid"));
+    // liquid 的深浅随系统外观实时解析；light/dark 保持原二值语义
+    const bool dark = liquid ? systemDark() : (theme == QLatin1String("dark"));
+    s_theme = liquid ? QStringLiteral("liquid")
+                     : (dark ? QStringLiteral("dark") : DEFAULT_THEME);
 
-    const auto palette = themePalette(dark);
+    const auto palette = liquid ? liquidPalette(dark) : themePalette(dark);
     const auto& table = colorSettingTable();
     for (int i = 0; i < kStyleColorCount; ++i) {
         const auto& s = table[static_cast<size_t>(i)];
@@ -430,6 +612,11 @@ void StyleManager::initFromConfig(ConfigManager* cm) {
 
     // 主题标量（颜色键已被上方循环持久化覆盖，天然恢复，无需按主题重铺色板）
     setTheme(cm->value("style/theme", DEFAULT_THEME).toString());
+
+    // 液态玻璃的深浅随系统外观实时变化：持久化的颜色可能属于上次的
+    // 系统外观（如上次是深色玻璃、本次启动时系统已切浅色），此处按
+    // 当前系统外观重铺，保证运行态与外观一致（持久化键不动）
+    refreshLiquidPalette();
 }
 
 namespace {
@@ -637,10 +824,51 @@ QString StyleManager::loadGlobalStyleSheet() {
     }
     QString sheet = QString::fromUtf8(qss.readAll());
 
-    // 占位符按主题填值（浅色=原硬编码值；深色=HUD 配套色）
+    // 占位符按主题填值（浅色=原硬编码值；深色=HUD 配套色；
+    // 液态玻璃=玻璃半透明配套色，深浅再按系统外观二分）
     const bool dark = (themeMode() == ThemeMode::Dark);
-    const QHash<QString, QString> tokens = dark
-        ? QHash<QString, QString>{
+    const QHash<QString, QString> tokens = isLiquid()
+        ? (dark ? QHash<QString, QString>{
+            { "@textColor",         "#f2f2f2" },
+            { "@groupBoxBorder",    "rgba(255,255,255,60)" },
+            { "@inputBorder",       "rgba(255,255,255,85)" },
+            { "@inputBorderFocus",  "rgba(255,255,255,165)" },
+            { "@scrollBg",          "rgba(255,255,255,26)" },
+            { "@scrollHandle",      "rgba(255,255,255,90)" },
+            { "@scrollHandleHover", "rgba(255,255,255,135)" },
+            { "@sliderGroove",      "rgba(255,255,255,45)" },
+            { "@sliderHandle",      "rgba(230,232,238,200)" },
+            { "@colorButtonBorder", "rgba(255,255,255,70)" },
+            { "@viewBg",            "rgba(30,30,36,160)" },
+            { "@separatorColor",    "rgba(255,255,255,60)" },
+            { "@checkBoxBorder",    "rgba(255,255,255,130)" },
+            { "@checkBoxBg",        "rgba(255,255,255,35)" },
+            { "@checkBoxBorderHover", "rgba(255,255,255,200)" },
+            { "@checkBoxChecked",   "#0078d7" },
+            { "@checkBoxDisabledBorder", "rgba(255,255,255,40)" },
+            { "@checkBoxDisabledBg", "rgba(255,255,255,12)" },
+        }
+        : QHash<QString, QString>{
+            { "@textColor",         "#1d1d1f" },
+            { "@groupBoxBorder",    "rgba(0,0,0,40)" },
+            { "@inputBorder",       "rgba(0,0,0,62)" },
+            { "@inputBorderFocus",  "rgba(0,0,0,140)" },
+            { "@scrollBg",          "rgba(0,0,0,22)" },
+            { "@scrollHandle",      "rgba(0,0,0,70)" },
+            { "@scrollHandleHover", "rgba(0,0,0,105)" },
+            { "@sliderGroove",      "rgba(0,0,0,42)" },
+            { "@sliderHandle",      "#5a5a60" },
+            { "@colorButtonBorder", "rgba(0,0,0,45)" },
+            { "@viewBg",            "rgba(255,255,255,150)" },
+            { "@separatorColor",    "rgba(0,0,0,45)" },
+            { "@checkBoxBorder",    "rgba(0,0,0,95)" },
+            { "@checkBoxBg",        "rgba(255,255,255,190)" },
+            { "@checkBoxBorderHover", "rgba(0,0,0,150)" },
+            { "@checkBoxChecked",   "#0078d7" },
+            { "@checkBoxDisabledBorder", "rgba(0,0,0,45)" },
+            { "@checkBoxDisabledBg", "rgba(255,255,255,110)" },
+        })
+        : (dark ? QHash<QString, QString>{
             { "@textColor",         "#f2f2f2" },
             { "@groupBoxBorder",    "rgba(255,255,255,55)" },
             { "@inputBorder",       "rgba(255,255,255,80)" },
@@ -679,7 +907,7 @@ QString StyleManager::loadGlobalStyleSheet() {
             { "@checkBoxChecked",   "#0078d7" },
             { "@checkBoxDisabledBorder", "#c0c0c0" },
             { "@checkBoxDisabledBg", "#f0f0f0" },
-        };
+        });
     // 按 token 长度降序替换：@inputBorder 是 @inputBorderFocus 的前缀、
     // @checkBoxBorder 是 @checkBoxBorderHover 的前缀，QHash 迭代顺序不定，
     // 短 token 先替换会吞掉长 token 的前缀，导致 focus/hover 规则偶发失效
@@ -1049,6 +1277,10 @@ QString StyleManager::getSettingsComboBoxStyle() {
 
 QString StyleManager::getMessageBoxStyle() {
         const bool dark = (themeMode() == ThemeMode::Dark);
+        // 消息框是不透明系统窗口、不接原生背景虚化：液态玻璃的半透明
+        // TabWidgetBg 直接铺上去会透出系统默认底色，这里抬升到近实色
+        QColor boxBg = color(StyleColorId::TabWidgetBg);
+        boxBg.setAlpha(qMax(boxBg.alpha(), 244));
         return QString(
             "QMessageBox { background-color: %1; }"
             "QMessageBox QLabel { color: %6; }"
@@ -1057,7 +1289,7 @@ QString StyleManager::getMessageBoxStyle() {
             "QMessageBox QPushButton:hover { background-color: %4; }"
             "QMessageBox QPushButton:pressed { background-color: %4; }"
             "QMessageBox QPushButton:disabled { color: %2; background-color: %5; }"
-        ).arg(qssColor(color(StyleColorId::TabWidgetBg)))
+        ).arg(qssColor(boxBg))
          .arg(qssColor(color(StyleColorId::SettingButtonText)))
          .arg(qssColor(color(StyleColorId::SettingButtonBg)))
          .arg(qssColor(color(StyleColorId::ToolbarButtonHover)))

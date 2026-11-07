@@ -10,6 +10,9 @@
 #include <QAbstractItemView>
 #include <QTimer>
 #include "StyleManager.h"
+#include "GlassPainter.h"
+#include "GlassPanelWidget.h"
+#include "../platform/GlassBackdrop.h"
 #include "../core/ConfigManager.h"
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
@@ -81,6 +84,13 @@ QHBoxLayout *BaseToolBar::initShell(Qt::WindowFlags flags) {
     setStyleSheet(StyleManager::getToolbarBackgroundStyle());
     setCursor(Qt::ArrowCursor);
 
+    // 顶层形态（贴图标注栏）在液态玻璃主题下挂原生背景虚化；
+    // 内嵌形态（截图/录屏工具栏）由 paintEvent 取样父控件模糊
+    if (isWindow() && StyleManager::isLiquid()) {
+        m_glassAttached = GlassBackdrop::attach(this, {GlassBackdrop::Material::HUD,
+                                                       static_cast<qreal>(StyleManager::toolbarCornerRadius(this))});
+    }
+
     m_mainLayout = new QVBoxLayout(this);
     m_mainLayout->setContentsMargins(0, 0, 0, 0);
     m_mainLayout->setSpacing(0);
@@ -149,11 +159,15 @@ BaseToolBar::BaseToolBar(QWidget *parent) : QWidget(parent) {
 // ============================================================
 
 /**
- * @brief 绘制圆角矩形背景
+ * @brief 绘制圆角矩形背景（液态玻璃主题下为玻璃面板）
  *
  * 当窗口设置了 WA_TranslucentBackground 后，QSS 的 background-color 不会自动绘制，
  * 导致圆角矩形没有底色。这里用 QPainter 主动绘制圆角矩形背景，
  * 既保证圆角外区域透明（不露出直角底层），又保证圆角内有底色。
+ *
+ * 液态玻璃主题：顶层窗口（贴图标注栏）由 GlassBackdrop 的系统虚化垫底，
+ * 这里只画玻璃叠加层；内嵌子控件（截图/录屏工具栏）取样父控件自身绘制
+ * 内容做磨砂模糊（玻璃即"对截图内容虚化"，观感对齐 iOS 26 控件）。
  *
  * 半径与 QSS 中的 border-radius: 0.3em 一致，按当前字体 em 高度换算。
  * @param event 绘制事件
@@ -163,10 +177,24 @@ void BaseToolBar::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
-    painter.setPen(Qt::NoPen);
-    painter.setBrush(StyleManager::getToolbarBgColor());
     const int radius = StyleManager::toolbarCornerRadius(this);
-    painter.drawRoundedRect(rect(), radius, radius);
+
+    if (!StyleManager::isLiquid()) {
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(StyleManager::getToolbarBgColor());
+        painter.drawRoundedRect(rect(), radius, radius);
+        return;
+    }
+
+    // 模糊底可用性：内嵌形态取样父控件恒可得；顶层形态取决于原生虚化挂载
+    const bool blurBehind = !isWindow() || m_glassAttached;
+    QPixmap backdrop;
+    if (!isWindow()) {
+        backdrop = GlassPainter::sampleParentBackdrop(this);
+    }
+    GlassPainter::paintGlassPanel(&painter, QRectF(rect()), radius,
+                                  StyleManager::glassPanelColor(StyleManager::StyleColorId::ToolbarBg, blurBehind),
+                                  backdrop);
 }
 
 // ============================================================
@@ -353,7 +381,11 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
     LOG_INFO(QString("Build sub-toolbar variant %1").arg(v));
 
     // ---------- 窗口外壳 ----------
-    data.window = new QWidget(parentWidget());
+    // GlassPanelWidget 统一底板绘制：浅色/深色主题为纯色圆角（原 QSS 行为），
+    // 液态玻璃主题内嵌时取样父控件模糊、顶层时由原生虚化垫底（refreshGlassBackdrop）
+    auto *panel = new GlassPanelWidget(parentWidget());
+    data.window = panel;
+    panel->setGlassMaterial(GlassBackdrop::Material::HUD);
     if (parentWidget() == nullptr) {
         // Pin 场景：独立顶层窗口 + 置顶 + 透明背景（圆角需要）
         // NoDropShadowWindowHint：子工具栏紧贴主工具栏下边缘，而 macOS 顶层窗口
@@ -363,14 +395,12 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
                                     | Qt::NoDropShadowWindowHint);
         data.window->setAttribute(Qt::WA_TranslucentBackground, true);
     } else {
-        // 截图/录屏场景：父窗口内嵌子控件
+        // 截图/录屏场景：父窗口内嵌子控件（无透明背景属性，paintEvent 透明区域自然透出父控件）
         data.window->setWindowFlags(Qt::Widget | Qt::FramelessWindowHint);
-        data.window->setAttribute(Qt::WA_TranslucentBackground, false);
     }
-    data.window->setAttribute(Qt::WA_StyledBackground, true);
-    data.window->setStyleSheet(StyleManager::getSubToolbarStyle());
     data.window->setCursor(Qt::ArrowCursor);
     data.window->installEventFilter(this);
+    panel->refreshGlassBackdrop();
 
     data.layout = new QHBoxLayout(data.window);
     data.layout->setContentsMargins(5, 2, 5, 2);
@@ -804,18 +834,30 @@ QWidget *BaseToolBar::getSubToolbarWindow() const {
 /**
  * @brief 更新背景样式
  *
- * 遍历全部已构建的子工具栏变体刷新窗口背景与形状下拉框样式，
- * 主题切换后未激活的变体再次弹出时也呈现新主题配色
- * （subToolbarWindow 是激活变体窗口的别名，循环已覆盖）。
+ * 液态玻璃主题下先重挂自身/子工具栏变体的原生背景虚化（顶层形态，
+ * 主题或系统明暗变化后材质随外观刷新），再遍历全部已构建的子工具栏
+ * 变体重绘背景与形状下拉框样式；主题切换后未激活的变体再次弹出时
+ * 也呈现新主题配色（subToolbarWindow 是激活变体窗口的别名，循环已覆盖）。
  * @author chiangyang
  */
 void BaseToolBar::updateBackgroundStyle() {
+    if (isWindow()) {
+        if (StyleManager::isLiquid()) {
+            m_glassAttached = GlassBackdrop::attach(this, {GlassBackdrop::Material::HUD,
+                                                           static_cast<qreal>(StyleManager::toolbarCornerRadius(this))});
+        } else {
+            m_glassAttached = false;
+            GlassBackdrop::detach(this);
+        }
+    }
+    update();
     for (auto &data : m_subVariants) {
         if (!data.built) {
             continue;
         }
-        if (data.window) {
-            data.window->setStyleSheet(StyleManager::getSubToolbarStyle());
+        if (auto *panel = qobject_cast<GlassPanelWidget *>(data.window)) {
+            panel->refreshGlassBackdrop();
+        } else if (data.window) {
             data.window->update();
         }
         if (data.shapeCombo) {

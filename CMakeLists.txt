@@ -191,6 +191,7 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/core/ConfigManager.h
         src/core/SecretStore.cpp
         src/core/SecretStore.h
+        src/platform/GlassBackdrop.h
         src/core/DisplayInfo.cpp
         src/core/DisplayInfo.h
         src/core/Hunter.cpp
@@ -231,6 +232,10 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/widgets/BaseToolBar.h
         src/widgets/PinAnnotationToolBar.cpp
         src/widgets/PinAnnotationToolBar.h
+        src/widgets/GlassPainter.cpp
+        src/widgets/GlassPainter.h
+        src/widgets/GlassPanelWidget.cpp
+        src/widgets/GlassPanelWidget.h
         src/widgets/OverlayTextEdit.cpp
         src/widgets/OverlayTextEdit.h
         src/widgets/FloatingWidget.cpp
@@ -360,15 +365,18 @@ add_executable(QuickShot ${WIN32_OPTION}
 if (WIN32)
     target_sources(QuickShot PRIVATE
         src/recording/platform/ScreenRecorder_win.cpp
+        src/platform/GlassBackdrop_win.cpp
     )
 elseif (APPLE)
     target_sources(QuickShot PRIVATE
         src/recording/platform/ScreenRecorder_mac.cpp
         src/recording/platform/ScreenRecorder_mac_helper.mm
+        src/platform/GlassBackdrop_mac.mm
     )
 elseif (UNIX AND NOT APPLE)
     target_sources(QuickShot PRIVATE
         src/recording/platform/ScreenRecorder_linux.cpp
+        src/platform/GlassBackdrop_other.cpp
     )
 endif()
 target_link_libraries(QuickShot

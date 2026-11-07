@@ -4,6 +4,7 @@
 #include "../core/TranslationManager.h"
 #include "../shortcut/ShortcutTypes.h"
 #include "../translate/TranslateService.h"
+#include "../platform/GlassBackdrop.h"
 #ifdef ENABLE_OCR
 #include "../ocr/OcrEngine.h"
 #endif
@@ -257,8 +258,19 @@ void SettingsWindow::updateWindowBackground() {
     if (objectName().isEmpty()) {
         setObjectName(QStringLiteral("settingsMainWindow"));
     }
+    // 液态玻璃主题：挂/卸原生背景虚化（材质随主题/系统明暗更新，幂等），
+    // 窗口底色用保留 alpha 的玻璃色（cssColor），半透明底透出系统虚化；
+    // 其他主题确保卸载虚化并恢复实色底
+    if (StyleManager::isLiquid()) {
+        m_glassAttached = GlassBackdrop::attach(this, {GlassBackdrop::Material::Panel});
+    } else {
+        m_glassAttached = false;
+        GlassBackdrop::detach(this);
+    }
     setStyleSheet(QString("QWidget#%1 { background-color: %2; }")
-                  .arg(objectName(), StyleManager::getTabWidgetBgColor().name()));
+                  .arg(objectName(),
+                       StyleManager::cssColor(StyleManager::glassPanelColor(
+                           StyleManager::StyleColorId::TabWidgetBg, m_glassAttached))));
     StyleManager::applyDarkTitleBar(winId());
 }
 

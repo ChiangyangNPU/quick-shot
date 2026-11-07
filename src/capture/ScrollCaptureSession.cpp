@@ -5,6 +5,7 @@
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 #include "../utils/Utils.h"
+#include "../platform/GlassBackdrop.h"
 
 #include <QAbstractButton>
 #include <QGuiApplication>
@@ -585,6 +586,14 @@ void ScrollCaptureSession::createHintBar() {
 
     updateHintText();
     m_hintBar->adjustSize();
+
+    // 液态玻璃主题：挂原生背景虚化（macOS NSVisualEffectView，圆角与容器
+    // QSS 0.3em 对齐；Windows/Linux 无悬浮窗虚化能力，attach 失败退化为
+    // 色板加浓的纯色玻璃）。提示条按会话创建，创建即取当前主题，无需刷新路径
+    if (StyleManager::isLiquid()) {
+        GlassBackdrop::attach(m_hintBar, {GlassBackdrop::Material::HUD,
+                                          static_cast<qreal>(StyleManager::toolbarCornerRadius(m_hintBar))});
+    }
 
     // 兜底：选区占满整屏时提示条可能落在选区内，排除出捕获避免被拍进长图
     excludeWindowFromCapture(m_hintBar->winId());

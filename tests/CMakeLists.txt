@@ -13,10 +13,23 @@ set(QS_TEST_CORE_SOURCES
     ${CMAKE_SOURCE_DIR}/src/core/TranslationManager.cpp
 )
 
+# StyleManager.cpp 引用 GlassBackdrop（液态玻璃原生虚化能力探测，
+# 与主目标同款按平台选实现）
+if (WIN32)
+    list(APPEND QS_TEST_CORE_SOURCES ${CMAKE_SOURCE_DIR}/src/platform/GlassBackdrop_win.cpp)
+elseif (APPLE)
+    list(APPEND QS_TEST_CORE_SOURCES ${CMAKE_SOURCE_DIR}/src/platform/GlassBackdrop_mac.mm)
+elseif (UNIX AND NOT APPLE)
+    list(APPEND QS_TEST_CORE_SOURCES ${CMAKE_SOURCE_DIR}/src/platform/GlassBackdrop_other.cpp)
+endif()
+
 # QS_TEST_CORE_SOURCES 中 StyleManager.cpp 的 Windows 分支调用
-# DwmSetWindowAttribute，凡引用该闭包的测试目标在 Windows 上均需链接 dwmapi
+# DwmSetWindowAttribute，凡引用该闭包的测试目标在 Windows 上均需链接 dwmapi；
+# macOS 上 GlassBackdrop_mac.mm 使用 AppKit/QuartzCore（NSVisualEffectView/CALayer）
 if (WIN32)
     set(QS_TEST_PLATFORM_LIBS dwmapi)
+elseif (APPLE)
+    set(QS_TEST_PLATFORM_LIBS "-framework AppKit -framework QuartzCore")
 endif()
 
 # ---- UpdateManager：版本比较与 release API 解析 ----

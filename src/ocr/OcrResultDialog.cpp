@@ -4,6 +4,7 @@
 #include "TranslateService.h"
 #include "ConfigManager.h"
 #include "Logger.h"
+#include "../platform/GlassBackdrop.h"
 
 #include <QClipboard>
 #include <QApplication>
@@ -73,6 +74,20 @@ OcrResultDialog::OcrResultDialog(const OcrEngine::OcrResult &result, QWidget *pa
     setAttribute(Qt::WA_DeleteOnClose);
     resize(500, 400);
     setMinimumSize(500, 400);
+
+    // 液态玻璃主题：透明窗口承载原生背景虚化（macOS NSVisualEffectView；
+    // Windows/Linux 无悬浮窗虚化能力，attach 失败退化为色板加浓的纯色
+    // 玻璃，圆角外仍透明）。透明属性必须在 winId 产生（show）前设置。
+    // 其他主题保持原实色窗口行为。
+    if (StyleManager::isLiquid()) {
+#ifndef Q_OS_WIN
+        setAttribute(Qt::WA_TranslucentBackground, true);
+#endif
+        // 圆角对齐 QSS 底板 border-radius: 0.5em（'M' 宽度近似 em，同
+        // StyleManager::toolbarCornerRadius 的换算惯例）
+        const qreal glassRadius = 0.5 * fontMetrics().horizontalAdvance(QLatin1Char('M'));
+        GlassBackdrop::attach(this, {GlassBackdrop::Material::Panel, glassRadius});
+    }
 
     LOG_INFO(QString("OcrResultDialog: Displaying %1 text regions").arg(result.texts.size()));
 }
@@ -145,8 +160,9 @@ void OcrResultDialog::setupUi() {
 
     // 应用整体背景样式（使用类型选择器限定作用域，避免子控件如 QMessageBox 继承圆角背景）
     // border-radius 用 em 单位随字体（DPI）缩放
+    // 液态玻璃下背景为半透明玻璃底（cssColor 保留 alpha，透出原生虚化）
     setStyleSheet(QString("OcrResultDialog { background-color: %1; border-radius: 0.5em; }")
-        .arg(StyleManager::getToolbarBgColor().name()));
+        .arg(StyleManager::cssColor(StyleManager::getToolbarBgColor())));
 }
 
 /**

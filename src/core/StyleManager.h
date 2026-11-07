@@ -36,9 +36,11 @@ private:
 
 public:
     static QString s_toolbarButtonStyle;        ///< 工具栏按钮当前样式（"text"或"icon"）
-    static QString s_theme;                     ///< 当前主题（"light"或"dark"）
+    static QString s_theme;                     ///< 当前主题（"light"、"dark"或"liquid"）
 
-    /// 主题模式（浅色 / 深色）
+    /// 外观模式（浅色 / 深色）
+    /// @note 主题为 "liquid"（液态玻璃）时，外观由系统明暗实时解析，
+    ///       浅色/深色主题则固定对应外观；全库的深浅分支判断应使用本枚举
     enum class ThemeMode { Light, Dark };
 
     static const QString DEFAULT_THEME;         ///< 默认主题（浅色）
@@ -143,28 +145,59 @@ public:
 
     /**
      * @brief 获取当前主题标识
-     * @return 主题标识（"light"或"dark"）
+     * @return 主题标识（"light"、"dark"或"liquid"）
      * @author chiangyang
      */
     static QString theme();
 
     /**
+     * @brief 当前主题是否为液态玻璃
+     * @return s_theme 为 "liquid" 时返回 true
+     * @author chiangyang
+     */
+    static bool isLiquid();
+
+    /**
      * @brief 设置当前主题标识（仅更新标量，不写配置、不铺色板）
-     * @param theme 主题标识（"light"或"dark"，其他值按浅色处理）
+     * @param theme 主题标识（"light"、"dark"或"liquid"，其他值按浅色处理）
      * @author chiangyang
      */
     static void setTheme(const QString &theme);
 
     /**
-     * @brief 获取当前主题模式枚举
-     * @return s_theme 为 "dark" 时返回 ThemeMode::Dark，否则 ThemeMode::Light
+     * @brief 获取当前外观模式枚举（液态玻璃按系统明暗解析）
+     * @return s_theme 为 "dark" 或（"liquid" 且系统深色外观）时返回 ThemeMode::Dark，
+     *         否则 ThemeMode::Light；全库深浅分支（dark ? A : B）应使用本方法
      * @author chiangyang
      */
     static ThemeMode themeMode();
 
     /**
+     * @brief 从系统读取明暗外观并更新内部状态
+     * @return 外观是否发生变化（未变化返回 false，调用方可跳过刷新）
+     * @note 优先取 QStyleHints::colorScheme()，Unknown 时按应用调色板窗口色亮度判断；
+     *       main.cpp 连接 colorSchemeChanged 后调用本方法实现液态玻璃实时跟随系统
+     * @author chiangyang
+     */
+    static bool syncSystemAppearance();
+
+    /**
+     * @brief 获取系统当前明暗外观
+     * @return true=系统深色外观（惰性初始化，首次调用时检测）
+     * @author chiangyang
+     */
+    static bool systemDark();
+
+    /**
+     * @brief 按当前系统外观重铺液态玻璃色板（运行时刷新，不持久化）
+     * @note 仅当 isLiquid() 时有实际效果；系统明暗变化与启动恢复 liquid 主题时调用
+     * @author chiangyang
+     */
+    static void refreshLiquidPalette();
+
+    /**
      * @brief 应用主题：批量覆盖颜色表并持久化全部颜色键与主题键
-     * @param theme 主题标识（"light"或"dark"）
+     * @param theme 主题标识（"light"、"dark"或"liquid"）
      * @param cm ConfigManager 指针；非空时写入 style/theme 与全部颜色键（HexArgb）
      * @note 主题是一组预设色板：切换时批量覆盖 21 项颜色，之后用户仍可单项微调；
      *       本方法不刷新界面，调用方负责随后 reapplyGlobalStyleSheet() 与各窗口样式刷新
@@ -564,6 +597,26 @@ public:
      * @author chiangyang
      */
     static int toolbarCornerRadius(const QWidget *widget);
+
+    /**
+     * @brief 颜色转 QSS 颜色串（保留 alpha 通道）
+     * @param c 颜色
+     * @return alpha<255 时输出 rgba(r,g,b,a)，否则输出 #rrggbb
+     * @note QColor::name() 会丢弃 alpha；液态玻璃色板的半透明底色经
+     *       setStyleSheet 设置到窗口/容器时必须用本方法，否则玻璃透明度丢失
+     * @author chiangyang
+     */
+    static QString cssColor(const QColor &c);
+
+    /**
+     * @brief 读取玻璃面板底色（无虚化时加浓 alpha 兜底）
+     * @param id 颜色 ID
+     * @param blurBehind 该窗口背后是否有模糊（原生虚化已挂载，或内嵌形态
+     *        可取样父控件自绘模糊）
+     * @return 玻璃底色；blurBehind=false 时 alpha 抬升到至少 232（纯色玻璃）
+     * @author chiangyang
+     */
+    static QColor glassPanelColor(StyleColorId id, bool blurBehind);
 
     /**
      * @brief 下拉框弹窗统一为"高亮选中"风格（去 ✓ 勾选指示器）

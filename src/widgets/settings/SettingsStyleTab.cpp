@@ -38,6 +38,8 @@ void SettingsStyleTab::setupUi() {
     cmbTheme->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     cmbTheme->addItem(tm->get("style.theme.light", "Light"), "light");
     cmbTheme->addItem(tm->get("style.theme.dark", "Dark"), "dark");
+    // 液态玻璃：半透明玻璃材质主题，明暗随系统外观实时变化
+    cmbTheme->addItem(tm->get("style.theme.liquid", "Liquid Glass"), "liquid");
     const int themeIndex = cmbTheme->findData(StyleManager::theme());
     if (themeIndex >= 0) {
         cmbTheme->setCurrentIndex(themeIndex);
@@ -413,6 +415,7 @@ void SettingsStyleTab::retranslateUi() {
         cmbTheme->clear();
         cmbTheme->addItem(tm->get("style.theme.light", "Light"), "light");
         cmbTheme->addItem(tm->get("style.theme.dark", "Dark"), "dark");
+        cmbTheme->addItem(tm->get("style.theme.liquid", "Liquid Glass"), "liquid");
         cmbTheme->setCurrentIndex(currentIndex);
         cmbTheme->blockSignals(false);
     }
