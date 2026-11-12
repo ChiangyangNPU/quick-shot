@@ -5,7 +5,6 @@
 #include "../shortcut/ShortcutTypes.h"
 #include "../translate/TranslateService.h"
 #include "../platform/GlassBackdrop.h"
-#include "GlassPainter.h"
 #ifdef ENABLE_OCR
 #include "../ocr/OcrEngine.h"
 #endif
@@ -262,18 +261,8 @@ void SettingsWindow::updateWindowBackground() {
     // 液态玻璃主题：挂/卸原生背景虚化（材质随主题/系统明暗更新，幂等），
     // 窗口底色用保留 alpha 的玻璃色（cssColor），半透明底透出系统虚化；
     // 其他主题确保卸载虚化并恢复实色底
-    //
-    // macOS 特例：带原生标题栏的窗口若使用半透明 QSS 背景，Qt 会自动启用
-    // 透明窗口处理，导致 NSWindow 标题栏布局异常（标题文字左移与红绿灯
-    // 重叠）。故 macOS 下不挂载原生虚化、使用不透明背景，改由 paintEvent
-    // 自绘玻璃外观（底色 + sheen + 描边），保留玻璃视觉的同时保证标题栏正常。
     if (StyleManager::isLiquid()) {
-#if defined(Q_OS_MACOS)
-        m_glassAttached = false;
-        GlassBackdrop::detach(this);
-#else
         m_glassAttached = GlassBackdrop::attach(this, {GlassBackdrop::Material::Panel});
-#endif
     } else {
         m_glassAttached = false;
         GlassBackdrop::detach(this);
@@ -283,20 +272,6 @@ void SettingsWindow::updateWindowBackground() {
                        StyleManager::cssColor(StyleManager::glassPanelColor(
                            StyleManager::StyleColorId::TabWidgetBg, m_glassAttached))));
     StyleManager::applyDarkTitleBar(winId());
-    update(); // 触发 paintEvent 重绘玻璃外观
-}
-
-void SettingsWindow::paintEvent(QPaintEvent *event) {
-    QWidget::paintEvent(event);
-    if (!StyleManager::isLiquid()) {
-        return;
-    }
-    // macOS 下带原生标题栏的窗口不使用半透明背景（避免标题栏布局异常），
-    // 在此自绘玻璃外观：不透明底色 + 顶部 sheen + 高光描边，模拟玻璃质感。
-    QPainter painter(this);
-    QColor tint = StyleManager::color(StyleManager::StyleColorId::TabWidgetBg);
-    tint.setAlpha(255);
-    GlassPainter::paintGlassOverlay(&painter, rect(), 0, tint);
 }
 
 /**
