@@ -64,7 +64,23 @@ public:
      */
     void setEditorColor(const QColor &color);
 
+signals:
+    /**
+     * @brief 复制截图请求信号（Ctrl+C 且无选中文本时发出）
+     *
+     * 宿主收到后应先提交当前文本标注，再执行复制流程。
+     * @author chiangyang
+     */
+    void copyRequested();
+
 protected:
+    /**
+     * @brief 键盘事件：Ctrl+C 无选中文本时提交文本并复制截图
+     * @param event 键盘事件
+     * @author chiangyang
+     */
+    void keyPressEvent(QKeyEvent *event) override;
+
     /**
      * @brief geometryChanged 载荷的旋转角度
      * @author chiangyang

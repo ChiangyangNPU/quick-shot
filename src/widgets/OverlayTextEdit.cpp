@@ -1,6 +1,8 @@
 #include "OverlayTextEdit.h"
 #include <cmath>
 #include <QEvent>
+#include <QKeyEvent>
+#include <QKeySequence>
 #include <QPainter>
 #include <QLineF>
 #include <QStyle>
@@ -378,6 +380,22 @@ void OverlayTextEdit::updateRotationPreview() {
 
     // 手柄覆盖层跟随旋转帧（四角圆点/X 与命中映射随旋转）
     updateHandleOverlayPosition();
+}
+
+/**
+ * @brief 键盘事件：Ctrl+C 无选中文本时提交文本并复制截图
+ *
+ * 有选中文本时保持原生复制文本行为；没有选中内容时复制空文本没有意义，
+ * 此时交给宿主走"提交文本标注 + 复制截图"流程，避免正在编辑的文字丢失。
+ * @author chiangyang
+ */
+void OverlayTextEdit::keyPressEvent(QKeyEvent *event) {
+    if (event->matches(QKeySequence::Copy) && !textCursor().hasSelection()) {
+        emit copyRequested();
+        event->accept();
+        return;
+    }
+    QTextEdit::keyPressEvent(event);
 }
 
 /**

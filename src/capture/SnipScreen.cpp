@@ -160,6 +160,9 @@ void SnipScreen::setupAnnotationHost()
         // X 关闭手柄 = 放弃文本（提交走点击别处/切换工具的 finalizeTextEdit 路径）
         connect(m_textEdit, &OverlayTextEdit::closeRequested,
                 this, &SnipScreen::cancelTextEdit);
+        // Ctrl+C 且无选中文本：先提交文本再复制截图（有选中文本时仍复制文本）
+        connect(m_textEdit, &OverlayTextEdit::copyRequested,
+                this, &SnipScreen::copy);
         m_textEdit->show();
         m_textEdit->setFocus();
         // 文本编辑框获得焦点：禁用与文本输入冲突的标注快捷键
@@ -601,6 +604,8 @@ void SnipScreen::exit() {
  * @author chiangyang
  */
 void SnipScreen::copy() {
+    // 正在编辑的文本先提交，保证复制结果包含尚未确认的文字标注
+    finalizeTextEdit();
     auto [pixmap, pos] = snip();
 
     // 剪贴板 + 历史记录统一分发
@@ -624,6 +629,9 @@ void SnipScreen::copy() {
  * @author chiangyang
  */
 void SnipScreen::save() {
+    // 正在编辑的文本先提交，避免保存/导出时丢失尚未确认的文字标注
+    finalizeTextEdit();
+
     // 生成默认文件名：QuickShot_yyyy-MM-dd_hhmmss_zzz.png
     QString defaultName =
         "QuickShot_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_hhmmss_zzz") + ".png";
@@ -669,6 +677,8 @@ void SnipScreen::save() {
  * @author chiangyang
  */
 void SnipScreen::pin() {
+    // 正在编辑的文本先提交，避免贴图结果丢失尚未确认的文字标注
+    finalizeTextEdit();
     auto [pixmap, pos] = snip();
     pinPixmap(pixmap, pos, /*fitToScreen=*/false);
 
@@ -977,6 +987,8 @@ std::pair<QPixmap, QPoint> SnipScreen::snip() {
  * @author chiangyang
  */
 QPixmap SnipScreen::captureSelectionForOcr() {
+    // 正在编辑的文本先提交，OCR/翻译结果与屏幕所见保持一致
+    finalizeTextEdit();
     const QRect rect = m_selector->selected();
     if (rect.isEmpty()) return QPixmap();
 

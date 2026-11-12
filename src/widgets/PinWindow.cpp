@@ -563,6 +563,8 @@ void PinWindow::closeEvent(QCloseEvent *event) {
  * @author chiangyang
  */
 void PinWindow::copyToClipboard() {
+    // 正在编辑的文本先提交，保证复制结果包含尚未确认的文字标注
+    finalizeTextEdit();
     QPixmap pix = compositePixmap();
 
     // 剪贴板 + 历史记录统一分发
@@ -576,6 +578,9 @@ void PinWindow::copyToClipboard() {
  * @author chiangyang
  */
 void PinWindow::saveToFile() {
+    // 正在编辑的文本先提交，避免保存时丢失尚未确认的文字标注
+    finalizeTextEdit();
+
     // 生成默认文件名：QuickShot_Capture_yyyyMMdd_HHmmss.png
     QString defaultName = QString("QuickShot_Capture_%1.png").arg(QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss"));
 
@@ -837,6 +842,9 @@ void PinWindow::createTextEdit(const QPoint &pos) {
     connect(m_textEdit, &OverlayTextEdit::closeRequested, this, [this]() {
         cancelTextEdit();
     });
+    // Ctrl+C 且无选中文本：先提交文本再复制图片（有选中文本时仍复制文本）
+    connect(m_textEdit, &OverlayTextEdit::copyRequested,
+            this, &PinWindow::copyToClipboard);
     m_textEdit->show();
     m_textEdit->setFocus();
     // 文本编辑框获得焦点：禁用与文本输入冲突的标注快捷键（数字键/[]/Tab/Delete等裸键）
