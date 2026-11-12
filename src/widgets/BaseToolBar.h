@@ -520,7 +520,6 @@ protected:
     QHBoxLayout *m_primaryLayout = nullptr;
     QList<QPair<QPushButton *, ActionBtnSpec>> m_actionButtons; ///< makeActionButton 注册的操作按钮（样式/翻译统一遍历）
     QWidget *subToolbarWindow = nullptr;       ///< 当前激活子工具栏窗口（作为外部 getSubToolbarWindow 的别名）
-    bool m_glassAttached = false;              ///< 液态玻璃下原生背景虚化是否挂载成功（顶层形态；内嵌形态取样父控件恒 true 语义）
 
 
     int m_currentToolId = -1;

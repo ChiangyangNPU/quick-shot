@@ -3,7 +3,6 @@
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 #include "../core/StyleManager.h"
-#include "../platform/GlassBackdrop.h"
 #include "../utils/Utils.h"
 
 #include <QVBoxLayout>
@@ -205,29 +204,20 @@ void HistoryWindow::showEvent(QShowEvent *event)
  *
  * 从 StyleManager 读取最新的选项卡背景色，同步刷新窗口及顶部工具栏、
  * 列表区、底部操作栏容器的背景，保证与 SettingsWindow 视觉一致。
- * 液态玻璃主题：窗口底色为保留 alpha 的玻璃色（cssColor），并挂/卸
- * 原生背景虚化（材质随主题/系统明暗更新，幂等）。
  * @author chiangyang
  */
 void HistoryWindow::updateWindowColors()
 {
-    if (StyleManager::isLiquid()) {
-        m_glassAttached = GlassBackdrop::attach(this, {GlassBackdrop::Material::Panel});
-    } else {
-        m_glassAttached = false;
-        GlassBackdrop::detach(this);
-    }
-    const QColor bgColor = StyleManager::glassPanelColor(
-        StyleManager::StyleColorId::TabWidgetBg, m_glassAttached);
-    setStyleSheet(QString("background-color: %1;").arg(StyleManager::cssColor(bgColor)));
+    QColor bgColor = StyleManager::getTabWidgetBgColor();
+    setStyleSheet(QString("background-color: %1;").arg(bgColor.name()));
     if (m_toolbarContainer) {
-        m_toolbarContainer->setStyleSheet(QString("background-color: %1;").arg(StyleManager::cssColor(bgColor)));
+        m_toolbarContainer->setStyleSheet(QString("background-color: %1;").arg(bgColor.name()));
     }
     if (m_listContainer) {
-        m_listContainer->setStyleSheet(QString("background-color: %1;").arg(StyleManager::cssColor(bgColor)));
+        m_listContainer->setStyleSheet(QString("background-color: %1;").arg(bgColor.name()));
     }
     if (m_bottomContainer) {
-        m_bottomContainer->setStyleSheet(QString("background-color: %1;").arg(StyleManager::cssColor(bgColor)));
+        m_bottomContainer->setStyleSheet(QString("background-color: %1;").arg(bgColor.name()));
     }
     // 选项卡标签颜色（含 pane 背景）一并刷新
     if (m_tabWidget) {
@@ -321,8 +311,8 @@ void HistoryWindow::setupUi()
 
     // 窗口背景设为选项卡背景色，与 SettingsWindow 保持一致
     // （SettingsWindow 由 tabWidget::pane 填充整个窗口，此处用窗口背景实现一致效果）
-    // 首次构建即按当前主题挂载原生背景虚化，背景色保留 alpha（液态玻璃）
-    updateWindowColors();
+    setStyleSheet(QString("background-color: %1;")
+                      .arg(StyleManager::getTabWidgetBgColor().name()));
 
     QVBoxLayout *mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
@@ -332,7 +322,7 @@ void HistoryWindow::setupUi()
     // 顶部工具栏容器：背景色与选项卡一致
     m_toolbarContainer = new QWidget(this);
     m_toolbarContainer->setStyleSheet(
-        QString("background-color: %1;").arg(StyleManager::cssColor(StyleManager::getTabWidgetBgColor())));
+        QString("background-color: %1;").arg(StyleManager::getTabWidgetBgColor().name()));
     QHBoxLayout *toolbarLayout = new QHBoxLayout(m_toolbarContainer);
     toolbarLayout->setContentsMargins(10, 10, 10, 5);
     toolbarLayout->setSpacing(10);

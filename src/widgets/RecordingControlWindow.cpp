@@ -10,7 +10,6 @@
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 #include "../recording/ScreenRecorder.h"
-#include "GlassPainter.h"
 
 /**
  * @brief 构造函数
@@ -35,14 +34,11 @@ RecordingControlWindow::RecordingControlWindow(QWidget *parent) : QWidget(parent
 // ============================================================
 
 /**
- * @brief 绘制圆角矩形背景（液态玻璃主题下为玻璃面板）
+ * @brief 绘制圆角矩形背景
  *
  * 当窗口设置了 WA_TranslucentBackground 后，QSS 的 background-color 不会自动绘制，
  * 导致圆角矩形没有底色。这里用 QPainter 主动绘制圆角矩形背景，
  * 既保证圆角外区域透明（不露出直角底层），又保证圆角内有底色。
- *
- * 液态玻璃主题：本窗口是宿主（截图遮罩层）的内嵌子控件，取样父控件
- * 自身绘制内容做磨砂模糊 + 玻璃叠加层（与截图/录屏工具栏同款观感）。
  *
  * 半径复用工具栏统一算法（StyleManager::toolbarCornerRadius），
  * 保证与截图/录屏工具栏的圆角观感一致。
@@ -53,18 +49,10 @@ void RecordingControlWindow::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(Qt::NoPen);
+    painter.setBrush(StyleManager::getRecordControlBgColor());
     const int radius = StyleManager::toolbarCornerRadius(this);
-
-    if (!StyleManager::isLiquid()) {
-        painter.setPen(Qt::NoPen);
-        painter.setBrush(StyleManager::getRecordControlBgColor());
-        painter.drawRoundedRect(rect(), radius, radius);
-        return;
-    }
-
-    GlassPainter::paintGlassPanel(&painter, QRectF(rect()), radius,
-                                  StyleManager::getRecordControlBgColor(),
-                                  GlassPainter::sampleParentBackdrop(this));
+    painter.drawRoundedRect(rect(), radius, radius);
 }
 
 /**

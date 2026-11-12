@@ -73,10 +73,9 @@ public:
     /**
      * @brief 刷新窗口自身背景色与系统标题栏主题
      *
-     * 窗口底色取 TabWidgetBg 色板项（浅色近白/深色 #1a1a1e；
-     * 液态玻璃主题为半透明玻璃底），用 objectName 选择器只染窗口自身、
-     * 避免级联到子控件；标题栏经 StyleManager::applyDarkTitleBar
-     * 跟随外观。液态玻璃主题下另挂/卸原生背景虚化（GlassBackdrop）。
+     * 窗口底色取 TabWidgetBg 色板项（浅色近白/深色 #1a1a1e），
+     * 用 objectName 选择器只染窗口自身、避免级联到子控件；
+     * 标题栏经 StyleManager::applyDarkTitleBar 跟随浅色/深色。
      * 构造时与主题切换（refreshAllStyles）时调用。
      * @author chiangyang
      */
@@ -339,7 +338,6 @@ private:
     int m_animatedHeight; ///< 动画高度属性
     QScrollArea *m_suppressedScrollArea = nullptr; ///< 高度动画期间被抑制滚动条的选项卡滚动区
     bool m_heightRecheckScheduled = false; ///< 高度复核是否已安排（防重复排队）
-    bool m_glassAttached = false; ///< 液态玻璃下原生背景虚化是否挂载成功（决定玻璃底色兜底加浓）
 
 private slots:
 

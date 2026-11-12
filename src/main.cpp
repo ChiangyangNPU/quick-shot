@@ -7,7 +7,6 @@
 #include <QLocale>
 #include <QMessageBox>
 #include <QStandardPaths>
-#include <QStyleHints>
 #include <csignal>
 
 #include "shortcut/ShortcutManager.h"
@@ -322,33 +321,6 @@ int main(int argc, char *argv[]) {
     QObject::connect(tm, &TranslationManager::languageChanged, [&updateStaticText]() {
         updateStaticText();
         ShortcutManager::instance()->retranslateTrayMenu();
-    });
-
-    // 系统明暗外观变化：液态玻璃主题实时跟随（浅色/深色主题外观固定，不受影响）
-    // 刷新序列与设置页主题切换（SettingsStyleTab::onThemeChanged → themeChanged
-    // 广播）一致：重铺液态玻璃色板 → 全局 qss 重填 → 各存活窗口刷新。
-    // settingsWindow 惰加载，已创建才刷新。
-    QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
-                     [snipScreen, historyWindow, trayMenu, &settingsWindow]() {
-        if (!StyleManager::syncSystemAppearance()) {
-            return; // 外观未变化（如仅强调色/对比度方案变化）
-        }
-        if (StyleManager::theme() != QLatin1String("liquid")) {
-            return; // 液态玻璃之外的主题不随系统外观
-        }
-        // 运行时重铺液态玻璃色板（不持久化：下次手动切换主题才落盘）
-        StyleManager::refreshLiquidPalette();
-        StyleManager::reapplyGlobalStyleSheet();
-        snipScreen->refreshTheme();
-        PinWindow::refreshAllTheme();
-        historyWindow->updateWindowColors();
-        DesktopPetManager::instance()->refreshTheme();
-        DesktopPetManager::instance()->refreshTodoWindowStyle();
-        trayMenu->setStyleSheet(StyleManager::getMenuStyle());
-        if (settingsWindow) {
-            settingsWindow->refreshAllStyles();
-        }
-        LOG_INFO("System appearance changed, liquid glass theme refreshed");
     });
 
     // 快捷键变更时更新 tooltip（快捷键 action 文本已由 TrayMenuBuilder::refresh 自动刷新）

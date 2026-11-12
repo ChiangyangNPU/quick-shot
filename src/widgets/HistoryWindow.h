@@ -260,7 +260,6 @@ private:
     QWidget *m_toolbarContainer;   ///< 顶部工具栏容器（搜索/筛选）
     QWidget *m_listContainer;     ///< 列表区容器（列表 + 加载更多按钮）
     QWidget *m_bottomContainer;   ///< 底部操作栏容器（复制/保存/删除/清空）
-    bool m_glassAttached = false; ///< 液态玻璃下原生背景虚化是否挂载成功（决定玻璃底色兜底加浓）
 
     QTabWidget *m_tabWidget;      ///< 选项卡控件（全部/截图/文本）
     QLineEdit *m_searchEdit;      ///< 搜索输入框
