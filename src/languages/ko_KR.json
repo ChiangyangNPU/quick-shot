@@ -175,6 +175,7 @@
   "pet.tabName": "데스크탑 펫",
   "pet.group": "데스크탑 펫",
   "pet.enable": "데스크탑 펫 사용",
+  "pet.scale": "크기",
   "pet.resetPosition": "펫 위치 초기화",
   "pet.clotheslineTrigger": "빨랫줄 표시/숨기기 방식",
   "pet.todoReminder": "할 일 알림",

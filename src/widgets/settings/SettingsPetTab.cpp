@@ -115,6 +115,26 @@ void SettingsPetTab::setupUi() {
     });
     basicLayout->addWidget(m_enablePetCheck);
 
+    // 宠物大小：以 96 逻辑像素为 1.0x 基准，按倍数放大/缩小（即时生效并持久化）
+    m_scaleLabel = new QLabel(tm->get("pet.scale", "Size") + ":", m_basicGroup);
+    m_scaleSpin = new QDoubleSpinBox(m_basicGroup);
+    m_scaleSpin->setRange(PetWindow::minUserScale(), PetWindow::maxUserScale());
+    m_scaleSpin->setSingleStep(0.1);
+    m_scaleSpin->setDecimals(1);
+    m_scaleSpin->setSuffix(QStringLiteral("x"));
+    m_scaleSpin->setValue(DesktopPetManager::instance()->petScale());
+    m_scaleSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    connect(m_scaleSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [](double v) {
+        DesktopPetManager::instance()->setPetScale(v);
+    });
+    QHBoxLayout *scaleRow = new QHBoxLayout();
+    scaleRow->setContentsMargins(0, 0, 0, 0);
+    scaleRow->setSpacing(PetUi::scaled(8));
+    scaleRow->addWidget(m_scaleLabel);
+    scaleRow->addWidget(m_scaleSpin);
+    scaleRow->addStretch();
+    basicLayout->addLayout(scaleRow);
+
     // ===== 宠物样式组：平铺图标按钮，点击即切换（图标为各样式预览图） =====
     m_styleGroupBox = new QGroupBox(tm->get("pet.styleLabel", "Pet Style"), scrollContent);
     m_styleGroupBox->setStyleSheet(StyleManager::getGroupBoxStyle());
@@ -603,6 +623,7 @@ void SettingsPetTab::retranslateUi() {
     TranslationManager *tm = TranslationManager::instance();
     if (m_basicGroup) m_basicGroup->setTitle(tm->get("pet.basicGroup", "Basic"));
     if (m_enablePetCheck) m_enablePetCheck->setText(tm->get("pet.enable", "Enable Desktop Pet"));
+    if (m_scaleLabel) m_scaleLabel->setText(tm->get("pet.scale", "Size") + ":");
     if (m_styleGroupBox) m_styleGroupBox->setTitle(tm->get("pet.styleLabel", "Pet Style"));
     if (m_behaviorGroup) m_behaviorGroup->setTitle(tm->get("pet.behaviorGroup", "Behavior"));
     if (m_classicLabel) m_classicLabel->setText(tm->get("pet.classicGroup", "Classic"));
@@ -683,6 +704,7 @@ void SettingsPetTab::refreshStyles() {
     if (m_styleGroupBox) m_styleGroupBox->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_behaviorGroup) m_behaviorGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_enablePetCheck) m_enablePetCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    if (m_scaleSpin) m_scaleSpin->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     if (m_todoReminderCheck) m_todoReminderCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_pomodoroCheck) m_pomodoroCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     if (m_idleSleepCheck) m_idleSleepCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());

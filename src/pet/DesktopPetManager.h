@@ -66,6 +66,23 @@ public:
     bool isEnabled() const { return m_enabled; }
 
     /**
+     * @brief 获取宠物显示倍数（持久化于 pet/scale，默认 1.0）
+     * @return 显示倍数
+     * @author chiangyang
+     */
+    qreal petScale() const;
+
+    /**
+     * @brief 设置宠物显示倍数（即时缩放窗口并持久化）
+     *
+     * 以宠物底边中点为锚点缩放，保持"站立点"不漂移；
+     * 缩放后的坐标同步写入 pet/posX/pet/posY。
+     * @param scale 显示倍数（自动夹取到 PetWindow::minUserScale ~ maxUserScale）
+     * @author chiangyang
+     */
+    void setPetScale(qreal scale);
+
+    /**
      * @brief 投喂宠物：截图从 sourceGlobalRect 飞入宠物并被吃掉
      *
      * 宠物未开启或图像为空时直接返回，调用方无需判断。

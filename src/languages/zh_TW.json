@@ -175,6 +175,7 @@
   "pet.tabName": "桌面寵物",
   "pet.group": "桌面寵物",
   "pet.enable": "開啟桌面寵物",
+  "pet.scale": "大小",
   "pet.resetPosition": "重置寵物位置",
   "pet.clotheslineTrigger": "晾衣繩顯示和消失方式",
   "pet.todoReminder": "待辦提醒",

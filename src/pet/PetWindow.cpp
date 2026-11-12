@@ -1,6 +1,7 @@
 #include "PetWindow.h"
 #include "pets/PetStyles.h"
 #include "PetTheme.h"
+#include "../core/ConfigManager.h"
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
 
@@ -498,6 +499,23 @@ void paintPetBody(QPainter &p, PetWindow::PetStyle style,
 
     p.restore();
 }
+}
+
+/**
+ * @brief 用户调节的显示倍数（持久化于 pet/scale，默认 1.0）
+ * @author chiangyang
+ */
+qreal PetWindow::userScale() {
+    const qreal s = ConfigManager::instance()->value("pet/scale", 1.0).toDouble();
+    return qBound(minUserScale(), s, maxUserScale());
+}
+
+/**
+ * @brief 宠物窗口边长（正方形，96 逻辑基准按屏幕 DPI 与用户倍数缩放）
+ * @author chiangyang
+ */
+int PetWindow::petSize() {
+    return qRound(96 * PetUi::scale() * userScale());
 }
 
 /**

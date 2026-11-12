@@ -151,6 +151,8 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "pet/posX", -1 },
         { "pet/posY", -1 },
         { "pet/style", 0 },
+        // 宠物显示倍数（1.0 为 96 逻辑像素基准，仅在此之上叠加用户调节）
+        { "pet/scale", 1.0 },
         { "pet/clotheslineTrigger", 2 },
         // 待办红点提醒开关（逾期/今天到期时宠物头顶显示角标）
         { "pet/todoReminder", true },

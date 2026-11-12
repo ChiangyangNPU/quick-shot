@@ -175,6 +175,7 @@
   "pet.tabName": "デスクトップペット",
   "pet.group": "デスクトップペット",
   "pet.enable": "デスクトップペットを有効にする",
+  "pet.scale": "サイズ",
   "pet.resetPosition": "ペットの位置をリセット",
   "pet.clotheslineTrigger": "物干しロープの表示/非表示",
   "pet.todoReminder": "ToDo リマインダー",

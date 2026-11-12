@@ -144,6 +144,46 @@ void DesktopPetManager::setEnabled(bool enabled) {
 }
 
 /**
+ * @brief 获取宠物显示倍数（持久化于 pet/scale，默认 1.0）
+ * @author chiangyang
+ */
+qreal DesktopPetManager::petScale() const {
+    return PetWindow::userScale();
+}
+
+/**
+ * @brief 设置宠物显示倍数（即时缩放窗口并持久化）
+ * @author chiangyang
+ */
+void DesktopPetManager::setPetScale(qreal scale) {
+    const qreal clamped = qBound(PetWindow::minUserScale(), scale, PetWindow::maxUserScale());
+    QSettings *settings = ConfigManager::instance()->getSettings();
+    const qreal current = settings->value("pet/scale", 1.0).toDouble();
+    if (qFuzzyCompare(current, clamped)) {
+        return;
+    }
+    settings->setValue("pet/scale", clamped);
+
+    if (!m_petWindow) {
+        settings->sync();
+        return;
+    }
+
+    // 以底边中点为锚点缩放，保持宠物在桌面上的"站立点"不变
+    const QRect geo = m_petWindow->geometry();
+    const int size = PetWindow::petSize();
+    const QPoint newPos(geo.center().x() - size / 2, geo.bottom() - size + 1);
+    m_petWindow->setFixedSize(size, size);
+    m_petWindow->move(newPos);
+    // 同步持久化位置，避免下次启动按旧左上角坐标复原导致视觉偏移
+    settings->setValue("pet/posX", newPos.x());
+    settings->setValue("pet/posY", newPos.y());
+    settings->sync();
+
+    LOG_INFO(QString("DesktopPetManager: pet scale=%1, size=%2").arg(clamped).arg(size));
+}
+
+/**
  * @brief 创建宠物窗口并接线
  * @author chiangyang
  */

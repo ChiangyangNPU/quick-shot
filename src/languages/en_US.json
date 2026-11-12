@@ -175,6 +175,7 @@
   "pet.tabName": "Desktop Pet",
   "pet.group": "Desktop Pet",
   "pet.enable": "Enable Desktop Pet",
+  "pet.scale": "Size",
   "pet.resetPosition": "Reset Pet Position",
   "pet.clotheslineTrigger": "Show/Hide Clothesline",
   "pet.todoReminder": "Todo Reminder",

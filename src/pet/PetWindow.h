@@ -113,11 +113,32 @@ public:
     explicit PetWindow(QWidget *parent = nullptr);
 
     /**
-     * @brief 宠物窗口边长（正方形，96 逻辑基准按屏幕 DPI 缩放）
+     * @brief 用户可调显示倍数的下限（设置页微调框范围用）
+     * @return 最小倍数
+     * @author chiangyang
+     */
+    static constexpr qreal minUserScale() { return 1.0; }
+
+    /**
+     * @brief 用户可调显示倍数的上限（设置页微调框范围用）
+     * @return 最大倍数
+     * @author chiangyang
+     */
+    static constexpr qreal maxUserScale() { return 2.0; }
+
+    /**
+     * @brief 用户调节的显示倍数（持久化于 pet/scale，默认 1.0）
+     * @return 夹取到 [minUserScale, maxUserScale] 的倍数
+     * @author chiangyang
+     */
+    static qreal userScale();
+
+    /**
+     * @brief 宠物窗口边长（正方形，96 逻辑基准按屏幕 DPI 与用户倍数缩放）
      * @return 边长像素值
      * @author chiangyang
      */
-    static int petSize() { return qRound(96 * PetUi::scale()); }
+    static int petSize();
 
     /**
      * @brief 渲染某样式的静态预览图（设置页样式选择下拉框图标用）

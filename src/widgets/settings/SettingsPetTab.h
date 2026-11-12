@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QCheckBox>
 #include <QSpinBox>
+#include <QDoubleSpinBox>
 #include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
@@ -96,6 +97,8 @@ private:
     QWidget *m_petScrollContent = nullptr;  ///< 滚动内容容器（palette 背景）
     QGroupBox *m_basicGroup;            ///< 基本分组（宠物开关）
     QCheckBox *m_enablePetCheck;        ///< 打开桌面宠物复选框
+    QLabel *m_scaleLabel = nullptr;     ///< 宠物显示倍数标签
+    QDoubleSpinBox *m_scaleSpin = nullptr; ///< 宠物显示倍数（1.0x 为基准大小）
     QGroupBox *m_styleGroupBox;         ///< 宠物样式分组（经典样式 + 十二生肖）
     QLabel *m_classicLabel;             ///< 经典样式分组标签（第一行）
     QLabel *m_zodiacLabel;              ///< 十二生肖分组标签（第二行起，FlowLayout 自动换行）
