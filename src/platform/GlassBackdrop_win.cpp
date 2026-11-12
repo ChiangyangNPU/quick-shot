@@ -52,36 +52,6 @@ enum WINDOWCOMPOSITIONATTRIBBACKDROP_TYPE {
 };
 #endif
 
-// ---- 非公开 SetWindowCompositionAttribute 兜底类型 ----
-// MSVC SDK 与 mingw-w64 头文件均未公开这些声明，且枚举常量无法用
-// #ifndef 探测，故统一在本文件内自定义（匿名命名空间，不会与将来
-// 头文件里的同名声明冲突）；字段与 Windows 逆向共识布局一致
-namespace {
-
-enum AccentCompositionAttrib {
-    WCA_ACCENT_POLICY = 19
-};
-
-enum AccentPolicyState {
-    ACCENT_ENABLE_GRADIENT = 1,          // 无模糊纯色（等效关闭亚克力）
-    ACCENT_ENABLE_ACRYLICBLURBEHIND = 4  // 亚克力模糊
-};
-
-struct ACCENT_POLICY {
-    INT AccentState;
-    INT AccentFlags;
-    DWORD GradientColor;
-    INT AnimationId;
-};
-
-struct WINDOWCOMPOSITIONATTRIBDATA {
-    AccentCompositionAttrib Attrib;
-    void *pvData;
-    SIZE_T cbData;
-};
-
-} // namespace
-
 namespace {
 
 /// RtlGetVersion：比 GetVersionEx 兼容清单影响更小的版本探测
