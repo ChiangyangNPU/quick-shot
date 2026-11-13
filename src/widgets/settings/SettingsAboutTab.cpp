@@ -323,7 +323,9 @@ void SettingsAboutTab::onUpdateDownloadFinished(bool success,
         QPushButton *openBtn = box.addCustomButton(
             tm->get("update.macExitAndOpen", "Quit and open installer"), QMessageBox::AcceptRole);
         box.addCustomButton(tm->get("update.later", "Later"), QMessageBox::RejectRole);
-        box.centerOn(geometry());
+        // centerOn 需要屏幕坐标；geometry() 是相对父滚动区域的坐标，
+        // 用顶层设置窗口的 geometry() 才能让弹窗居中于设置窗口
+        box.centerOn(window()->geometry());
         box.exec();
         if (box.clickedButton() == openBtn) {
             QDesktopServices::openUrl(QUrl::fromLocalFile(filePath));
