@@ -1,5 +1,6 @@
 # QuickShot 发布流程（GitHub / Gitee 双端）
 
+> 更新：2026-11-13（新增本机补发 Gitee 的完整操作说明，见 §7）
 > 更新：2026-10-21（新增 Gitee 附件配额自动清理；首发实测 2026-10-09 v0.1.0）
 > 首发日期口径：v0.1.0 Release 发布于 UTC 2026-10-09 23:21（北京时间 2026-10-10 清晨 07:21），tag 创建于北京时间 2026-10-10 07:17——正文日期未注明时区的一律为 UTC 口径
 > 相关文档：[git-multi-remote.md](git-multi-remote.md)（双远程同步）
@@ -11,7 +12,7 @@
 | 编译与打包 | GitHub Actions（`release.yml` 的 `release` job） | push `v*` tag 触发，双平台并行：Windows MinGW（zip）+ macOS arm64（DMG） |
 | GitHub Release | GitHub Actions | 构建完自动发布（非草稿），产物由 CI 直接挂上 |
 | Gitee Release | GitHub Actions（`release.yml` 的 `gitee` job） | 构建完成后自动把**同一份产物**传到 Gitee；**前置条件：仓库配置 `GITEE_TOKEN` 密钥** |
-| 补发通道 | 本地（`deploy/gitee/publish_gitee_release.sh`） | CI 失败/超时或想立刻发完时使用，分钟级；版本默认取最新 tag（`git describe --tags --abbrev=0`），产物默认从 `release-download/` 目录读取 |
+| 补发通道 | 本地（`deploy/gitee/publish_gitee_release.sh`） | CI 失败/超时或想立刻发完时使用，分钟级；版本默认取最新 tag（`git describe --tags --abbrev=0`），产物默认从 `release-download/` 目录读取。完整步骤见 §7 |
 
 CI 与本地**共用同一个脚本**（`deploy/gitee/publish_gitee_release.sh`），两条通路行为一致：
 复用/创建 Gitee Release（说明取 tag 注释）→ 清理旧版本附件（防止配额超限，见 §5）→
@@ -55,10 +56,10 @@ git push github vX.Y.Z && git push gitee vX.Y.Z     # 推 GitHub 才触发 CI
 #      QuickShot-Release-vX.Y.Z.dmg
 
 # 5.（仅在 gitee job 失败/超时/想立刻发完时）本地补发
-GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee_release.sh
-#    版本默认取最新 tag（git describe --tags --abbrev=0）；产物自动从 GitHub Release
-#    下载到 release-download/ 目录（可传第 2 个参数覆盖）并校验字节数
-#    可重复执行：已存在且大小一致的附件会跳过
+bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token vX.Y.Z
+#    版本省略时默认取最新 tag；产物自动从 GitHub Release 下载到 release-download/
+#    并校验字节数；可重复执行，已存在且大小一致的附件会跳过
+#    令牌准备、成功判定、失败处理和清理参见 §7
 ```
 
 ## 3. 发布说明的组织方式
@@ -124,8 +125,125 @@ KEEP_GITEE_RELEASES=3 GITEE_TOKEN=<私人令牌> bash deploy/gitee/publish_gitee
 | CI 报 “Tag (vX.Y.Z) 与 CMakeLists.txt 版本不一致” | 版本号没改或 tag 打错，改 `CMakeLists.txt` 后重打 tag |
 | macOS 打包步骤 1 秒即失败 | `deploy/mac/deploy_mac.sh` 在 git 索引里丢了可执行位；工作流已改为 `bash 脚本` 调用，另请确认 `git ls-files -s` 显示 100755 |
 | CI 的 DMG 背景没有版本号 | macOS job 的 Pillow 安装失败（脚本已逐级回退 + 告警），DMG 会回退静态背景图，不影响安装包 |
-| Gitee 附件上传失败 | 单附件上限 100MB；DMG 经 ULMO 压缩约 82MB、zip 约 86MB，均在限内。大文件已改成并行上传（贴近 TMD 策略）。CI 失败/超时用本地脚本补发 |
+| Gitee 附件上传失败 | 单附件上限 100MB；DMG 经 ULMO 压缩约 82MB、zip 约 86MB，均在限内。大文件已改成并行上传（贴近 TMD 策略）。CI 失败/超时用本地脚本补发，完整步骤见 §7 |
 | Gitee 上传被配额拒绝（附件总量超 1GB） | 脚本已在上传前自动清理旧版本附件（默认保留最近 2 个，见 §5）；若仍失败，手动删除旧版本附件后按 §2 第 5 步补发 |
 | 同一版本要重发 | 得先清干净：删两端 tag 与 Release（GitHub Release 用网页删，或临时工作流 `gh release delete --cleanup-tag`；Gitee 用 `DELETE /releases/{id}` + `git push gitee :refs/tags/vX.Y.Z`），再按 §2 重新打 tag 推送 |
 | 傍晚/夜里上传特别慢 | 跨境链路按时间段波动明显（实测早上快很多）；慢时可先用本地脚本发，或次日再发 |
 | macOS 首次打开被 Gatekeeper 拦 | 未做 Apple 公证，右键 →「打开」放行；录屏/录音需在系统设置里授权 |
+
+## 7. 本机补发 Gitee 附件（完整操作）
+
+### 7.1 先判断用哪条通路
+
+| 场景 | 做法 |
+|------|------|
+| 发新版本 | 按 §2 改版本号、打 tag、推送，等 CI 完成双端发布 |
+| GitHub Release 已成功，Gitee 缺附件/上传失败 | 按本节在本机补发 |
+| 同一版本两端都要重发 | 先删两端 tag 与 Release，再按 §2 完整重发 |
+
+本机补发**只做三件事**：从 GitHub Release 下载安装包 → 上传到 Gitee Release → 校验字节数。
+它不会重新编译，不会修改 tag、版本号或 GitHub Release。
+
+### 7.2 前置条件
+
+- 本机有 `git`、`curl`、`python3`（macOS 自带）
+- 本地存在对应 tag，例如 `v0.1.7`；脚本用它取发布说明和默认版本
+- GitHub Release 已经构建完成，并包含两个产物：
+  - `QuickShot-Release-vX.Y.Z-Windows-x64.zip`
+  - `QuickShot-Release-vX.Y.Z.dmg`
+- 有 Gitee 私人令牌，权限包含 `projects`
+
+如果 GitHub Release 还没有产物，说明 CI 的构建 job 尚未完成，本机脚本无法替代构建。
+
+### 7.3 准备令牌（推荐放文件）
+
+不要把令牌写进仓库或脚本。写入用户目录并限制权限：
+
+```bash
+printf '%s' '<Gitee 私人令牌>' > ~/.gitee_token
+chmod 600 ~/.gitee_token
+```
+
+也可以临时用环境变量，但会留在当前 shell 环境中：
+
+```bash
+export GITEE_TOKEN='<Gitee 私人令牌>'
+```
+
+令牌泄露后应立即在 Gitee 撤销并重新生成，同时更新 GitHub 仓库的 `GITEE_TOKEN` secret。
+
+### 7.4 执行补发
+
+```bash
+# 默认补发最新 tag，产物下载到 ./release-download/
+bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token
+
+# 指定版本
+bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token v0.1.7
+
+# 已经手动下载好产物时，指定产物目录
+bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token v0.1.7 /path/to/assets
+```
+
+脚本内部顺序：
+
+1. 读取 GitHub Release 的产物清单
+2. 下载到 `release-download/`，已存在且大小一致则跳过
+3. 复用已有 Gitee Release；不存在则创建
+4. 清理旧版本附件（默认保留最近 2 个，见 §5）
+5. 并行上传，失败自动重试（每个文件最多 4 次）
+6. 用 Gitee 下载地址的实际字节数逐项校验
+
+可选环境变量：
+
+```bash
+# GitHub API 匿名调用可能限流，配置后更稳定
+GH_TOKEN=<GitHub 令牌> bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token v0.1.7
+
+# 调整旧版本附件保留数量
+KEEP_GITEE_RELEASES=3 bash deploy/gitee/publish_gitee_release.sh --token-file ~/.gitee_token v0.1.7
+```
+
+### 7.5 成功标志
+
+正常情况下会看到：
+
+```text
+已上传: QuickShot-Release-v0.1.7-Windows-x64.zip
+已上传: QuickShot-Release-v0.1.7.dmg
+OK: QuickShot-Release-v0.1.7-Windows-x64.zip (91073131 bytes)
+OK: QuickShot-Release-v0.1.7.dmg (83526012 bytes)
+Gitee 发布完成：https://gitee.com/chiangyangNPU/quick-shot/releases/tag/v0.1.7
+```
+
+最后到 Gitee Release 页面确认两个附件都在，且能正常下载。
+
+### 7.6 重复执行与断点补发
+
+脚本是幂等的，可以反复执行：
+
+- 同名且字节数一致的附件直接跳过
+- 只缺一个附件时，只补传缺失的那个
+- 上传中断后重新执行即可，不会重复创建 Release
+
+### 7.7 常见失败
+
+| 现象 | 处理 |
+|------|------|
+| `错误：请设置 GITEE_TOKEN 或用 --token-file 指定令牌文件` | 令牌没传，检查 `--token-file` 路径或环境变量 |
+| `创建 Gitee Release 失败` / HTTP 401 | 令牌失效或权限不足，重新生成并勾选 `projects` |
+| `附件上传失败 ... (HTTP 403/429)` | 权限、限流或配额问题；脚本会带出服务端响应，按响应处理 |
+| 上传很慢或 HTTP 000 | 跨境链路问题；在国内网络环境执行，或稍后重试 |
+| `缺失或大小不符` | 上传未完整落库；重新执行脚本，已存在且大小正确的会跳过 |
+| `下载 xxx 失败` | GitHub 侧产物不可用或 API 限流；配置 `GH_TOKEN` 后重试 |
+| Gitee Release 被整体删除 | 脚本会自动重新创建，再上传附件 |
+
+### 7.8 清理
+
+补发完成后 `release-download/` 里的安装包是临时文件，可以删除：
+
+```bash
+rm -rf release-download
+```
+
+`~/.gitee_token` 按需保留，权限保持 `600`，不要提交到任何仓库。
