@@ -8,7 +8,7 @@
 #include <QHash>
 #include <Qt>
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
 #include <Carbon/Carbon.h>
 #endif
 
@@ -58,7 +58,7 @@ public:
      */
     bool updateShortcut(const QString &newKeySequence);
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     /**
      * @brief 触发快捷键回调（供 Carbon 事件回调调用，切回 Qt 事件循环执行）
      * @author chiangyang
@@ -91,7 +91,7 @@ private:
     bool m_isRegistered;                ///< 是否已注册快捷键
     std::function<void()> m_fnKeyCallback; ///< Fn键回调（macOS平台）
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     int m_targetKeyCode;                ///< 目标按键键码（Carbon 虚拟键码）
     EventHotKeyRef m_carbonHotKeyRef;   ///< Carbon 全局热键引用
 #endif

@@ -94,7 +94,7 @@ void ConfigManager::initDefaultConfigPath() {
 #ifdef Q_OS_WIN
     // Windows: 保存在应用程序目录下
     m_defaultConfigPath = appDir + "/QuickShot.ini";
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MACOS)
     // macOS: 保存在应用程序包 Resources 目录下或用户配置目录
     m_defaultConfigPath = appDir + "/../Resources/QuickShot.ini";
     if (!QFile::exists(m_defaultConfigPath)) {
@@ -324,7 +324,7 @@ bool ConfigManager::openConfigFileLocation() {
     process.startDetached(command);
     LOG_INFO(QString("Opened file location: %1").arg(folderPath));
     return true;
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MACOS)
     // macOS: 使用 open 命令
     QString command = QString("open -R \"%1\"").arg(m_currentConfigPath);
     QProcess process;

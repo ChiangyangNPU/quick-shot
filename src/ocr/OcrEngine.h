@@ -17,7 +17,7 @@
 // 平台相关头文件，用于动态加载 GPU 执行提供者
 #ifdef Q_OS_WIN
 #include <windows.h>
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MACOS)
 #include <dlfcn.h>
 #endif
 

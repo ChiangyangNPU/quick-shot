@@ -2,7 +2,7 @@
 
 #include <QTimer>
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
 #include <mach/mach_host.h>
 #include <mach/host_info.h>
 #include <mach/vm_statistics.h>
@@ -100,7 +100,7 @@ void PetSystemMonitor::poll() {
     }
 }
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
 
 /**
  * @brief 采样 CPU 占用（macOS：host_statistics HOST_CPU_LOAD_INFO 差分）

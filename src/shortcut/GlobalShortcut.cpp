@@ -11,7 +11,7 @@
 
 GlobalShortcut::GlobalShortcut(QObject *parent)
     : QObject(parent), m_hotkeyId(0), m_isRegistered(false)
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     , m_targetKeyCode(0), m_carbonHotKeyRef(nullptr)
 #endif
 {
@@ -144,7 +144,7 @@ bool GlobalShortcut::nativeEventFilter(const QByteArray &eventType, void *messag
     return false;
 }
 
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MACOS)
 
 /**
  * @brief Carbon 全局热键实现：通过 RegisterEventHotKey 注册系统级快捷键

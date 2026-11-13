@@ -208,7 +208,7 @@ bool OcrEngine::configureGpuProvider() {
     m_useGpu = true;
     return true;
 
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MACOS)
     // ============ macOS: CoreML（动态加载） ============
     typedef OrtStatus* (ORT_API_CALL *PFN_AppendCoreML)(OrtSessionOptions* options, uint32_t coreml_flags);
     PFN_AppendCoreML pfnCoreML = (PFN_AppendCoreML)dlsym(RTLD_DEFAULT, "OrtSessionOptionsAppendExecutionProvider_CoreML");

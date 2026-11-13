@@ -101,7 +101,7 @@ bool TranslationManager::loadLanguage(const QString &langCode) {
     QString filePath;
     
     // Check if running on macOS app bundle
-    #ifdef Q_OS_MAC
+    #ifdef Q_OS_MACOS
         // On macOS, language files are in Resources directory
         filePath = appDir + "/../Resources/languages/" + langCode + ".json";
         if (!QFile::exists(filePath)) {

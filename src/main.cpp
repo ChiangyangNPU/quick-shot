@@ -336,7 +336,7 @@ int main(int argc, char *argv[]) {
         if (reason == QSystemTrayIcon::DoubleClick) {
             snipScreen->start();
         }
-#ifndef Q_OS_MAC
+#ifndef Q_OS_MACOS
         // macOS: 左键单击由系统自动显示托盘菜单，不触发截屏
         // 其他平台: 左键单击触发截屏
         else if (reason == QSystemTrayIcon::Trigger) {

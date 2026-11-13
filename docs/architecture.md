@@ -3089,7 +3089,7 @@ graph TB
 `cpp
 #ifdef Q_OS_WIN
     #include " ScreenRecorder_win.cpp\
-#elif defined(Q_OS_MAC)
+#elif defined(Q_OS_MACOS)
  #include \ScreenRecorder_mac.cpp\
 #elif defined(Q_OS_LINUX)
  #include \ScreenRecorder_linux.cpp\
