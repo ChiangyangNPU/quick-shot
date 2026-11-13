@@ -269,7 +269,10 @@ while read -r name; do
     if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
         echo "已上传: ${name}"
     else
-        echo "附件上传失败: ${name} (HTTP ${code})" >&2
+        # 同时输出 Actions 错误注解：CI 页面上可直接看到 HTTP 码与服务端响应，
+        # 便于区分令牌权限、限流、配额和 Gitee 临时故障
+        detail=$(head -c 200 "/tmp/gitee_attach_${name}.json" 2>/dev/null | tr '\n' ' ')
+        echo "::error::附件上传失败: ${name} (HTTP ${code}) ${detail}" >&2
         UPLOAD_FAILED=1
     fi
 done < "$UPLOAD_LIST"

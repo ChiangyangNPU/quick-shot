@@ -144,7 +144,11 @@ jobs:
 
       - name: Build (macOS)
         if: runner.os == 'macOS'
-        run: cmake --build build --parallel
+        # macOS 默认使用 Unix Makefiles；`--parallel` 不带数字会展开成 `make -j`，
+        # 而 macOS 的 GNU Make 3.81 把无参数 -j 视为“不限制并发”，在 3 核 runner
+        # 上会同时拉起上百个 clang 进程并触发 swap，构建被拖到数小时。
+        # 显式传入 CPU 核数，避免超配。
+        run: cmake --build build --parallel "$(sysctl -n hw.ncpu)"
 
       - name: Run unit tests (macOS)
         if: runner.os == 'macOS'

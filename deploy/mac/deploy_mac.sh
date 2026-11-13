@@ -89,8 +89,11 @@ build_config() {
     cmake -S "$PROJECT_ROOT" -B . $CMAKE_ARGS
 
     # 构建项目
+    # macOS 默认使用 Unix Makefiles；`--parallel` 不带数字会展开成 `make -j`，
+    # 而 macOS 的 GNU Make 3.81 把无参数 -j 视为“不限制并发”，在核数较少的
+    # CI runner 上会同时拉起上百个 clang 进程并触发 swap，构建可能被拖到数小时。
     echo "Building project..."
-    cmake --build . --parallel
+    cmake --build . --parallel "$(sysctl -n hw.ncpu)"
 
     # 回到项目根目录
     cd "$PROJECT_ROOT"
