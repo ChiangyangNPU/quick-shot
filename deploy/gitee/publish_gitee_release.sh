@@ -83,7 +83,8 @@ gh_download() {
 
 # 远端附件的实际字节数（Gitee/GitHub API 不返回大小或不可信，直接看下载响应头）
 remote_size() {
-    curl -sIL -A "$UA" "$1" | tr -d '\r' | awk 'tolower($1)=="content-length:"{n=$2} END{print n+0}'
+    # 校验阶段也可能卡在无响应的下载地址上，加超时避免整个 job 被拖死
+    curl -sIL -A "$UA" --connect-timeout 15 --max-time 60 "$1" | tr -d '\r' | awk 'tolower($1)=="content-length:"{n=$2} END{print n+0}'
 }
 
 echo "== 发布 $TAG 到 Gitee（产物来自 GitHub Release） =="
@@ -117,7 +118,10 @@ while IFS=$'\t' read -r id name size; do
         continue
     fi
     echo "下载 $name ..."
-    gh_download "https://api.github.com/repos/$REPO_SLUG/releases/assets/$id" "$target"
+    if ! gh_download "https://api.github.com/repos/$REPO_SLUG/releases/assets/$id" "$target"; then
+        echo "::error::下载 ${name} 失败" >&2
+        exit 1
+    fi
     actual="$(file_size "$target")"
     if [ "$actual" != "$size" ]; then
         echo "错误：${name} 下载不完整（本地 ${actual} ≠ 远端 ${size}）" >&2
@@ -236,10 +240,12 @@ upload_asset() {
     for attempt in 1 2 3 4; do
         # 变量用 ${} 包裹：后接中文全角字符时，bash 3.2 会把多字节字符并进变量名解析
         echo "上传 ${name}（第 ${attempt} 次）..."
+        # curl 非零退出（超时/连接中断）时也要继续重试并记录 000，
+        # 否则 set -e 会让后台子 shell 直接退出，最终连错误注解都来不及输出
         code=$(curl -s -A "$UA" --speed-limit 512 --speed-time 900 \
             -o "/tmp/gitee_attach_${name}.json" -w "%{http_code}" -X POST \
             "https://gitee.com/api/v5/repos/$GITEE_SLUG/releases/$RELEASE_ID/attach_files" \
-            -F "access_token=$GITEE_TOKEN" -F "file=@$ASSET_DIR/$name")
+            -F "access_token=$GITEE_TOKEN" -F "file=@$ASSET_DIR/$name") || code="000"
         code="${code:-000}"
         if [ "$code" -ge 200 ] && [ "$code" -lt 300 ]; then
             echo "$code" > "/tmp/gitee_attach_${name}.code"
@@ -271,7 +277,9 @@ while read -r name; do
     else
         # 同时输出 Actions 错误注解：CI 页面上可直接看到 HTTP 码与服务端响应，
         # 便于区分令牌权限、限流、配额和 Gitee 临时故障
-        detail=$(head -c 200 "/tmp/gitee_attach_${name}.json" 2>/dev/null | tr '\n' ' ')
+        # 末尾的 || true 不能省：响应文件可能不存在，pipefail 下 head 失败会让
+        # set -e 直接退出，导致这条错误注解永远打印不出来
+        detail=$(head -c 200 "/tmp/gitee_attach_${name}.json" 2>/dev/null | tr '\n' ' ' || true)
         echo "::error::附件上传失败: ${name} (HTTP ${code}) ${detail}" >&2
         UPLOAD_FAILED=1
     fi
@@ -285,7 +293,7 @@ while IFS=$'\t' read -r id name size; do
     if [ "$got" = "$size" ]; then
         echo "OK: $name ($got bytes)"
     else
-        echo "缺失或大小不符: $name 期望 $size 实际 $got" >&2
+        echo "::error::缺失或大小不符: $name 期望 $size 实际 $got" >&2
         FAILED=1
     fi
 done < /tmp/gh_assets.txt
