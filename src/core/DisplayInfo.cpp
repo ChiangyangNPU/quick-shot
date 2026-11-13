@@ -78,7 +78,6 @@ static BOOL CALLBACK enumWindowsProc(HWND hwnd, LPARAM lParam) {
 
 #ifdef Q_OS_MACOS
 #include <CoreGraphics/CoreGraphics.h>
-#include <unistd.h>
 
 /**
  * @brief 将 CFString 转换为 QString
@@ -198,7 +197,6 @@ void DisplayInfo::refresh() {
         kCGNullWindowID);
 
     if (windowList) {
-        pid_t myPid = getpid();
         CFIndex count = CFArrayGetCount(windowList);
 
         for (CFIndex i = 0; i < count; i++) {
@@ -211,11 +209,9 @@ void DisplayInfo::refresh() {
             if (layerRef) CFNumberGetValue(layerRef, kCFNumberIntType, &layer);
             if (layer != 0) continue;
 
-            // 过滤2: 跳过自己应用的窗口（截屏全屏窗口不应作为猎物）
-            pid_t pid = 0;
-            auto pidRef = static_cast<CFNumberRef>(CFDictionaryGetValue(dict, kCGWindowOwnerPID));
-            if (pidRef) CFNumberGetValue(pidRef, kCFNumberIntType, &pid);
-            if (pid == myPid) continue;
+            // 注：不过滤自身进程窗口，以便框选 QuickShot 自己的设置/历史/待办等窗口。
+            // 截屏覆盖层（SnipScreen）在 refresh() 之后才 show()，不在枚举结果中，
+            // 因此不会被误选为猎物；该行为与 Windows 保持一致。
 
             // 获取窗口标题
             auto nameRef = static_cast<CFStringRef>(CFDictionaryGetValue(dict, kCGWindowName));
@@ -225,7 +221,7 @@ void DisplayInfo::refresh() {
             auto ownerRef = static_cast<CFStringRef>(CFDictionaryGetValue(dict, kCGWindowOwnerName));
             QString ownerName = cfStringToQString(ownerRef);
 
-            // 过滤3: 无标题且无应用名则跳过（与 Windows 逻辑一致）
+            // 过滤2: 无标题且无应用名则跳过（与 Windows 逻辑一致）
             if (title.isEmpty() && ownerName.isEmpty()) continue;
 
             // 获取窗口边界（CGRect，单位为逻辑点，与 Qt 坐标系一致）

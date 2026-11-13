@@ -465,16 +465,6 @@ private:
     void startCapture(bool recording);
 
     /**
-     * @brief 进入截图/录屏/滚动截图时隐藏设置窗口与历史窗口（仅 macOS，不自动恢复）
-     *
-     * 截图、录屏、滚动截图都需要激活应用，macOS 激活时会把应用所有窗口
-     * 连同被盖住的设置/历史窗口整体抬到其他应用之上，取消后会露出来。
-     * 故进入会话时直接隐藏；不自动恢复是有意行为（需要时从托盘再打开）。
-     * @author chiangyang
-     */
-    void hideAuxiliaryWindowsForCapture();
-
-    /**
      * @brief 切换到录屏模式
      * @author chiangyang
      */
