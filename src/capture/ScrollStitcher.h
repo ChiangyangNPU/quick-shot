@@ -13,10 +13,17 @@
  *
  * 拼接原理：
  * 1. 灰度化后为每行按固定步长采样列、生成 64 位指纹；
- * 2. 只在前后两帧中都唯一出现的行参与位移投票，得票最多的位移为候选；
+ * 2. 只在前后两帧中都唯一出现的行参与位移投票，正负两个方向的得票
+ *    各自统计，得票最多的位移为候选；
  * 3. 用上一帧其余唯一行回代校验一致率，不足则丢弃该帧；
  * 4. 匹配成功后只追加当前帧的新内容条带；帧底部连续不动的区域视为
  *    固定页脚，不参与对齐也不再拼入长图，避免正文丢失与页脚重复。
+ *
+ * 滚动方向双支持：正向（垂直下滚/水平右滚）新内容进入底部，按序追加；
+ * 反向（垂直上滚/水平左滚）新内容进入顶部，拼接为前置条带。视口在
+ * 已捕获范围内来回时（回滚已拍过的内容）通过 gap 跟踪判重，不产生
+ * 重复条带。前置条带的起点为当前帧顶部静止行数（与上一帧相同的行，
+ * 已捕获，跳过即去重）。
  *
  * 空白行与重复排版行因不唯一而不投票，固定表头/底栏因位移为 0
  * 被排除，纯色画面则因缺乏唯一行被判为无法定位。
@@ -130,20 +137,38 @@ public:
 
 private:
     /**
-     * @brief 通过行指纹投票求两帧之间的滚动位移
+     * @brief 求两帧之间的滚动位移（对齐总入口）
      *
-     * 为每行像素生成 64 位指纹，只让在两帧中均唯一出现的行参与投票：
-     * 空白行、重复排版行会自然失去投票权，固定表头/底栏因位移为 0
-     * 被排除，避免其干扰定位。得票最多的位移再回代校验一致性。
+     * 先尝试行指纹精确对齐（见 tryHashVerticalShift），失败后退化为
+     * 梯度显著点 2-D SAD 匹配（matchByGradientSamples）——触控板/平滑
+     * 滚动在抓帧时刻多为亚像素位置，系统渲染做抗锯齿混合，精确比对
+     * 必然失配。
      *
      * @param prev 上一帧灰度图（转置坐标系）
      * @param next 当前帧灰度图（转置坐标系）
+     * @param shift 输出：带符号位移。正 = 内容上移（新内容进入底部，
+     *              追加方向）；负 = 内容下移（新内容进入顶部，前置方向）；
+     *              0 = 未滚动
+     * @param staticTopRows 输出：帧顶部连续保持不动的行数（固定侧栏/表头候选）
      * @param staticBottomRows 输出：帧底部连续保持不动的行数（固定页脚候选）
-     * @return 内容上移的像素数；0 表示未滚动；-1 表示无法可靠定位
+     * @return 是否可靠定位；false 表示无法定位（纯色、无纹理、滚动过快等）
      * @author chiangyang
      */
-    int findVerticalShift(const QImage &prev, const QImage &next,
-                          int *staticBottomRows) const;
+    bool findVerticalShift(const QImage &prev, const QImage &next, int *shift,
+                           int *staticTopRows, int *staticBottomRows) const;
+
+    /**
+     * @brief 行指纹投票精确对齐（见 findVerticalShift 文档）
+     *
+     * 为每行像素生成 64 位指纹，只让在两帧中均唯一出现的行参与投票：
+     * 空白行、重复排版行会自然失去投票权，固定表头/底栏因位移为 0
+     * 被排除，避免其干扰定位。正负两个方向的得票各自统计，取票数最多
+     * 的位移再回代校验一致性，因此反向滚动（垂直上滚/水平左滚）同样
+     * 能被可靠定位。
+     * @author chiangyang
+     */
+    bool tryHashVerticalShift(const QImage &prev, const QImage &next, int *shift,
+                              int *staticTopRows, int *staticBottomRows) const;
 
     /**
      * @brief 将新内容追加为一段条带（转置坐标系）
@@ -176,6 +201,8 @@ private:
     int m_stitchedLength = 0;       ///< 已拼接的主方向长度
     int m_footerRows = 0;           ///< 已确认的固定页脚行数（0 表示无页脚）
     int m_firstStripTrimmedRows = 0;///< 首帧条带已裁掉的页脚行数
+    int m_startGap = 0;             ///< 视口起点深入已捕获内容的回退量（反向滚动防重复）
+    int m_endGap = 0;               ///< 已捕获内容超出视口终点的富余量（正向回滚防重复）
     int m_maxLength = kDefaultMaxLength;  ///< 最大拼接长度
 };
 

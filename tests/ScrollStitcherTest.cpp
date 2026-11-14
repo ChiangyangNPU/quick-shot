@@ -2,14 +2,16 @@
  * @file ScrollStitcherTest.cpp
  * @brief 滚动截图拼接器单元测试
  *
- * 覆盖垂直/水平拼接、固定表头与底栏、重复帧丢弃、无纹理画面拒绝、
- * 最大长度限制，以及页面跳转/快速滚动后的基准重设。
- * 纯 QImage 计算，无 GUI 依赖，使用 QTEST_GUILESS_MAIN。
+ * 覆盖垂直/水平拼接、正反向滚动、固定表头与底栏、重复帧丢弃、无纹理
+ * 画面拒绝、最大长度限制、页面跳转/快速滚动后的基准重设，以及亚像素
+ * 平滑滚动（抗锯齿混合帧）的剖面兜底匹配。
+ * 渲染文本用例需要 QApplication，使用 QTEST_MAIN。
  * @author chiangyang
  */
 #include <QtTest>
 #include <QImage>
 #include <QPainter>
+#include <cmath>
 #include <cstring>
 
 #include "capture/ScrollStitcher.h"
@@ -29,6 +31,14 @@ QImage makeDocument(int width, int height) {
         for (int x = 0; x < width; ++x) {
             const int v = (y * 37 + x * 11 + (y * y) / 17 + (x * x) / 13) % 256;
             image.setPixel(x, y, qRgb(v, (v * 3) % 256, (v * 7) % 256));
+        }
+    }
+    // 行 3 写入逐列唯一标记：基础公式在 mod 256 下存在列别名（部分列完全
+    // 相同），会污染水平方向的锚点投票；真实截屏每列几乎必然不同，这里
+    // 显式保证列唯一性，使水平用例贴近真实内容
+    if (height > 3) {
+        for (int x = 0; x < width; ++x) {
+            image.setPixel(x, 3, qRgb(x % 256, (x * 7) % 256, (x * 13) % 256));
         }
     }
     return image;
@@ -82,6 +92,32 @@ bool imagesEqual(const QImage &a, const QImage &b) {
         }
     }
     return true;
+}
+
+/**
+ * @brief 生成亚像素混合帧：模拟 macOS 平滑滚动在抓帧时刻的渲染
+ *
+ * 真实滚动的位移常为分数像素，系统渲染时在列方向做相邻内容的线性
+ * 插值（抗锯齿混合），行指纹逐字节精确比对必然失配。
+ * @param doc 源文档
+ * @param offset 亚像素滚动偏移（列方向）
+ * @author chiangyang
+ */
+QImage makeBlendedFrame(const QImage &doc, double offset, int frameW, int frameH) {
+    QImage frame(frameW, frameH, QImage::Format_RGB32);
+    const int x0 = int(std::floor(offset));
+    const double f = offset - x0;
+    for (int y = 0; y < frameH; ++y) {
+        for (int x = 0; x < frameW; ++x) {
+            const QRgb ca = doc.pixel(x0 + x, y);
+            const QRgb cb = doc.pixel(x0 + 1 + x, y);
+            const int r = int(qRed(ca) * (1 - f) + qRed(cb) * f);
+            const int g = int(qGreen(ca) * (1 - f) + qGreen(cb) * f);
+            const int b = int(qBlue(ca) * (1 - f) + qBlue(cb) * f);
+            frame.setPixel(x, y, qRgb(r, g, b));
+        }
+    }
+    return frame;
 }
 
 } // namespace
@@ -158,6 +194,40 @@ private slots:
      * @author chiangyang
      */
     void fastScrollBecomesNoMatch();
+
+    /**
+     * @brief 水平向左滚动（反向）：新内容进入左侧，应拼接为前置条带
+     * @author chiangyang
+     */
+    void horizontalScrollLeftPrepend();
+
+    /**
+     * @brief 水平往返滚动：回滚已捕获范围不产生重复条带，越过边界才增长
+     * @author chiangyang
+     */
+    void horizontalBidirectional();
+
+    /**
+     * @brief 垂直向上滚动（反向）：新内容进入顶部，应拼接为前置条带
+     * @author chiangyang
+     */
+    void verticalScrollUpPrepend();
+
+    /**
+     * @brief 固定左侧栏 + 向左滚动：前置条带应跳过侧栏列，侧栏只出现一次
+     * @author chiangyang
+     */
+    void horizontalScrollLeftWithSidebar();
+
+    /**
+     * @brief 亚像素平滑滚动（抗锯齿混合帧）：剖面兜底匹配应正常拼接
+     *
+     * 触控板/平滑滚动在抓帧时刻多为分数像素位置，渲染时相邻内容线性
+     * 混合，行指纹精确比对必然失配；此时应退化为剖面 SAD 匹配并持续
+     * 拼接，累计长度接近真实滚动距离。
+     * @author chiangyang
+     */
+    void horizontalSmoothScrollBlend();
 };
 
 void ScrollStitcherTest::verticalStitch() {
@@ -448,5 +518,174 @@ void ScrollStitcherTest::fastScrollBecomesNoMatch() {
     QCOMPARE(stitcher.stitchedLength(), before + 40);
 }
 
-QTEST_GUILESS_MAIN(ScrollStitcherTest)
+void ScrollStitcherTest::horizontalScrollLeftPrepend() {
+    const int frameW = 150;
+    const int frameH = 120;
+    const int step = 50;
+    const int start = 400;
+    const QImage doc = makeDocument(600, frameH);
+
+    ScrollStitcher stitcher(ScrollStitcher::Orientation::Horizontal);
+    QVERIFY(stitcher.appendFrame(slice(doc, start, 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+
+    // 向左滚动：视口起点从 400 退到 200，新内容依次前置
+    for (int i = 1; i <= 4; ++i) {
+        QCOMPARE(stitcher.appendFrame(slice(doc, start - i * step, 0, frameW, frameH)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    QCOMPARE(stitcher.stitchedLength(), frameW + 4 * step);
+    QCOMPARE(stitcher.result().size(), QSize(frameW + 4 * step, frameH));
+    QVERIFY(imagesEqual(stitcher.result(), slice(doc, start - 4 * step, 0, frameW + 4 * step, frameH)));
+}
+
+void ScrollStitcherTest::horizontalBidirectional() {
+    const int frameW = 150;
+    const int frameH = 120;
+    const int step = 50;
+    const QImage doc = makeDocument(700, frameH);
+
+    // 先向右滚两帧（扩到 [200,450)），再原路回滚（不产生重复），最后
+    // 越过起点向左扩展两帧（前置）
+    const int offsets[] = { 200, 250, 300, 250, 200, 150, 100 };
+    ScrollStitcher stitcher(ScrollStitcher::Orientation::Horizontal);
+    QVERIFY(stitcher.appendFrame(slice(doc, offsets[0], 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+    // 右滚两帧：追加
+    for (int i = 1; i <= 2; ++i) {
+        QCOMPARE(stitcher.appendFrame(slice(doc, offsets[i], 0, frameW, frameH)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+    // 原路回滚两帧：视口仍在已捕获范围内，应判为未新增
+    for (int i = 3; i <= 4; ++i) {
+        QCOMPARE(stitcher.appendFrame(slice(doc, offsets[i], 0, frameW, frameH)),
+                 ScrollStitcher::AppendResult::Duplicate);
+    }
+    // 越过起点向左两帧：前置新内容
+    for (int i = 5; i <= 6; ++i) {
+        QCOMPARE(stitcher.appendFrame(slice(doc, offsets[i], 0, frameW, frameH)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    // 覆盖范围：最左前置帧 offsets[6]=100 到最右追加帧的右缘 300+150
+    const int left = offsets[6];
+    const int right = offsets[2] + frameW;
+    QCOMPARE(stitcher.stitchedLength(), right - left);
+    QVERIFY(imagesEqual(stitcher.result(), slice(doc, left, 0, right - left, frameH)));
+}
+
+void ScrollStitcherTest::verticalScrollUpPrepend() {
+    const int frameW = 120;
+    const int frameH = 150;
+    const int step = 50;
+    const int start = 400;
+    const QImage doc = makeDocument(frameW, 600);
+
+    ScrollStitcher stitcher;
+    QVERIFY(stitcher.appendFrame(slice(doc, 0, start, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+
+    // 向上滚动：新内容从顶部进入，依次前置
+    for (int i = 1; i <= 4; ++i) {
+        QCOMPARE(stitcher.appendFrame(slice(doc, 0, start - i * step, frameW, frameH)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    QCOMPARE(stitcher.stitchedLength(), frameH + 4 * step);
+    QVERIFY(imagesEqual(stitcher.result(), slice(doc, 0, start - 4 * step, frameW, frameH + 4 * step)));
+}
+
+void ScrollStitcherTest::horizontalScrollLeftWithSidebar() {
+    const int frameW = 200;
+    const int frameH = 120;
+    const int sidebarW = 40;
+    const int step = 50;
+    const int start = 400;
+    const QImage doc = makeDocument(700, frameH);
+    const QImage sidebar = makeDocument(sidebarW, frameH);
+
+    // 帧左侧 40px 为固定侧栏，其余为随滚动移动的内容
+    auto makeFrame = [&](int offset) {
+        QImage frame(frameW, frameH, QImage::Format_RGB32);
+        QPainter painter(&frame);
+        painter.drawImage(0, 0, sidebar);
+        painter.drawImage(sidebarW, 0, doc.copy(offset + sidebarW, 0, frameW - sidebarW, frameH));
+        return frame;
+    };
+
+    ScrollStitcher stitcher(ScrollStitcher::Orientation::Horizontal);
+    QVERIFY(stitcher.appendFrame(makeFrame(start))
+            == ScrollStitcher::AppendResult::Appended);
+    for (int i = 1; i <= 2; ++i) {
+        QCOMPARE(stitcher.appendFrame(makeFrame(start - i * step)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    // 前置条带只含内容列（跳过侧栏），侧栏只在首帧位置出现一次
+    const int stitched = frameW + 2 * step;
+    QCOMPARE(stitcher.stitchedLength(), stitched);
+
+    QImage expected(stitched, frameH, QImage::Format_RGB32);
+    QPainter painter(&expected);
+    // 两次前置的内容：doc[340,390) 与 doc[390,440)
+    painter.drawImage(0, 0, doc.copy(start - 2 * step + sidebarW, 0, step, frameH));
+    painter.drawImage(step, 0, doc.copy(start - step + sidebarW, 0, step, frameH));
+    painter.drawImage(2 * step, 0, sidebar);
+    painter.drawImage(2 * step + sidebarW, 0, doc.copy(start + sidebarW, 0, frameW - sidebarW, frameH));
+    QVERIFY(imagesEqual(stitcher.result(), expected));
+}
+
+void ScrollStitcherTest::horizontalSmoothScrollBlend() {
+    const int frameW = 700;
+    const int frameH = 460;
+    const double step = 12.4;  // 触控板式平滑滚动：每帧分数像素位移
+
+    // 真实渲染文本页：贴近实际截图内容（注意勿用像素公式生成器——
+    // 公式化内容常带周期性列结构，会人为制造混叠假峰）
+    QImage doc(frameW + 500, frameH, QImage::Format_RGB32);
+    doc.fill(qRgb(250, 250, 248));
+    {
+        QPainter p(&doc);
+        p.setPen(QColor(40, 40, 45));
+        QFont f = p.font();
+        f.setPixelSize(15);
+        p.setFont(f);
+        const QString words[] = {
+            "quick brown fox jumps over lazy dog", "release engineering pipeline",
+            "配置项已同步到云端", "performance metrics collected", "滚动截图水平方向验证",
+            "network retry strategy revised", "缓存淘汰策略调整说明", "deployment rollback plan",
+            "无量纲指标看板上线", "merge conflict resolution notes"
+        };
+        int y = 20;
+        int i = 0;
+        while (y < frameH - 20) {
+            const QString line = QString("%1. %2 — %3")
+                .arg(i).arg(words[i % 10]).arg(words[(i * 7 + 3) % 10]);
+            p.drawText(QRect(12, y, frameW + 500 - 24, 22), Qt::AlignLeft | Qt::AlignVCenter, line);
+            y += 26;
+            ++i;
+        }
+        p.setPen(QColor(210, 210, 210));
+        for (int sy = 12; sy < frameH; sy += 52) p.drawLine(0, sy, frameW + 500, sy);
+    }
+
+    ScrollStitcher stitcher(ScrollStitcher::Orientation::Horizontal);
+    QVERIFY(stitcher.appendFrame(makeBlendedFrame(doc, 60.0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+
+    const int frames = 9;
+    for (int i = 1; i <= frames; ++i) {
+        QCOMPARE(stitcher.appendFrame(makeBlendedFrame(doc, 60.0 + i * step, frameW, frameH)),
+                 ScrollStitcher::AppendResult::Appended);
+    }
+
+    // 真实滚动距离 9 * 12.4 ≈ 111.6；SAD 峰值取最近整数，允许每帧 ±1 的
+    // 取整误差，累计长度应落在 [真实距离 - 帧数, 真实距离 + 帧数] 区间
+    const double scrolled = frames * step;
+    QVERIFY(stitcher.stitchedLength() >= frameW + int(scrolled) - frames);
+    QVERIFY(stitcher.stitchedLength() <= frameW + int(scrolled) + frames + 1);
+}
+
+QTEST_MAIN(ScrollStitcherTest)
 #include "ScrollStitcherTest.moc"

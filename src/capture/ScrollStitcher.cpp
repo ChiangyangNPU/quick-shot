@@ -3,6 +3,7 @@
 #include <QTransform>
 #include <QVector>
 #include <QtGlobal>
+#include <cmath>
 #include <cstring>
 
 namespace {
@@ -22,6 +23,17 @@ constexpr double kMinNoScrollAnchorRatio = 0.2;
 constexpr int kMinFooterRows = 8;
 ///< 固定页脚最大占帧高的比例（超过该值多半是整块内容而非页脚）
 constexpr double kMaxFooterRatio = 0.5;
+///< 梯度点匹配的采样步长（物理像素）
+constexpr int kMatchSampleStride = 4;
+///< 梯度显著点数量上限（控制全位移扫描耗时）
+constexpr int kMaxGradientPoints = 2000;
+///< 采样点最少数量（低于该值视为画面平坦，无法匹配）
+constexpr int kMinGradientPoints = 100;
+///< 行方向梯度阈值（达到即认为该点落在文本/边缘上）
+constexpr int kGradientThreshold = 6;
+///< 匹配的 NCC 显著性阈值：真对齐（含混合帧）≈0.85+，无关内容 ≈0；
+///< 周期性内容的混叠峰也常达到 0.8+，属固有可能歧义
+constexpr double kMinNcc = 0.7;
 
 /**
  * @brief 判断两帧是否几乎完全相同
@@ -147,6 +159,123 @@ bool isBlankBackgroundRegion(const QImage &image, int top) {
     }
     return dominant == candidate;
 }
+
+/**
+ * @brief 梯度显著点 2-D SAD 匹配求位移（哈希精确定位失败时的兜底）
+ *
+ * 触控板/平滑滚动在抓帧时刻多为亚像素位置，系统渲染时做抗锯齿混合，
+ * 像素是相邻内容的插值，行指纹逐字节精确比对必然失配。此兜底在
+ * prev 帧上选取行方向梯度显著的采样点（文本/边缘像素，白底等平坦
+ * 区域被排除出信号），对全位移范围扫描求 2-D NCC 最大值：混合帧的
+ * 采样点值近似等于相邻位置像素的加权平均，NCC 峰值仍落在真实位移
+ * 附近的整数位置。
+ *
+ * 相比一维剖面匹配，2-D 采样点保留了字形/边缘的结构信息，对"文字带
+ * 固定行结构"（所有列剖面凹陷位置相同，一维匹配恒在 0 位移处）与
+ * 周期性列内容（混叠假峰）均能可靠区分。
+ *
+ * 显著性判据：最优 NCC ≥ kMinNcc（无关内容 ≈0）；周期性内容在多个
+ * 位移处 NCC 同样高属固有可能歧义，不在判据范围内。
+ *
+ * @param prev 上一帧灰度图（转置坐标系）
+ * @param next 当前帧灰度图（转置坐标系）
+ * @param shift 输出：带符号位移（正 = 追加方向，负 = 前置方向；0 = 未滚动）
+ * @return 是否求得可信位移
+ * @author chiangyang
+ */
+bool matchByGradientSamples(const QImage &prev, const QImage &next, int *shift) {
+    if (prev.size() != next.size() || prev.width() <= 0 || prev.height() <= 0) {
+        return false;
+    }
+    const int h = prev.height();
+    const int w = prev.width();
+    const int maxShift = h - kMinOverlapRows;
+    if (maxShift < kMinShift) {
+        return false;
+    }
+
+    // 1. 选取行方向梯度显著的采样点（prev 坐标；转置坐标系下行方向即
+    // 滚动方向，文本/边缘像素的混合误差信号最强）
+    QVector<QPoint> points;
+    for (int c = 0; c < w; c += kMatchSampleStride) {
+        for (int rp = 1; rp < h - 1; rp += kMatchSampleStride) {
+            const int g = qAbs(int(prev.constScanLine(rp + 1)[c]) - int(prev.constScanLine(rp - 1)[c]));
+            if (g >= kGradientThreshold) {
+                points.append(QPoint(c, rp));
+            }
+        }
+    }
+    if (points.size() < kMinGradientPoints) {
+        return false;  // 画面平坦（无文本/边缘），无法匹配
+    }
+    if (points.size() > kMaxGradientPoints) {
+        QVector<QPoint> thinned;
+        thinned.reserve(kMaxGradientPoints);
+        const int keepEvery = (points.size() + kMaxGradientPoints - 1) / kMaxGradientPoints;
+        for (int i = 0; i < points.size() && thinned.size() < kMaxGradientPoints; i += keepEvery) {
+            thinned.append(points[i]);
+        }
+        points = thinned;
+    }
+
+    // 2. 全位移扫描：next 行 r ≈ prev 行 r + s（带符号 s），比较采样点。
+    //    评分用 NCC（归一化互相关）：对整体亮度变化不敏感，真对齐时
+    //    混合帧与原像素仍高度相关（≈0.85+），无关内容 ≈0，判别力远强于
+    //    SAD 均值比。有效点占比过低（位移过大、重叠不足）的候选直接跳过
+    double bestNcc = -2.0;
+    int bestS = 0;
+    int candidates = 0;
+    const int minCount = qMax(50, int(points.size() * 0.25));
+    for (int s = -maxShift; s <= maxShift; ++s) {
+        double sumP = 0, sumN = 0, sumPN = 0, sumP2 = 0, sumN2 = 0;
+        int count = 0;
+        for (const QPoint &pt : points) {
+            const int rn = pt.y() - s;  // prev 行 rp 的内容出现在 next 行 rp - s
+            if (rn < 0 || rn >= h) {
+                continue;
+            }
+            const double pv = prev.constScanLine(pt.y())[pt.x()];
+            const double nv = next.constScanLine(rn)[pt.x()];
+            sumP += pv;
+            sumN += nv;
+            sumPN += pv * nv;
+            sumP2 += pv * pv;
+            sumN2 += nv * nv;
+            ++count;
+        }
+        if (count < minCount) {
+            continue;
+        }
+        const double meanP = sumP / count;
+        const double meanN = sumN / count;
+        const double varP = qMax(0.0, sumP2 / count - meanP * meanP);
+        const double varN = qMax(0.0, sumN2 / count - meanN * meanN);
+        const double den = std::sqrt(varP * varN);
+        if (den < 1e-6) {
+            continue;  // 采样点亮度无变化（纯色区域）
+        }
+        const double ncc = (sumPN / count - meanP * meanN) / den;
+        ++candidates;
+        if (ncc > bestNcc) {
+            bestNcc = ncc;
+            bestS = s;
+        }
+    }
+    if (candidates < 3) {
+        return false;
+    }
+
+    // 3. 显著性判据：真对齐（含混合帧）的 NCC 显著高于无关内容
+    if (bestNcc < kMinNcc) {
+        return false;  // 峰值不显著：画面无纹理或大面积重复排版
+    }
+    if (qAbs(bestS) < kMinShift) {
+        *shift = 0;  // 未滚动
+        return true;
+    }
+    *shift = bestS;
+    return true;
+}
 } // namespace
 
 ScrollStitcher::ScrollStitcher(Orientation orientation)
@@ -162,6 +291,8 @@ void ScrollStitcher::reset(Orientation orientation) {
     m_stitchedLength = 0;
     m_footerRows = 0;
     m_firstStripTrimmedRows = 0;
+    m_startGap = 0;
+    m_endGap = 0;
 }
 
 int ScrollStitcher::stitchedLength() const {
@@ -198,16 +329,19 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
 
     // 静止帧快路径：画面几乎没变时必然是未滚动
     if (framesNearlyIdentical(m_lastGray, gray)) {
+        m_lastGray = gray;
         return AppendResult::Duplicate;
     }
 
+    int shift = 0;
+    int staticTopRows = 0;
     int staticBottomRows = 0;
-    const int shift = findVerticalShift(m_lastGray, gray, &staticBottomRows);
-    if (shift < 0) {
+    if (!findVerticalShift(m_lastGray, gray, &shift, &staticTopRows, &staticBottomRows)) {
         return AppendResult::NoMatch;
     }
     // 位移为 0 或过小：页面未滚动（或仅有抖动），不追加内容
-    if (shift < kMinShift) {
+    if (qAbs(shift) < kMinShift) {
+        m_lastGray = gray;
         return AppendResult::Duplicate;
     }
 
@@ -230,21 +364,67 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
     }
 
     const int contentBottom = work.height() - m_footerRows;  // 正文可视区下边界
-    const int startRow = contentBottom - shift;              // 当前帧中新内容的起始行
-    if (startRow < 0) {
-        return AppendResult::NoMatch;
+
+    if (shift > 0) {
+        // 追加方向（垂直下滚/水平右滚）：新内容从底部进入。
+        // 视口沿追加方向前进 shift 像素：起点进一步深入已捕获内容（startGap
+        // 增大），终点与已捕获边界的富余量缩小（endGap 减小）；endGap 用尽后
+        // 才有新内容，从而在来回滚动时判重，不产生重复条带
+        m_startGap += shift;
+        const int newLen = shift - m_endGap;
+        if (newLen <= 0) {
+            m_endGap -= shift;
+            m_lastGray = gray;
+            return AppendResult::Duplicate;
+        }
+
+        if (m_stitchedLength + newLen > m_maxLength) {
+            return AppendResult::LimitReached;
+        }
+        if (qint64(m_workFrameSize.width()) * (m_stitchedLength + newLen) > kMaxTotalPixels) {
+            return AppendResult::LimitReached;
+        }
+
+        const int startRow = contentBottom - newLen;  // 当前帧中新内容的起始行
+        if (startRow < 0 || !appendRows(work, startRow, contentBottom)) {
+            return AppendResult::NoMatch;
+        }
+        m_endGap = 0;
+    } else {
+        // 前置方向（垂直上滚/水平左滚）：新内容从顶部进入，拼为前置条带。
+        // 与追加方向对称：起点回退量 startGap 用尽前没有新内容；条带起点
+        // 跳过帧顶部静止行（与上一帧相同，已在结果中，跳过即去重）
+        const int step = -shift;
+        m_startGap -= step;
+        m_endGap += step;
+        const int newLen = -m_startGap;
+        if (newLen <= 0) {
+            // 视口仍在已捕获范围内：同步更新匹配基准。否则下一帧的位移
+            // 仍相对旧基准求解，会与本帧已入账的移动叠加（双重计算），
+            // 导致 gap 记账错位、回滚被误判为新内容
+            m_lastGray = gray;
+            return AppendResult::Duplicate;
+        }
+
+        if (staticTopRows + newLen > contentBottom - kMinOverlapRows) {
+            return AppendResult::NoMatch;  // 静止区 + 新内容占满视口，重叠不足，不可靠
+        }
+        if (m_stitchedLength + newLen > m_maxLength) {
+            return AppendResult::LimitReached;
+        }
+        if (qint64(m_workFrameSize.width()) * (m_stitchedLength + newLen) > kMaxTotalPixels) {
+            return AppendResult::LimitReached;
+        }
+
+        const QImage strip = work.copy(0, staticTopRows, work.width(), newLen);
+        if (strip.isNull()) {
+            return AppendResult::NoMatch;
+        }
+        m_strips.prepend(strip);
+        m_stitchedLength += newLen;
+        m_startGap = 0;
     }
 
-    if (m_stitchedLength + shift > m_maxLength) {
-        return AppendResult::LimitReached;
-    }
-    if (qint64(m_workFrameSize.width()) * (m_stitchedLength + shift) > kMaxTotalPixels) {
-        return AppendResult::LimitReached;
-    }
-
-    if (!appendRows(work, startRow, contentBottom)) {
-        return AppendResult::NoMatch;
-    }
     m_lastGray = gray;
     return AppendResult::Appended;
 }
@@ -263,23 +443,45 @@ bool ScrollStitcher::restartFromFrame(const QImage &frame) {
     }
 
     m_lastGray = toGray(work);
+    // 基准重设后视口与已捕获范围的对应关系失效，按"视口与已捕获边界对齐"
+    // 的乐观假设清零（与旧行为一致：重启后按全量位移追加/前置）
+    m_startGap = 0;
+    m_endGap = 0;
     return !m_lastGray.isNull();
 }
 
-int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
-                                      int *staticBottomRows) const {
+bool ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next, int *shift,
+                                       int *staticTopRows, int *staticBottomRows) const {
+    // 先尝试行指纹精确对齐：整数对齐帧上最快、最准
+    if (tryHashVerticalShift(prev, next, shift, staticTopRows, staticBottomRows)) {
+        return true;
+    }
+    // 精确对齐失败：触控板/平滑滚动在抓帧时刻多为亚像素位置，系统渲染
+    // 做抗锯齿混合，行指纹逐字节比对必然失配；或内容行大量重复时退化为
+    // 梯度显著点 2-D SAD 匹配（容忍混合像素）
+    return matchByGradientSamples(prev, next, shift);
+}
+
+bool ScrollStitcher::tryHashVerticalShift(const QImage &prev, const QImage &next, int *shift,
+                                          int *staticTopRows, int *staticBottomRows) const {
+    if (shift) {
+        *shift = 0;
+    }
+    if (staticTopRows) {
+        *staticTopRows = 0;
+    }
     if (staticBottomRows) {
         *staticBottomRows = 0;
     }
     const int width = prev.width();
     const int height = prev.height();
     if (next.width() != width || next.height() != height || width <= 0 || height <= 0) {
-        return -1;
+        return false;
     }
 
     const int maxShift = height - kMinOverlapRows;
     if (maxShift < kMinShift) {
-        return -1;
+        return false;
     }
 
     // 采样步长：每帧最多约 240 列参与指纹计算，兼顾精度与耗时
@@ -289,7 +491,7 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
     const int colBegin = edgeInset;
     const int colEnd = width - edgeInset;
     if (colEnd <= colBegin) {
-        return -1;
+        return false;
     }
 
     QVector<quint64> prevRows(height);
@@ -316,13 +518,16 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
     }
 
     /**
-     * @brief 锚点投票
+     * @brief 锚点投票（双向）
      *
-     * 位移 = 该行在上一帧的行号 - 在当前帧的行号。只在两帧中都唯一
-     * 出现的行才投票：空白行、重复排版行会因计数 > 1 被排除；
-     * 固定表头/底栏的行虽然唯一，但位移恒为 0，同样不计入。
+     * 位移 = 该行在上一帧的行号 - 在当前帧的行号。正位移 = 内容上移
+     * （新内容进入底部，追加方向）；负位移 = 内容下移（新内容进入顶部，
+     * 前置方向）。只在两帧中都唯一出现的行才投票：空白行、重复排版行
+     * 会因计数 > 1 被排除；固定表头/底栏/侧栏的行虽然唯一，但位移恒为 0，
+     * 同样不计入。
      */
-    QHash<int, int> votes;
+    QHash<int, int> downVotes;  // 正位移得票（键 = 位移）
+    QHash<int, int> upVotes;    // 负位移得票（键 = 位移绝对值）
     int anchorTotal = 0;
     for (int p = 0; p < height; ++p) {
         const quint64 hash = prevRows[p];
@@ -334,24 +539,45 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
             continue;
         }
         ++anchorTotal;
-        const int shift = p - it.value();
-        if (shift >= kMinShift && shift <= maxShift) {
-            ++votes[shift];
+        const int s = p - it.value();
+        if (s >= kMinShift && s <= maxShift) {
+            ++downVotes[s];
+        } else if (s <= -kMinShift && -s <= maxShift) {
+            ++upVotes[-s];
         }
     }
 
     // 唯一行太少：整幅画面都是纯色或重复排版，无法定位
     if (anchorTotal < kMinAnchorVotes) {
-        return -1;
+        return false;
     }
 
-    int bestShift = -1;
-    int bestVotes = 0;
-    for (auto it = votes.constBegin(); it != votes.constEnd(); ++it) {
-        if (it.value() > bestVotes) {
-            bestVotes = it.value();
-            bestShift = it.key();
+    int bestDownShift = -1;
+    int bestDownVotes = 0;
+    for (auto it = downVotes.constBegin(); it != downVotes.constEnd(); ++it) {
+        if (it.value() > bestDownVotes) {
+            bestDownVotes = it.value();
+            bestDownShift = it.key();
         }
+    }
+    int bestUpStep = -1;
+    int bestUpVotes = 0;
+    for (auto it = upVotes.constBegin(); it != upVotes.constEnd(); ++it) {
+        if (it.value() > bestUpVotes) {
+            bestUpVotes = it.value();
+            bestUpStep = it.key();
+        }
+    }
+
+    // 取票数更多的方向；票数相同（含同为 0）时优先追加方向
+    int signedShift = 0;
+    int bestVotes = 0;
+    if (bestDownVotes >= bestUpVotes && bestDownShift >= 0) {
+        signedShift = bestDownShift;
+        bestVotes = bestDownVotes;
+    } else if (bestUpStep >= 0) {
+        signedShift = -bestUpStep;
+        bestVotes = bestUpVotes;
     }
 
     /**
@@ -361,13 +587,13 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
      * 超出重叠范围、画面被大面积动画覆盖），按无法定位处理，让会话
      * 有机会重设基准；锚点充足时才视为页面未滚动。
      */
-    if (bestShift < 0 || bestVotes < kMinAnchorVotes) {
+    if (signedShift == 0 || bestVotes < kMinAnchorVotes) {
         const int minAnchorsForNoScroll =
             qMax(kMinAnchorVotes, int(height * kMinNoScrollAnchorRatio));
-        return anchorTotal >= minAnchorsForNoScroll ? 0 : -1;
+        return anchorTotal >= minAnchorsForNoScroll;  // true = 未滚动（*shift 保持 0）
     }
 
-    // 回代校验：上一帧的行在向上移动后应落在当前帧更低的位置；跳过静止行（表头/底栏）
+    // 回代校验：上一帧的行按位移移动后应落在当前帧对应位置；跳过静止行（表头/底栏/侧栏）
     int agree = 0;
     int total = 0;
     for (int p = 0; p < height; ++p) {
@@ -375,8 +601,8 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
         if (prevCount.value(hash) != 1 || nextRows[p] == hash) {
             continue;
         }
-        const int target = p - bestShift;
-        if (target < 0) {
+        const int target = p - signedShift;
+        if (target < 0 || target >= height) {
             continue;
         }
         ++total;
@@ -386,26 +612,30 @@ int ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next,
     }
 
     if (total < kMinAnchorVotes || double(agree) / total < kMinAnchorAgreement) {
-        return -1;
+        return false;
     }
 
-    // 帧底部连续与上一帧同位置完全相同的行，作为固定页脚候选。
-    // 是否采纳还要看它是否为页面背景留白（见 appendFrame）。
+    // 帧顶部/底部连续与上一帧同位置完全相同的行，作为固定区域候选。
+    // 底部候选是否采纳还要看它是否为页面背景留白（见 appendFrame）；
+    // 顶部候选由前置路径用作条带起点（这些行已在结果中，跳过即去重）。
+    // 用采样行指纹而不是整行像素寻找：行指纹跳过左右各 3% 的列，
+    // 滚动条滑块、窗口阴影等边缘元素移动时不会把静止区域截短。
+    if (staticTopRows) {
+        int run = 0;
+        for (int y = 0; y < height && prevRows[y] == nextRows[y]; ++y) {
+            ++run;
+        }
+        *staticTopRows = run;
+    }
     if (staticBottomRows) {
-        /**
-         * @brief 用采样行指纹而不是整行像素寻找静止页脚
-         *
-         * 行指纹跳过左右各 3% 的列，滚动条滑块、窗口阴影等边缘元素在
-         * 页脚区域移动时不会把静止页脚截短；页脚是否只是页面背景留白
-         * 由 appendFrame 中的 isBlankBackgroundRegion 用全像素检查。
-         */
         int run = 0;
         for (int y = height - 1; y >= 0 && prevRows[y] == nextRows[y]; --y) {
             ++run;
         }
         *staticBottomRows = run;
     }
-    return bestShift;
+    *shift = signedShift;
+    return true;
 }
 
 bool ScrollStitcher::appendRows(const QImage &frame, int startRow, int endRow) {
