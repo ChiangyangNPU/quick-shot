@@ -318,19 +318,11 @@ public:
     static QString getComboBoxStyle();
 
     /**
-     * @brief 获取复选框样式
-     * @return 复选框样式字符串
-     * @note 使用位置:
-     *   - RecordingControlWindow: 音频录制选项复选框
-     * @author chiangyang
-     */
-    static QString getCheckBoxStyle();
-
-    /**
-     * @brief 获取设置/历史界面复选框样式
+     * @brief 获取复选框样式（应用内统一，含设置/历史界面与录屏控制栏）
      * @return 复选框样式字符串
      * @note 使用位置: SettingsWindow（开机自启、日志打印、OCR GPU加速、
-     *       翻译开关、隐私提示、截图/剪贴板历史记录开关等复选框）
+     *       翻译开关、隐私提示、截图/剪贴板历史记录开关等复选框）；
+     *       RecordingControlWindow（系统声音、麦克风复选框，与设置界面统一）。
      *       显式指定文字颜色为黑色，避免不同系统主题下文字颜色
      *       与浅色背景相近导致看不见（深色系统主题下Qt原生
      *       QCheckBox会把文字继承为浅色，在浅色背景上不可见）。

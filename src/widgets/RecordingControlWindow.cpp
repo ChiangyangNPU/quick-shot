@@ -124,9 +124,9 @@ void RecordingControlWindow::setupUi() {
     chkSystemAudio->setChecked(sysAudioEnabled);
     chkMicrophone->setChecked(micEnabled);
 
-    // 复选框样式
-    chkSystemAudio->setStyleSheet(StyleManager::getCheckBoxStyle());
-    chkMicrophone->setStyleSheet(StyleManager::getCheckBoxStyle());
+    // 复选框样式（与设置界面统一）
+    chkSystemAudio->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    chkMicrophone->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
 
     connect(chkSystemAudio, &QCheckBox::toggled, this, [this](bool checked) {
         LOG_INFO(QString("RecordingControlWindow: system audio toggled=%1").arg(checked));
@@ -384,12 +384,12 @@ void RecordingControlWindow::updateButtonStyles() {
     btnResume->updateGeometry();
     btnStop->updateGeometry();
 
-    // 更新复选框样式
+    // 更新复选框样式（与设置界面统一）
     if (chkSystemAudio) {
-        chkSystemAudio->setStyleSheet(StyleManager::getCheckBoxStyle());
+        chkSystemAudio->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     }
     if (chkMicrophone) {
-        chkMicrophone->setStyleSheet(StyleManager::getCheckBoxStyle());
+        chkMicrophone->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
     }
     if (m_formatCombo) {
         m_formatCombo->setStyleSheet(StyleManager::getComboBoxStyle());

@@ -1007,13 +1007,6 @@ QString StyleManager::getComboBoxStyle() {
          .arg(hover);
 }
 
-QString StyleManager::getCheckBoxStyle() {
-        return QString(
-            "QCheckBox { color: %1; spacing: 4px; }"
-            "QCheckBox::indicator { width: 0.67em; height: 0.67em; }"
-        ).arg(qssColor(color(StyleColorId::ToolbarText)));
-}
-
 QString StyleManager::getSettingsCheckBoxStyle() {
         const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(
