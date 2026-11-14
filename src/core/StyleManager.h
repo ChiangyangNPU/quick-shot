@@ -189,6 +189,22 @@ public:
      */
     static void applyDarkTitleBar(WId windowId);
 
+    /**
+     * @brief 禁用窗口原生层面的最大化/缩放能力
+     * @param windowId 目标窗口句柄（QWidget::winId()）
+     * @note 双击系统标题栏触发的是原生最大化（Windows）/缩放或填充（macOS），
+     *       不经过 Qt 的 WindowMaximizeButtonHint；固定尺寸窗口被 Qt 钳制回原尺寸
+     *       后，原生层仍会把窗口挪到屏幕边缘（Windows 左上角、macOS 屏幕顶部）。
+     *       本方法从原生层面移除该能力：Windows 清除 WS_MAXIMIZEBOX；macOS 移除
+     *       NSWindowStyleMaskResizable、兜底禁用绿色缩放按钮，并挂钩窗口 delegate
+     *       的 windowShouldZoom:/windowWillUseStandardFrame:（缩放/填充路径都会
+     *       先询问 delegate，无 Resizable 位的窗口直接拒绝，其余窗口走 Qt 原实现）；
+     *       仅影响用户交互路径，Qt 的程序化 resize（高度动画、DPI 适配）不受影响；
+     *       其他平台为空实现
+     * @author chiangyang
+     */
+    static void disableWindowMaximize(WId windowId);
+
     // 标注工具默认值
     static constexpr int DEFAULT_PEN_WIDTH = 5;                 ///< 画笔默认粗细
     static constexpr int DEFAULT_FONT_SIZE = 28;                ///< 文本默认字号

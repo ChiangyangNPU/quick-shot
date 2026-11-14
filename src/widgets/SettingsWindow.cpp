@@ -41,7 +41,14 @@
 SettingsWindow::SettingsWindow(QWidget *parent) : QWidget(parent), heightAnimation(nullptr), m_animatedHeight(0) {
     LOG_INFO("SettingsWindow instance created");
     setWindowTitle("Settings");
-    
+
+    // 禁用最大化：窗口宽度固定、高度随选项卡自适应（applyTabHeight 里 setFixedSize），
+    // 最大化无意义。这里先移除 Qt 层的最大化按钮提示；但双击标题栏触发的是原生
+    // 最大化/缩放，不走该提示，固定尺寸窗口被钳制后窗口会跳到屏幕边缘
+    // （Windows 左上角、macOS 屏幕顶部），故 showEvent 里另调用
+    // StyleManager::disableWindowMaximize 从原生窗口样式上一并禁用
+    setWindowFlags(windowFlags() & ~Qt::WindowMaximizeButtonHint);
+
     // 使用QSvgRenderer设置SVG图标
     QSvgRenderer svgRenderer(QString(":/icons/app.svg"));
     if (svgRenderer.isValid()) {
@@ -111,7 +118,13 @@ void SettingsWindow::showEvent(QShowEvent *event) {
     // 重新显示时补刷标题栏深色属性：窗口是懒加载单例，关闭仅隐藏、再次打开
     // 复用同一原生窗口，而 Windows 在隐藏/重显周期会丢失 DWM 深色标题栏属性，
     // 导致第二次打开标题栏退回浅色（构造函数里只应用过一次，此处必须补刷）
-    StyleManager::applyDarkTitleBar(winId());
+    const WId wid = winId();
+    StyleManager::applyDarkTitleBar(wid);
+
+    // 禁用原生最大化/缩放：首次 show 时 NSWindow/Win32 窗口按可缩放样式创建
+    // （彼时高度尚未固定），需在原生层面移除，否则双击标题栏触发最大化/缩放，
+    // 被 Qt 固定尺寸钳制后窗口位置跳变；每次 show 幂等补刷兜底
+    StyleManager::disableWindowMaximize(wid);
 
     // 首次显示时同步设定当前选项卡对应的高度（无动画）
     // 懒加载下窗口是托盘点击瞬间才构造的，构造函数里的 100ms 初始化校准
