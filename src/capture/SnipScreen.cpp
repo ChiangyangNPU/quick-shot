@@ -669,7 +669,8 @@ void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToS
         return;
     }
 
-    // 长截图可能远超屏幕高度：按当前屏幕可用高度等比缩小初始显示窗口，
+    // 长截图可能远超屏幕边界：按当前屏幕可用区域等比缩小初始显示窗口
+    // （垂直长图高超屏、水平长图宽超屏，取两个方向的更严约束），
     // PinWindow 内部仍保留原图，复制/保存不受影响。
     // 窗口尺寸用设备无关尺寸：高 DPR 截图（物理像素）按 DPR 折算回逻辑尺寸显示
     QSize windowSize = pixmap.deviceIndependentSize().toSize();
@@ -678,10 +679,17 @@ void SnipScreen::pinPixmap(const QPixmap &pixmap, const QPoint &pos, bool fitToS
         if (!screen) screen = QGuiApplication::primaryScreen();
         if (screen) {
             const int maxHeight = qMax(100, int(screen->availableGeometry().height() * 0.9));
-            if (windowSize.height() > maxHeight) {
-                const qreal scale = qreal(maxHeight) / windowSize.height();
-                windowSize.setHeight(maxHeight);
+            const int maxWidth = qMax(100, int(screen->availableGeometry().width() * 0.9));
+            if (windowSize.height() > maxHeight || windowSize.width() > maxWidth) {
+                qreal scale = 1.0;
+                if (windowSize.height() > maxHeight) {
+                    scale = qMin(scale, qreal(maxHeight) / windowSize.height());
+                }
+                if (windowSize.width() > maxWidth) {
+                    scale = qMin(scale, qreal(maxWidth) / windowSize.width());
+                }
                 windowSize.setWidth(qMax(1, qRound(windowSize.width() * scale)));
+                windowSize.setHeight(qMax(1, qRound(windowSize.height() * scale)));
             }
         }
     }

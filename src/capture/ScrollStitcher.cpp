@@ -3,6 +3,7 @@
 #include <QTransform>
 #include <QVector>
 #include <QtGlobal>
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -34,6 +35,46 @@ constexpr int kGradientThreshold = 6;
 ///< 匹配的 NCC 显著性阈值：真对齐（含混合帧）≈0.85+，无关内容 ≈0；
 ///< 周期性内容的混叠峰也常达到 0.8+，属固有可能歧义
 constexpr double kMinNcc = 0.7;
+///< 候选位移的方差下限：den = sqrt(varP·varN)（灰度单位）。低于该值说明
+///< 采样点落在平坦区域（纯白/纯色），NCC 数值不稳定（±1.0 的巧合相关），
+///< 没有对齐信息，直接拒绝。真对齐的梯度点方差通常在数千量级
+constexpr double kMinMatchDen = 300;
+///< 强梯度点判别的 NCC 阈值：强点 = 文本笔画（梯度远大于网格线），
+///< 网格对齐但文本错位的混叠峰在强点子集上 NCC 崩落，据此剔除
+constexpr double kMinNccStrong = 0.6;
+///< 强梯度子集的最小点数（不足时跳过强点判别，退回全体点判据）
+constexpr int kMinStrongPoints = 40;
+
+/**
+ * @brief 沿滚动轴（转置坐标系的行方向）做 [1,2,1]/4 模糊
+ *
+ * 平滑滚动的抓帧时刻多为分数像素位置，两帧的分数部分常不相同
+ * （如 72.4 vs 84.8，整数位移后仍余 0.4px 子偏移），细笔画文本在
+ * 亚像素偏移下完全去相关，精确比对与 NCC 都会失效。沿滚动轴模糊
+ * 后信号带宽受限，子像素偏移的相关性恢复到 0.9+，峰位不变。
+ * 只模糊滚动轴：另一轴无子偏移，保留细节以维持判别力。
+ * @author chiangyang
+ */
+QImage blurAlongRows(const QImage &gray) {
+    // [1,4,6,4,1]/16 卷积核：0.5px 子偏移下的自相关 ≈0.95，足以抵抗
+    // 平滑滚动的分数像素错位；[1,2,1]/4 对 0.4~0.5px 子偏移恢复不足
+    QImage out(gray.size(), QImage::Format_Grayscale8);
+    const int h = gray.height();
+    const int w = gray.width();
+    const int taps[5] = { 1, 4, 6, 4, 1 };
+    for (int y = 0; y < h; ++y) {
+        uchar *dst = out.scanLine(y);
+        for (int x = 0; x < w; ++x) {
+            int sum = 0;
+            for (int t = 0; t < 5; ++t) {
+                const int yy = qBound(0, y + t - 2, h - 1);
+                sum += taps[t] * gray.constScanLine(yy)[x];
+            }
+            dst[x] = uchar((sum + 8) / 16);
+        }
+    }
+    return out;
+}
 
 /**
  * @brief 判断两帧是否几乎完全相同
@@ -183,10 +224,15 @@ bool isBlankBackgroundRegion(const QImage &image, int top) {
  * @return 是否求得可信位移
  * @author chiangyang
  */
-bool matchByGradientSamples(const QImage &prev, const QImage &next, int *shift) {
-    if (prev.size() != next.size() || prev.width() <= 0 || prev.height() <= 0) {
+bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *shift) {
+    if (prevRaw.size() != nextRaw.size() || prevRaw.width() <= 0 || prevRaw.height() <= 0) {
         return false;
     }
+    // 两帧分数部分不同（如 72.4 与 84.8，整数位移后仍余 0.4px 子偏移）时，
+    // 细笔画在精确像素比对下去相关；沿滚动轴模糊后子偏移的相关性恢复。
+    // 模糊只作用于兜底匹配，哈希精确对齐路径与拼接条带均不受影响
+    const QImage prev = blurAlongRows(prevRaw);
+    const QImage next = blurAlongRows(nextRaw);
     const int h = prev.height();
     const int w = prev.width();
     const int maxShift = h - kMinOverlapRows;
@@ -195,13 +241,15 @@ bool matchByGradientSamples(const QImage &prev, const QImage &next, int *shift) 
     }
 
     // 1. 选取行方向梯度显著的采样点（prev 坐标；转置坐标系下行方向即
-    // 滚动方向，文本/边缘像素的混合误差信号最强）
+    // 滚动方向，文本/边缘像素的混合误差信号最强），并记录各自的梯度值
     QVector<QPoint> points;
+    QVector<int> grads;
     for (int c = 0; c < w; c += kMatchSampleStride) {
         for (int rp = 1; rp < h - 1; rp += kMatchSampleStride) {
             const int g = qAbs(int(prev.constScanLine(rp + 1)[c]) - int(prev.constScanLine(rp - 1)[c]));
             if (g >= kGradientThreshold) {
                 points.append(QPoint(c, rp));
+                grads.append(g);
             }
         }
     }
@@ -210,22 +258,45 @@ bool matchByGradientSamples(const QImage &prev, const QImage &next, int *shift) 
     }
     if (points.size() > kMaxGradientPoints) {
         QVector<QPoint> thinned;
+        QVector<int> thinnedGrads;
         thinned.reserve(kMaxGradientPoints);
         const int keepEvery = (points.size() + kMaxGradientPoints - 1) / kMaxGradientPoints;
         for (int i = 0; i < points.size() && thinned.size() < kMaxGradientPoints; i += keepEvery) {
             thinned.append(points[i]);
+            thinnedGrads.append(grads[i]);
         }
         points = thinned;
+        grads = thinnedGrads;
+    }
+
+    // 强梯度子集：文本笔画（梯度远大于网格线/分隔线）。表格等周期性
+    // 内容上，网格对齐的混叠峰在全体点 NCC 里同样高分，但文本错位会使
+    // 强点子集的 NCC 崩落，以此区分真峰与混叠峰。
+    // 阈值自适应：取梯度 75 分位的 1.3 倍，下限 80。
+    QVector<QPoint> strongPoints;
+    {
+        QVector<int> sorted = grads;
+        std::sort(sorted.begin(), sorted.end());
+        const int p75 = sorted.isEmpty() ? 0 : sorted[qMin(sorted.size() - 1, (sorted.size() * 3) / 4)];
+        const int strongThreshold = qMax(80, int(p75 * 1.3));
+        for (int i = 0; i < points.size(); ++i) {
+            if (grads[i] >= strongThreshold) {
+                strongPoints.append(points[i]);
+            }
+        }
+        if (strongPoints.size() < kMinStrongPoints) {
+            strongPoints.clear();  // 文本太少，退回全体点判据
+        }
     }
 
     // 2. 全位移扫描：next 行 r ≈ prev 行 r + s（带符号 s），比较采样点。
     //    评分用 NCC（归一化互相关）：对整体亮度变化不敏感，真对齐时
-    //    混合帧与原像素仍高度相关（≈0.85+），无关内容 ≈0，判别力远强于
-    //    SAD 均值比。有效点占比过低（位移过大、重叠不足）的候选直接跳过
-    double bestNcc = -2.0;
+    //    混合帧与原像素仍高度相关（≈0.85+），无关内容 ≈0。候选须同时
+    //    通过全体点判据与强点子集判别；有效点占比过低的候选直接跳过
+    double bestScore = -2.0;   // 选峰分数：有强点子集时用其 NCC，否则用全体点 NCC
     int bestS = 0;
     int candidates = 0;
-    const int minCount = qMax(50, int(points.size() * 0.25));
+    const int minCount = qMax(50, int(points.size() * 0.3));
     for (int s = -maxShift; s <= maxShift; ++s) {
         double sumP = 0, sumN = 0, sumPN = 0, sumP2 = 0, sumN2 = 0;
         int count = 0;
@@ -251,22 +322,65 @@ bool matchByGradientSamples(const QImage &prev, const QImage &next, int *shift) 
         const double varP = qMax(0.0, sumP2 / count - meanP * meanP);
         const double varN = qMax(0.0, sumN2 / count - meanN * meanN);
         const double den = std::sqrt(varP * varN);
-        if (den < 1e-6) {
-            continue;  // 采样点亮度无变化（纯色区域）
+        if (den < kMinMatchDen) {
+            continue;  // 采样点方差过低（平坦区域），NCC 数值不稳定且无对齐信息
         }
-        const double ncc = (sumPN / count - meanP * meanN) / den;
+        const double nccAll = (sumPN / count - meanP * meanN) / den;
+        if (nccAll < kMinNcc) {
+            continue;  // 全体点相关性不足
+        }
+
+        // 强点子集二次判别：剔除"网格/周期结构对齐但文本错位"的混叠峰。
+        // 注意强点在候选位移下大部落界（可比较样本过少）时同样拒绝而非
+        // 空转通过——真对齐会把 prev 的文本点映射进 next 边界内，落在
+        // 界外说明该位移比较的是不含文本的另一片内容，正是混叠场景
+        double score = nccAll;
+        if (!strongPoints.isEmpty()) {
+            double sP = 0, sN = 0, sPN = 0, sP2 = 0, sN2 = 0;
+            int scount = 0;
+            for (const QPoint &pt : strongPoints) {
+                const int rn = pt.y() - s;
+                if (rn < 0 || rn >= h) {
+                    continue;
+                }
+                const double pv = prev.constScanLine(pt.y())[pt.x()];
+                const double nv = next.constScanLine(rn)[pt.x()];
+                sP += pv;
+                sN += nv;
+                sPN += pv * nv;
+                sP2 += pv * pv;
+                sN2 += nv * nv;
+                ++scount;
+            }
+            if (scount < kMinStrongPoints) {
+                continue;  // 文本点未随位移进入比较范围：内容不同源，拒绝
+            }
+            const double smP = sP / scount;
+            const double smN = sN / scount;
+            const double sden = std::sqrt(qMax(0.0, sP2 / scount - smP * smP)
+                                          * qMax(0.0, sN2 / scount - smN * smN));
+            if (sden < kMinMatchDen) {
+                continue;
+            }
+            const double nccStrong = (sPN / scount - smP * smN) / sden;
+            if (nccStrong < kMinNccStrong) {
+                continue;  // 文本未对齐：混叠峰，剔除
+            }
+            score = nccStrong;
+        }
+
         ++candidates;
-        if (ncc > bestNcc) {
-            bestNcc = ncc;
+        if (score > bestScore) {
+            bestScore = score;
             bestS = s;
         }
     }
-    if (candidates < 3) {
-        return false;
-    }
+    // 候选数为 0 时自然返回 false（bestS 保持 0 且 bestScore < 阈值）；
+    // 单一干净候选是好事，不再要求"至少 3 个候选"（那是旧 SAD 均值比
+    // 判据的遗留——阈值判据下混叠峰已被逐个剔除）
 
-    // 3. 显著性判据：真对齐（含混合帧）的 NCC 显著高于无关内容
-    if (bestNcc < kMinNcc) {
+    // 显著性判据：真对齐（含混合帧）的 NCC 显著高于无关内容
+    if (bestScore < kMinNcc) {
         return false;  // 峰值不显著：画面无纹理或大面积重复排版
     }
     if (qAbs(bestS) < kMinShift) {
