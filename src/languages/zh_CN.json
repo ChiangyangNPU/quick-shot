@@ -463,5 +463,9 @@
   "scroll.hint": "滚动页面开始采集",
   "scroll.tooltip": "长截图（左键垂直，右键选水平；快捷键 V / H）",
   "scroll.realign": "画面变化过大，已重新对齐",
-  "update.later": "稍后"
+  "update.later": "稍后",
+  "scroll.sensitivity": "灵敏度",
+  "scroll.sens.loose": "宽松",
+  "scroll.sens.normal": "标准",
+  "scroll.sens.strict": "严格"
 }

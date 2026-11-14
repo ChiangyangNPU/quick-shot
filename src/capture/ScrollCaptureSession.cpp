@@ -1,6 +1,7 @@
 #include "ScrollCaptureSession.h"
 #include "SnipScreen.h"
 #include "Selector.h"
+#include "../core/ConfigManager.h"
 #include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
 #include "../log/Logger.h"
@@ -41,8 +42,6 @@ constexpr int kCaptureIntervalMs = 150;
 constexpr int kMinSelectionSize = 32;
 ///< 隐藏宿主后等待一帧再抓首帧，避免抓到尚未消失的遮罩
 constexpr int kStartDelayMs = 120;
-///< 连续无法定位多少帧后重设匹配基准（150ms/帧，约 1.2 秒）
-constexpr int kNoMatchResetThreshold = 8;
 ///< “已重新对齐”提示显示时长
 constexpr int kResyncNoticeMs = 2500;
 ///< 选区参考框向外扩展的像素：让边框整体落在抓帧区域之外，避免被拍进长图
@@ -54,6 +53,21 @@ constexpr int kFrameOverlayOutset = 2;
  * @return QSS 颜色文本
  * @author chiangyang
  */
+/**
+ * @brief 各灵敏度档位对应的"连续无法定位重设基准"帧数
+ *
+ * 宽松档容忍更多连续失败帧（减少"画面变化过大"提示的出现频率），
+ * 严格档尽快重设基准。
+ * @author chiangyang
+ */
+int noMatchResetFor(int sensitivity) {
+    switch (sensitivity) {
+        case 0:  return 14;  // 宽松：约 2.1 秒
+        case 2:  return 5;   // 严格：约 0.75 秒
+        default: return 8;   // 标准：约 1.2 秒
+    }
+}
+
 QString hintQssColor(const QColor &c) {
     if (c.alpha() < 255) {
         return QStringLiteral("rgba(%1,%2,%3,%4)")
@@ -174,6 +188,10 @@ QString scrollText(const char *key, const char *fallback) {
 ScrollCaptureSession::ScrollCaptureSession(SnipScreen *host, QObject *parent)
     : QObject(parent)
     , m_host(host) {
+        // 从配置恢复对齐灵敏度（提示条按钮可改，跨会话保留）
+        m_sensitivity = qBound(0, ConfigManager::instance()->value(
+            QStringLiteral("capture/scrollSensitivity"), 1).toInt(), 2);
+        m_noMatchResetThreshold = noMatchResetFor(m_sensitivity);
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &ScrollCaptureSession::captureTick);
 
@@ -219,6 +237,7 @@ bool ScrollCaptureSession::start(ScrollStitcher::Orientation orientation) {
     m_dpr = screen ? screen->devicePixelRatio() : 1.0;
 
     m_stitcher.reset(orientation);
+    m_stitcher.setSensitivity(m_sensitivity);
     m_active = true;
     m_noMatchStreak = 0;
     m_showResyncNotice = false;
@@ -296,7 +315,7 @@ void ScrollCaptureSession::captureTick() {
         case ScrollStitcher::AppendResult::NoMatch:
             // 快速滚动、页面跳转或大面积动画导致无法对齐：连续失败后
             // 以当前画面重设基准，避免一直和过期基准比较而永久卡住
-            if (++m_noMatchStreak >= kNoMatchResetThreshold
+            if (++m_noMatchStreak >= m_noMatchResetThreshold
                 && m_stitcher.restartFromFrame(frame)) {
                 LOG_INFO("[ScrollCapture] re-aligned after repeated no-match");
                 m_noMatchStreak = 0;
@@ -428,6 +447,20 @@ void ScrollCaptureSession::setOrientation(ScrollStitcher::Orientation orientatio
         .arg(orientation == ScrollStitcher::Orientation::Vertical ? "vertical" : "horizontal"));
 }
 
+void ScrollCaptureSession::setSensitivity(int level) {
+    const int clamped = qBound(0, level, 2);
+    if (m_sensitivity == clamped) {
+        return;
+    }
+    m_sensitivity = clamped;
+    m_noMatchResetThreshold = noMatchResetFor(clamped);
+    m_stitcher.setSensitivity(clamped);
+    ConfigManager::instance()->setValue(QStringLiteral("capture/scrollSensitivity"), clamped);
+    updateHintText();
+    LOG_INFO(QString("[ScrollCapture] sensitivity switched to %1")
+        .arg(clamped == 0 ? "loose" : (clamped == 2 ? "strict" : "normal")));
+}
+
 void ScrollCaptureSession::shutdown() {
     // SnipScreen 全局复用，退出后可能再次进入截图：这里只停止并清理界面，
     // 定时器本身保留（随 QObject 父子关系销毁），避免下次 start 无定时器可用
@@ -557,6 +590,13 @@ void ScrollCaptureSession::createHintBar() {
     });
     layout->addWidget(m_orientationBtn, 0, Qt::AlignVCenter);
 
+    // 灵敏度切换按钮：点击在 宽松/标准/严格 之间循环（文案在 updateHintText 刷新）
+    m_sensitivityBtn = makeHintButton(QString());
+    connect(m_sensitivityBtn, &QAbstractButton::clicked, this, [this]() {
+        setSensitivity((m_sensitivity + 1) % 3);
+    });
+    layout->addWidget(m_sensitivityBtn, 0, Qt::AlignVCenter);
+
     m_finishBtn = makeHintButton(scrollText("scroll.finish", "Finish"));
     connect(m_finishBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::finish);
     layout->addWidget(m_finishBtn, 0, Qt::AlignVCenter);
@@ -604,6 +644,7 @@ void ScrollCaptureSession::destroyHintBar() {
     m_hintBar = nullptr;
     m_statusLabel = nullptr;
     m_orientationBtn = nullptr;
+    m_sensitivityBtn = nullptr;
     m_finishBtn = nullptr;
     m_cancelBtn = nullptr;
 }
@@ -673,6 +714,16 @@ void ScrollCaptureSession::updateHintText() {
             ? scrollText("scroll.mode.vertical", "Vertical")
             : scrollText("scroll.mode.horizontal", "Horizontal"));
     }
+    // 灵敏度按钮文案展示当前档位，点击后循环切换
+    if (m_sensitivityBtn) {
+        static const char *levelKeys[] = {
+            "scroll.sens.loose", "scroll.sens.normal", "scroll.sens.strict"
+        };
+        static const char *levelFallbacks[] = { "Loose", "Normal", "Strict" };
+        m_sensitivityBtn->setText(scrollText("scroll.sensitivity", "Sensitivity")
+            + QLatin1String(": ")
+            + scrollText(levelKeys[m_sensitivity], levelFallbacks[m_sensitivity]));
+    }
     if (m_statusLabel) {
         if (m_showResyncNotice) {
             m_statusLabel->setText(
@@ -712,6 +763,9 @@ bool ScrollCaptureSession::eventFilter(QObject *watched, QEvent *event) {
                 return true;
             case Qt::Key_H:
                 setOrientation(ScrollStitcher::Orientation::Horizontal);
+                return true;
+            case Qt::Key_S:
+                setSensitivity((m_sensitivity + 1) % 3);
                 return true;
             default:
                 break;

@@ -463,5 +463,9 @@
   "scroll.hint": "ページをスクロールして撮影",
   "scroll.tooltip": "長いスクリーンショット（左クリックで縦、右クリックで横、V / H）",
   "scroll.realign": "画面の変化が大きいため再同期しました",
-  "update.later": "後で"
+  "update.later": "後で",
+  "scroll.sensitivity": "感度",
+  "scroll.sens.loose": "緩",
+  "scroll.sens.normal": "標準",
+  "scroll.sens.strict": "厳格"
 }

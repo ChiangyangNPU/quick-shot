@@ -94,6 +94,17 @@ public:
     void setOrientation(ScrollStitcher::Orientation orientation);
 
     /**
+     * @brief 设置对齐灵敏度并持久化（0 宽松 / 1 标准 / 2 严格）
+     *
+     * 灵敏度映射到拼接器的重叠行数要求与 NCC 判定阈值：宽松容忍更快的
+     * 滚动与更弱的纹理（"画面变化过大"更少出现），严格抗误拼优先。
+     * 会话进行中切换立即生效，不影响已拼接内容。
+     * @param level 0 宽松 / 1 标准 / 2 严格（越界自动收敛）
+     * @author chiangyang
+     */
+    void setSensitivity(int level);
+
+    /**
      * @brief 宿主退出时强制清理（不触发完成/取消信号）
      * @author chiangyang
      */
@@ -198,11 +209,14 @@ private:
     QPointer<QWidget> m_frameOverlay;    ///< 选区参考框窗口（悬浮在选区位）
     QLabel *m_statusLabel = nullptr;     ///< 提示条状态文字
     QAbstractButton *m_orientationBtn = nullptr; ///< 滚动方向切换按钮（垂直/水平）
+    QAbstractButton *m_sensitivityBtn = nullptr; ///< 灵敏度切换按钮（宽松/标准/严格）
     QAbstractButton *m_finishBtn = nullptr;  ///< 完成按钮
     QAbstractButton *m_cancelBtn = nullptr;  ///< 取消按钮
     QRect m_captureRect;                 ///< 选区（全局坐标，已内缩避开边框）
     qreal m_dpr = 1.0;                   ///< 选区所在屏 DPR（拼接结果按此折算逻辑尺寸）
     int m_noMatchStreak = 0;             ///< 连续无法定位的帧数
+    int m_sensitivity = 1;               ///< 对齐灵敏度（0 宽松 / 1 标准 / 2 严格）
+    int m_noMatchResetThreshold = 8;     ///< 连续无法定位多少帧后重设基准（随灵敏度）
     bool m_active = false;               ///< 会话是否进行中
     bool m_showResyncNotice = false;     ///< 是否正在显示重新对齐提示
 };

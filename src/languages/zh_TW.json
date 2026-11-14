@@ -463,5 +463,9 @@
   "scroll.hint": "捲動頁面開始擷取",
   "scroll.tooltip": "長截圖（左鍵垂直，右鍵選水平；快捷鍵 V / H）",
   "scroll.realign": "畫面變化過大，已重新對齊",
-  "update.later": "稍後"
+  "update.later": "稍後",
+  "scroll.sensitivity": "靈敏度",
+  "scroll.sens.loose": "寬鬆",
+  "scroll.sens.normal": "標準",
+  "scroll.sens.strict": "嚴格"
 }

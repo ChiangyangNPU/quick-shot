@@ -12,8 +12,6 @@ namespace {
 constexpr double kStaticFrameDiff = 0.5;
 ///< 小于该位移视为页面未滚动（抗抖动）
 constexpr int kMinShift = 2;
-///< 允许的最快滚动：重叠行数低于该值说明位移过大，无法可靠对齐
-constexpr int kMinOverlapRows = 16;
 ///< 至少需要多少行唯一内容投票，低于该值视为画面缺少可辨识特征
 constexpr int kMinAnchorVotes = 2;
 ///< 回代校验时要求通过的唯一行占比
@@ -32,16 +30,9 @@ constexpr int kMaxGradientPoints = 2000;
 constexpr int kMinGradientPoints = 100;
 ///< 行方向梯度阈值（达到即认为该点落在文本/边缘上）
 constexpr int kGradientThreshold = 6;
-///< 匹配的 NCC 显著性阈值：真对齐（含混合帧）≈0.85+，无关内容 ≈0；
-///< 周期性内容的混叠峰也常达到 0.8+，属固有可能歧义
-constexpr double kMinNcc = 0.7;
-///< 候选位移的方差下限：den = sqrt(varP·varN)（灰度单位）。低于该值说明
-///< 采样点落在平坦区域（纯白/纯色），NCC 数值不稳定（±1.0 的巧合相关），
-///< 没有对齐信息，直接拒绝。真对齐的梯度点方差通常在数千量级
-constexpr double kMinMatchDen = 300;
-///< 强梯度点判别的 NCC 阈值：强点 = 文本笔画（梯度远大于网格线），
-///< 网格对齐但文本错位的混叠峰在强点子集上 NCC 崩落，据此剔除
-constexpr double kMinNccStrong = 0.6;
+///< 强梯度点判别的说明：强点 = 文本笔画（梯度远大于网格线），网格对齐
+///< 但文本错位的混叠峰在强点子集上 NCC 崩落，据此剔除；阈值随灵敏度
+///< 可调（见 ScrollStitcher::setSensitivity）。
 ///< 强梯度子集的最小点数（不足时跳过强点判别，退回全体点判据）
 constexpr int kMinStrongPoints = 40;
 
@@ -224,7 +215,15 @@ bool isBlankBackgroundRegion(const QImage &image, int top) {
  * @return 是否求得可信位移
  * @author chiangyang
  */
-bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *shift) {
+struct MatchThresholds {
+    double minNcc;          ///< 全体采样点 NCC 阈值
+    double minNccStrong;    ///< 强梯度点子集 NCC 阈值
+    double minDen;          ///< 候选方差下限
+    int minOverlapRows;     ///< 每帧最小重叠行数
+};
+
+bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *shift,
+                            const MatchThresholds &th) {
     if (prevRaw.size() != nextRaw.size() || prevRaw.width() <= 0 || prevRaw.height() <= 0) {
         return false;
     }
@@ -235,7 +234,7 @@ bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *s
     const QImage next = blurAlongRows(nextRaw);
     const int h = prev.height();
     const int w = prev.width();
-    const int maxShift = h - kMinOverlapRows;
+    const int maxShift = h - th.minOverlapRows;
     if (maxShift < kMinShift) {
         return false;
     }
@@ -322,11 +321,11 @@ bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *s
         const double varP = qMax(0.0, sumP2 / count - meanP * meanP);
         const double varN = qMax(0.0, sumN2 / count - meanN * meanN);
         const double den = std::sqrt(varP * varN);
-        if (den < kMinMatchDen) {
+        if (den < th.minDen) {
             continue;  // 采样点方差过低（平坦区域），NCC 数值不稳定且无对齐信息
         }
         const double nccAll = (sumPN / count - meanP * meanN) / den;
-        if (nccAll < kMinNcc) {
+        if (nccAll < th.minNcc) {
             continue;  // 全体点相关性不足
         }
 
@@ -359,11 +358,11 @@ bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *s
             const double smN = sN / scount;
             const double sden = std::sqrt(qMax(0.0, sP2 / scount - smP * smP)
                                           * qMax(0.0, sN2 / scount - smN * smN));
-            if (sden < kMinMatchDen) {
+            if (sden < th.minDen) {
                 continue;
             }
             const double nccStrong = (sPN / scount - smP * smN) / sden;
-            if (nccStrong < kMinNccStrong) {
+            if (nccStrong < th.minNccStrong) {
                 continue;  // 文本未对齐：混叠峰，剔除
             }
             score = nccStrong;
@@ -375,13 +374,11 @@ bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *s
             bestS = s;
         }
     }
-    // 候选数为 0 时自然返回 false（bestS 保持 0 且 bestScore < 阈值）；
-    // 单一干净候选是好事，不再要求"至少 3 个候选"（那是旧 SAD 均值比
-    // 判据的遗留——阈值判据下混叠峰已被逐个剔除）
-
-    // 显著性判据：真对齐（含混合帧）的 NCC 显著高于无关内容
-    if (bestScore < kMinNcc) {
-        return false;  // 峰值不显著：画面无纹理或大面积重复排版
+    // 无任何候选通过判据：无法定位。候选数为 0 是唯一的失败路径——
+    // 显著性已由逐候选的阈值判据保证（方差下限、全体点与强点子集 NCC
+    // 阈值），不再重复设总闸（旧"至少 3 个候选"与总阈值均为遗留判据）
+    if (candidates == 0) {
+        return false;  // 画面无纹理或大面积重复排版，无法定位
     }
     if (qAbs(bestS) < kMinShift) {
         *shift = 0;  // 未滚动
@@ -394,6 +391,30 @@ bool matchByGradientSamples(const QImage &prevRaw, const QImage &nextRaw, int *s
 
 ScrollStitcher::ScrollStitcher(Orientation orientation)
     : m_orientation(orientation) {
+}
+
+void ScrollStitcher::setSensitivity(int level) {
+    m_sensitivity = qBound(0, level, 2);
+    switch (m_sensitivity) {
+        case 0:  // 宽松：容忍更快滚动（重叠要求减半）与更弱的纹理相关
+            m_minOverlapRows = 8;
+            m_minNcc = 0.55;
+            m_minNccStrong = 0.45;
+            m_minMatchDen = 150;
+            break;
+        case 2:  // 严格：抗误拼优先，弱信号帧判 NoMatch
+            m_minOverlapRows = 24;
+            m_minNcc = 0.8;
+            m_minNccStrong = 0.7;
+            m_minMatchDen = 500;
+            break;
+        default:  // 标准
+            m_minOverlapRows = 16;
+            m_minNcc = 0.7;
+            m_minNccStrong = 0.6;
+            m_minMatchDen = 300;
+            break;
+    }
 }
 
 void ScrollStitcher::reset(Orientation orientation) {
@@ -468,7 +489,7 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
      */
     if (staticBottomRows >= kMinFooterRows) {
         const int maxFooterRows = qMin(int(work.height() * kMaxFooterRatio),
-                                       work.height() - kMinOverlapRows - kMinShift);
+                                       work.height() - m_minOverlapRows - kMinShift);
         if (staticBottomRows <= maxFooterRows
             && staticBottomRows > m_footerRows
             && !isBlankBackgroundRegion(work, work.height() - staticBottomRows)) {
@@ -520,7 +541,7 @@ ScrollStitcher::AppendResult ScrollStitcher::appendFrame(const QImage &frame) {
             return AppendResult::Duplicate;
         }
 
-        if (staticTopRows + newLen > contentBottom - kMinOverlapRows) {
+        if (staticTopRows + newLen > contentBottom - m_minOverlapRows) {
             return AppendResult::NoMatch;  // 静止区 + 新内容占满视口，重叠不足，不可靠
         }
         if (m_stitchedLength + newLen > m_maxLength) {
@@ -572,8 +593,9 @@ bool ScrollStitcher::findVerticalShift(const QImage &prev, const QImage &next, i
     }
     // 精确对齐失败：触控板/平滑滚动在抓帧时刻多为亚像素位置，系统渲染
     // 做抗锯齿混合，行指纹逐字节比对必然失配；或内容行大量重复时退化为
-    // 梯度显著点 2-D SAD 匹配（容忍混合像素）
-    return matchByGradientSamples(prev, next, shift);
+    // 梯度显著点 2-D 匹配（容忍混合像素）
+    return matchByGradientSamples(prev, next, shift,
+                                  {m_minNcc, m_minNccStrong, m_minMatchDen, m_minOverlapRows});
 }
 
 bool ScrollStitcher::tryHashVerticalShift(const QImage &prev, const QImage &next, int *shift,
@@ -593,7 +615,7 @@ bool ScrollStitcher::tryHashVerticalShift(const QImage &prev, const QImage &next
         return false;
     }
 
-    const int maxShift = height - kMinOverlapRows;
+    const int maxShift = height - m_minOverlapRows;
     if (maxShift < kMinShift) {
         return false;
     }

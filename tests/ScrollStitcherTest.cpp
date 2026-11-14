@@ -220,6 +220,15 @@ private slots:
     void horizontalScrollLeftWithSidebar();
 
     /**
+     * @brief 灵敏度档位：严格档拒绝小重叠快速滚动，宽松档接受
+     *
+     * 每帧滚动量使重叠仅 12 行（低于标准/严格档的重叠要求，高于宽松档），
+     * 验证灵敏度阈值确实映射到重叠行数要求。
+     * @author chiangyang
+     */
+    void sensitivityLevels();
+
+    /**
      * @brief 亚像素平滑滚动（抗锯齿混合帧）：剖面兜底匹配应正常拼接
      *
      * 触控板/平滑滚动在抓帧时刻多为分数像素位置，渲染时相邻内容线性
@@ -634,6 +643,38 @@ void ScrollStitcherTest::horizontalScrollLeftWithSidebar() {
     painter.drawImage(2 * step, 0, sidebar);
     painter.drawImage(2 * step + sidebarW, 0, doc.copy(start + sidebarW, 0, frameW - sidebarW, frameH));
     QVERIFY(imagesEqual(stitcher.result(), expected));
+}
+
+void ScrollStitcherTest::sensitivityLevels() {
+    const int frameW = 120;
+    const int frameH = 150;
+    const int step = frameH - 12;  // 重叠 12 行
+    const QImage doc = makeDocument(frameW, 800);
+
+    // 严格档：重叠要求 24 行 > 12，判 NoMatch
+    ScrollStitcher strict(ScrollStitcher::Orientation::Vertical);
+    strict.setSensitivity(2);
+    QVERIFY(strict.appendFrame(slice(doc, 0, 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+    QCOMPARE(strict.appendFrame(slice(doc, 0, step, frameW, frameH)),
+             ScrollStitcher::AppendResult::NoMatch);
+
+    // 标准档：重叠要求 16 行 > 12，判 NoMatch
+    ScrollStitcher normal(ScrollStitcher::Orientation::Vertical);
+    normal.setSensitivity(1);
+    QVERIFY(normal.appendFrame(slice(doc, 0, 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+    QCOMPARE(normal.appendFrame(slice(doc, 0, step, frameW, frameH)),
+             ScrollStitcher::AppendResult::NoMatch);
+
+    // 宽松档：重叠要求 8 行 < 12，正常拼接
+    ScrollStitcher loose(ScrollStitcher::Orientation::Vertical);
+    loose.setSensitivity(0);
+    QVERIFY(loose.appendFrame(slice(doc, 0, 0, frameW, frameH))
+            == ScrollStitcher::AppendResult::Appended);
+    QCOMPARE(loose.appendFrame(slice(doc, 0, step, frameW, frameH)),
+             ScrollStitcher::AppendResult::Appended);
+    QCOMPARE(loose.stitchedLength(), frameH + step);
 }
 
 void ScrollStitcherTest::horizontalSmoothScrollBlend() {

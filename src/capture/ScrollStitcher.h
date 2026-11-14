@@ -120,6 +120,31 @@ public:
     int stitchedLength() const;
 
     /**
+     * @brief 对齐灵敏度
+     *
+     * 宽松 = 容忍更快的滚动（更小重叠）与更弱的纹理相关，代价是周期性
+     * 内容上混叠误拼的风险升高；严格 = 抗误拼优先，弱信号帧判 NoMatch。
+     */
+    enum class Sensitivity { Loose = 0, Normal = 1, Strict = 2 };
+
+    /**
+     * @brief 设置对齐灵敏度（0 宽松 / 1 标准 / 2 严格）
+     *
+     * 调整重叠行数要求与 NCC 判定阈值；会话进行中切换立即生效，
+     * 不影响已拼接内容。
+     * @author chiangyang
+     */
+    void setSensitivity(int level);
+
+    /**
+     * @brief 当前灵敏度
+     * @author chiangyang
+     */
+    Sensitivity sensitivity() const {
+        return static_cast<Sensitivity>(m_sensitivity);
+    }
+
+    /**
      * @brief 设置最大拼接长度（主方向像素）
      * @param length 最大长度，默认 20000
      * @author chiangyang
@@ -204,6 +229,11 @@ private:
     int m_startGap = 0;             ///< 视口起点深入已捕获内容的回退量（反向滚动防重复）
     int m_endGap = 0;               ///< 已捕获内容超出视口终点的富余量（正向回滚防重复）
     int m_maxLength = kDefaultMaxLength;  ///< 最大拼接长度
+    int m_sensitivity = 1;          ///< 对齐灵敏度（0 宽松 / 1 标准 / 2 严格）
+    int m_minOverlapRows = 16;      ///< 每帧最小重叠行数（决定可容忍的单帧滚动幅度）
+    double m_minNcc = 0.7;          ///< 全体采样点的 NCC 阈值
+    double m_minNccStrong = 0.6;    ///< 强梯度点（文本笔画）子集的 NCC 阈值
+    double m_minMatchDen = 300.0;   ///< 候选位移的方差下限（平坦区域 NCC 不稳定）
 };
 
 #endif // SCROLLSTITCHER_H
