@@ -597,13 +597,19 @@ void ScrollCaptureSession::createHintBar() {
     });
     layout->addWidget(m_sensitivityBtn, 0, Qt::AlignVCenter);
 
-    m_finishBtn = makeHintButton(scrollText("scroll.finish", "Finish"));
+    // 完成/取消创建时留空文案：updateHintText 统一按角色填充（含悬停快捷键）
+    m_finishBtn = makeHintButton(QString());
     connect(m_finishBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::finish);
     layout->addWidget(m_finishBtn, 0, Qt::AlignVCenter);
 
-    m_cancelBtn = makeHintButton(scrollText("scroll.cancel", "Cancel"));
+    m_cancelBtn = makeHintButton(QString());
     connect(m_cancelBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::cancel);
     layout->addWidget(m_cancelBtn, 0, Qt::AlignVCenter);
+
+    // 四个按钮安装事件过滤器：悬停时显示快捷键提示（Enter/Leave）
+    for (QAbstractButton *btn : { m_orientationBtn, m_sensitivityBtn, m_finishBtn, m_cancelBtn }) {
+        btn->installEventFilter(this);
+    }
 
     /**
      * @brief 提示条样式：与工具栏统一
@@ -628,6 +634,17 @@ void ScrollCaptureSession::createHintBar() {
 
     // 兜底：选区占满整屏时提示条可能落在选区内，排除出捕获避免被拍进长图
     excludeWindowFromCapture(m_hintBar->winId());
+
+    // 快捷键提示走原生 tooltip（与一级工具栏悬停弹出的提示一致）：
+    // 悬停按钮后自动在下方弹出，按键名为物理按键不做翻译
+    m_orientationBtn->setToolTip(scrollText("scroll.hinttip.orientation",
+        "Switch orientation (V vertical / H horizontal)"));
+    m_sensitivityBtn->setToolTip(scrollText("scroll.hinttip.sensitivity",
+        "Switch sensitivity (S)"));
+    m_finishBtn->setToolTip(scrollText("scroll.hinttip.finish",
+        "Finish stitching (Enter)"));
+    m_cancelBtn->setToolTip(scrollText("scroll.hinttip.cancel",
+        "Cancel (Esc)"));
 }
 
 void ScrollCaptureSession::destroyHintBar() {
@@ -696,6 +713,32 @@ void ScrollCaptureSession::positionHintBar() {
     m_hintBar->move(qBound(minX, centerX, maxX), minY);
 }
 
+QString ScrollCaptureSession::hintButtonLabel(int role) const {
+    switch (role) {
+        case 0:  // 方向：展示当前方向
+            return m_stitcher.orientation() == ScrollStitcher::Orientation::Vertical
+                ? scrollText("scroll.mode.vertical", "Vertical")
+                : scrollText("scroll.mode.horizontal", "Horizontal");
+        case 1: {  // 灵敏度：展示当前档位
+            static const char *levelKeys[] = {
+                "scroll.sens.loose", "scroll.sens.normal", "scroll.sens.strict"
+            };
+            static const char *levelFallbacks[] = { "Loose", "Normal", "Strict" };
+            return scrollText("scroll.sensitivity", "Sensitivity")
+                + QLatin1String(": ")
+                + scrollText(levelKeys[m_sensitivity], levelFallbacks[m_sensitivity]);
+        }
+        case 2:
+            return scrollText("scroll.finish", "Finish");
+        case 3:
+            return scrollText("scroll.cancel", "Cancel");
+        default:
+            return QString();
+    }
+}
+
+
+
 void ScrollCaptureSession::updateHintText() {
     if (!m_hintBar) {
         return;
@@ -708,21 +751,12 @@ void ScrollCaptureSession::updateHintText() {
         titleLabel->setText(vertical ? scrollText("scroll.vertical", "Vertical Scroll Capture")
                                      : scrollText("scroll.horizontal", "Horizontal Scroll Capture"));
     }
-    // 方向按钮文案展示当前方向，点击后切换到另一方向
-    if (m_orientationBtn) {
-        m_orientationBtn->setText(vertical
-            ? scrollText("scroll.mode.vertical", "Vertical")
-            : scrollText("scroll.mode.horizontal", "Horizontal"));
-    }
-    // 灵敏度按钮文案展示当前档位，点击后循环切换
-    if (m_sensitivityBtn) {
-        static const char *levelKeys[] = {
-            "scroll.sens.loose", "scroll.sens.normal", "scroll.sens.strict"
-        };
-        static const char *levelFallbacks[] = { "Loose", "Normal", "Strict" };
-        m_sensitivityBtn->setText(scrollText("scroll.sensitivity", "Sensitivity")
-            + QLatin1String(": ")
-            + scrollText(levelKeys[m_sensitivity], levelFallbacks[m_sensitivity]));
+    // 四个按钮文案统一构建（纯翻译文字，快捷键由浮标在悬停时展示）
+    QAbstractButton *btns[] = { m_orientationBtn, m_sensitivityBtn, m_finishBtn, m_cancelBtn };
+    for (int role = 0; role < 4; ++role) {
+        if (btns[role]) {
+            btns[role]->setText(hintButtonLabel(role));
+        }
     }
     if (m_statusLabel) {
         if (m_showResyncNotice) {

@@ -467,5 +467,9 @@
   "scroll.sensitivity": "靈敏度",
   "scroll.sens.loose": "寬鬆",
   "scroll.sens.normal": "標準",
-  "scroll.sens.strict": "嚴格"
+  "scroll.sens.strict": "嚴格",
+  "scroll.hinttip.orientation": "切換滾動方向（V 垂直 / H 水平）",
+  "scroll.hinttip.sensitivity": "切換對齊靈敏度（S）",
+  "scroll.hinttip.finish": "完成拼接（Enter）",
+  "scroll.hinttip.cancel": "取消截圖（Esc）"
 }

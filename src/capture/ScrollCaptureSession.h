@@ -94,6 +94,13 @@ public:
     void setOrientation(ScrollStitcher::Orientation orientation);
 
     /**
+     * @brief 提示条按钮的基础文案（翻译文字，不含快捷键提示）
+     * @param role 0 方向 / 1 灵敏度 / 2 完成 / 3 取消
+     * @author chiangyang
+     */
+    QString hintButtonLabel(int role) const;
+
+    /**
      * @brief 设置对齐灵敏度并持久化（0 宽松 / 1 标准 / 2 严格）
      *
      * 灵敏度映射到拼接器的重叠行数要求与 NCC 判定阈值：宽松容忍更快的

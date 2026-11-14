@@ -467,5 +467,9 @@
   "scroll.sensitivity": "민감도",
   "scroll.sens.loose": "느슨",
   "scroll.sens.normal": "보통",
-  "scroll.sens.strict": "엄격"
+  "scroll.sens.strict": "엄격",
+  "scroll.hinttip.orientation": "스크롤 방향 전환（V 세로 / H 가로）",
+  "scroll.hinttip.sensitivity": "민감도 전환（S）",
+  "scroll.hinttip.finish": "합치기 완료（Enter）",
+  "scroll.hinttip.cancel": "취소（Esc）"
 }

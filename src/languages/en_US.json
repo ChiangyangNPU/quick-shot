@@ -467,5 +467,9 @@
   "scroll.sensitivity": "Sensitivity",
   "scroll.sens.loose": "Loose",
   "scroll.sens.normal": "Normal",
-  "scroll.sens.strict": "Strict"
+  "scroll.sens.strict": "Strict",
+  "scroll.hinttip.orientation": "Switch orientation (V vertical / H horizontal)",
+  "scroll.hinttip.sensitivity": "Switch sensitivity (S)",
+  "scroll.hinttip.finish": "Finish stitching (Enter)",
+  "scroll.hinttip.cancel": "Cancel (Esc)"
 }

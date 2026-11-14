@@ -467,5 +467,9 @@
   "scroll.sensitivity": "感度",
   "scroll.sens.loose": "緩",
   "scroll.sens.normal": "標準",
-  "scroll.sens.strict": "厳格"
+  "scroll.sens.strict": "厳格",
+  "scroll.hinttip.orientation": "スクロール方向を切り替え（V 縦 / H 横）",
+  "scroll.hinttip.sensitivity": "感度を切り替え（S）",
+  "scroll.hinttip.finish": "合成を完了（Enter）",
+  "scroll.hinttip.cancel": "キャンセル（Esc）"
 }
