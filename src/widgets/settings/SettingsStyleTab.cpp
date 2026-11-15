@@ -514,6 +514,17 @@ void SettingsStyleTab::onResetStyle() {
             cmbTheme->blockSignals(false);
         }
 
+        // 工具栏按钮样式复位（resetToDefaults 已将样式重置为文字，此处同步下拉框显示；
+        // 必须在 saveStyleSettings 之前，否则保存时会把残留的旧选中值写回配置）
+        if (cmbToolbarButtonStyle) {
+            cmbToolbarButtonStyle->blockSignals(true);
+            const int styleIndex = cmbToolbarButtonStyle->findData(StyleManager::getToolbarButtonStyle());
+            if (styleIndex >= 0) {
+                cmbToolbarButtonStyle->setCurrentIndex(styleIndex);
+            }
+            cmbToolbarButtonStyle->blockSignals(false);
+        }
+
         // 全局 qss 与输入控件样式按浅色主题重填
         StyleManager::reapplyGlobalStyleSheet();
         refreshStyles();
