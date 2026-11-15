@@ -274,6 +274,25 @@ private:
     void initDatabase();
 
     /**
+     * @brief 初始化数据库的实现（须在持有 m_mutex 时调用）
+     *
+     * 打开连接、建表、补列、建索引；clearAll 清空后删除库文件重建时复用。
+     * @author chiangyang
+     */
+    void initDatabaseLocked();
+
+    /**
+     * @brief 清空后收缩存储
+     *
+     * 还有记录时 VACUUM 压缩空闲页；库已空时删除库文件并标记懒重建
+     * （建表会立刻写回约 24 KB 的骨架页，故延迟到下次数据库操作前经
+     * ensureDatabaseReady 重建），文件被占用删不掉时回退为 VACUUM。
+     * 须在持有 m_mutex 时调用，且调用方不应再有该连接上未析构的查询对象。
+     * @author chiangyang
+     */
+    void shrinkStorageAfterClear();
+
+    /**
      * @brief 初始化配置项
      * @author chiangyang
      */
@@ -294,6 +313,25 @@ private:
      * @author chiangyang
      */
     void ensureDirectoryExists(const QString &path);
+
+    /**
+     * @brief 压缩数据库文件
+     *
+     * SQLite 的 DELETE 仅把数据页标记为空闲，文件体积不回收，
+     * 导致清空记录后"存储占用"仍显示旧体积；VACUUM 重写数据库
+     * 文件释放空闲页。须在持有 m_mutex 且无活动事务时调用。
+     * @author chiangyang
+     */
+    void vacuumDatabase();
+
+    /**
+     * @brief 确保数据库就绪（须在持有 m_mutex 时调用）
+     *
+     * 库文件被删除待懒重建时（m_schemaMissing），重建连接与表结构；
+     * 否则无操作。各数据库操作入口在加锁后调用。
+     * @author chiangyang
+     */
+    void ensureDatabaseReady();
 
     /**
      * @brief 获取数据库连接
@@ -343,6 +381,7 @@ private:
     static QString s_databasePathOverride;  ///< 测试用数据库路径覆盖（setDatabaseFilePathForTest）
     mutable QRecursiveMutex m_mutex;       ///< 递归互斥锁（支持嵌套加锁）
     QSqlDatabase m_database;                ///< 数据库连接
+    bool m_schemaMissing = false;           ///< 库文件已删除待懒重建（下次数据库操作前经 ensureDatabaseReady 建表）
 
     // 配置项
     bool m_screenshotEnabled;               ///< 是否启用截图历史记录

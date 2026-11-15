@@ -82,7 +82,15 @@ void HistoryManager::destroy()
 void HistoryManager::initDatabase()
 {
     QMutexLocker locker(&m_mutex);
+    initDatabaseLocked();
+}
 
+/**
+ * @brief 初始化数据库的实现（须在持有 m_mutex 时调用）
+ * @author chiangyang
+ */
+void HistoryManager::initDatabaseLocked()
+{
     QString dbPath = databasePath();
     ensureDirectoryExists(QFileInfo(dbPath).path());
 
@@ -144,6 +152,7 @@ void HistoryManager::initDatabase()
     // 创建缩略图目录
     ensureDirectoryExists(thumbnailDirPath());
 
+    m_schemaMissing = false;
     LOG_INFO("History database initialized successfully");
 }
 
@@ -218,6 +227,7 @@ qint64 HistoryManager::addScreenshot(const QString &filePath,
     }
 
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     QString timestampStr = QDateTime::currentDateTime().toString(Qt::ISODate);
     QString thumbnailPath = thumbnailDirPath() + QString("/thumb_%1.png")
@@ -264,6 +274,7 @@ qint64 HistoryManager::addScreenshotPixmap(const QPixmap &pixmap,
     }
 
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     // 将 pixmap 保存到截图缓存目录
     QString screenshotDir = historyDirPath() + "/screenshots";
@@ -334,6 +345,7 @@ qint64 HistoryManager::addClipboardText(const QString &text,
     QMutexLocker locker(&m_mutex);
 
     QString timestampStr = QDateTime::currentDateTime().toString(Qt::ISODate);
+    ensureDatabaseReady();
 
     QSqlQuery query(m_database);
     query.prepare("INSERT INTO history_items (type, content, source_app, timestamp) "
@@ -372,6 +384,7 @@ qint64 HistoryManager::addClipboardText(const QString &text,
 QList<HistoryItem> HistoryManager::getItems(HistoryType type, int page, int pageSize)
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     QList<HistoryItem> items;
 
@@ -418,6 +431,7 @@ QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryTy
 QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryType type, int page, int pageSize)
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     QList<HistoryItem> items;
 
@@ -455,6 +469,7 @@ QList<HistoryItem> HistoryManager::searchItems(const QString &keyword, HistoryTy
 int HistoryManager::getItemCount(HistoryType type)
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     QString sql = "SELECT COUNT(*) FROM history_items";
     if (type != HistoryType::All) {
@@ -481,6 +496,7 @@ int HistoryManager::getItemCount(HistoryType type)
 HistoryItem HistoryManager::getItemById(qint64 id)
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     HistoryItem item;
     item.id = 0;
@@ -508,6 +524,7 @@ HistoryItem HistoryManager::getItemById(qint64 id)
 bool HistoryManager::removeItem(qint64 id)
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     // 先获取记录信息，用于删除相关文件
     HistoryItem item = getItemById(id);
@@ -533,12 +550,82 @@ bool HistoryManager::removeItem(qint64 id)
 }
 
 /**
+ * @brief 压缩数据库文件
+ *
+ * VACUUM 重写数据库文件释放 DELETE 留下的空闲页，
+ * 让清空记录后"存储占用"随之下降。调用方须持有 m_mutex
+ * （VACUUM 不允许在事务内执行，且与其他操作互斥）。
+ * @author chiangyang
+ */
+void HistoryManager::vacuumDatabase()
+{
+    QSqlQuery vacuumQuery(m_database);
+    if (!vacuumQuery.exec("VACUUM")) {
+        LOG_WARNING(QString("Failed to vacuum database: %1").arg(vacuumQuery.lastError().text()));
+    }
+}
+
+/**
+ * @brief 确保数据库就绪
+ *
+ * 库文件被删除待懒重建时重建连接与表结构，否则无操作。
+ * 须在持有 m_mutex 时调用（QRecursiveMutex 支持嵌套，可从持锁方法内安全调用）。
+ * @author chiangyang
+ */
+void HistoryManager::ensureDatabaseReady()
+{
+    if (m_schemaMissing) {
+        initDatabaseLocked();
+    }
+}
+
+/**
+ * @brief 清空后收缩存储
+ *
+ * 还有记录时仅 VACUUM 压缩空闲页；库已空时删除库文件并标记懒重建
+ * （配合 getStorageSize 的空库检查，存储占用归零）。须在持有 m_mutex 时调用。
+ * @author chiangyang
+ */
+void HistoryManager::shrinkStorageAfterClear()
+{
+    if (getItemCount(HistoryType::All) > 0) {
+        vacuumDatabase();
+        return;
+    }
+
+    // 空库骨架仍保留表/索引页（约 24 KB），删除文件才能归零
+    const QString dbPath = databasePath();
+
+    m_database.close();
+    m_database = QSqlDatabase();  // 释放成员引用，否则 removeDatabase 报连接仍在使用
+    QSqlDatabase::removeDatabase(QStringLiteral("HistoryDB"));
+
+    // 连带清理可能残留的热日志，避免被新库误用
+    QFile::remove(dbPath + QStringLiteral("-journal"));
+    const bool fileRemoved = QFile::remove(dbPath);
+
+    if (fileRemoved) {
+        // 不立即重建：建表会立刻写回骨架页，占位又不归零。
+        // 标记待重建，下次数据库操作前经 ensureDatabaseReady 懒建，
+        // 期间存储占用保持 0
+        m_schemaMissing = true;
+        LOG_INFO("History database file deleted after clear; schema will be recreated lazily");
+    } else {
+        // 文件被占用删不掉时兜底：重开连接压缩空闲页，至少降回骨架大小
+        initDatabaseLocked();
+        vacuumDatabase();
+        LOG_INFO("History database file busy after clear; compacted instead");
+    }
+}
+
+/**
  * @brief 清空所有历史记录
  * @author chiangyang
  */
 void HistoryManager::clearAll()
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     // 删除所有缩略图文件
     QString thumbDir = thumbnailDirPath();
@@ -550,11 +637,17 @@ void HistoryManager::clearAll()
         }
     }
 
-    QSqlQuery query(m_database);
-    if (!query.exec("DELETE FROM history_items")) {
-        LOG_ERROR(QString("Failed to clear all history: %1").arg(query.lastError().text()));
-        return;
+    // DELETE 查询对象须先出作用域：连接关闭/移除前不能留有引用
+    {
+        QSqlQuery query(m_database);
+        if (!query.exec("DELETE FROM history_items")) {
+            LOG_ERROR(QString("Failed to clear all history: %1").arg(query.lastError().text()));
+            return;
+        }
     }
+
+    // 空库删文件（懒重建）归零占用，非空库 VACUUM 压缩
+    shrinkStorageAfterClear();
 
     emit cleared();
     LOG_INFO("All history records cleared");
@@ -567,27 +660,36 @@ void HistoryManager::clearAll()
 void HistoryManager::clearByType(HistoryType type)
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
+    // 查询对象须先出作用域：连接关闭/移除前不能留有引用
     // 获取该类型的所有记录，用于删除缩略图
     QString sql = QString("SELECT thumbnail_path FROM history_items WHERE type = %1").arg(typeToInt(type));
-    QSqlQuery selectQuery(m_database);
-    if (selectQuery.exec(sql)) {
-        while (selectQuery.next()) {
-            QString thumbPath = selectQuery.value("thumbnail_path").toString();
-            if (!thumbPath.isEmpty() && QFile::exists(thumbPath)) {
-                QFile::remove(thumbPath);
+    {
+        QSqlQuery selectQuery(m_database);
+        if (selectQuery.exec(sql)) {
+            while (selectQuery.next()) {
+                QString thumbPath = selectQuery.value("thumbnail_path").toString();
+                if (!thumbPath.isEmpty() && QFile::exists(thumbPath)) {
+                    QFile::remove(thumbPath);
+                }
             }
         }
     }
 
-    QSqlQuery deleteQuery(m_database);
-    deleteQuery.prepare("DELETE FROM history_items WHERE type = :type");
-    deleteQuery.bindValue(":type", typeToInt(type));
+    {
+        QSqlQuery deleteQuery(m_database);
+        deleteQuery.prepare("DELETE FROM history_items WHERE type = :type");
+        deleteQuery.bindValue(":type", typeToInt(type));
 
-    if (!deleteQuery.exec()) {
-        LOG_ERROR(QString("Failed to clear history by type: %1").arg(deleteQuery.lastError().text()));
-        return;
+        if (!deleteQuery.exec()) {
+            LOG_ERROR(QString("Failed to clear history by type: %1").arg(deleteQuery.lastError().text()));
+            return;
+        }
     }
+
+    // 空库删文件（懒重建）归零占用，非空库 VACUUM 压缩
+    shrinkStorageAfterClear();
 
     emit cleared();
     LOG_INFO(QString("History records cleared by type: %1").arg(typeToInt(type)));
@@ -688,18 +790,21 @@ int HistoryManager::maxItems() const
 void HistoryManager::cleanupExpired()
 {
     QMutexLocker locker(&m_mutex);
+    ensureDatabaseReady();
 
     QDateTime expireTime = QDateTime::currentDateTime().addDays(-m_retentionDays);
     QString expireTimeStr = expireTime.toString(Qt::ISODate);
 
-    // 删除过期记录
-    QSqlQuery query(m_database);
-    query.prepare("DELETE FROM history_items WHERE timestamp < :expire_time");
-    query.bindValue(":expire_time", expireTimeStr);
-
+    // 删除过期记录（查询对象须先出作用域：连接关闭/移除前不能留有引用）
     int deletedCount = 0;
-    if (query.exec()) {
-        deletedCount = query.numRowsAffected();
+    {
+        QSqlQuery query(m_database);
+        query.prepare("DELETE FROM history_items WHERE timestamp < :expire_time");
+        query.bindValue(":expire_time", expireTimeStr);
+
+        if (query.exec()) {
+            deletedCount = query.numRowsAffected();
+        }
     }
 
     // 如果记录数超过最大值，删除最旧的记录
@@ -718,6 +823,11 @@ void HistoryManager::cleanupExpired()
         }
     }
 
+    // 有删除才收缩：自动清理场景下避免无谓的整库重写
+    if (deletedCount > 0) {
+        shrinkStorageAfterClear();
+    }
+
     LOG_INFO(QString("History cleanup completed: %1 records deleted").arg(deletedCount));
 }
 
@@ -728,6 +838,12 @@ void HistoryManager::cleanupExpired()
  */
 qint64 HistoryManager::getStorageSize()
 {
+    // 空库时文件只剩表/索引骨架页（约 24 KB），属于空库实现开销而非记录占用，
+    // 直接报 0，让清空后的"存储占用"统计与直觉一致（清空 → 0 B）
+    if (getItemCount(HistoryType::All) == 0) {
+        return 0;
+    }
+
     QString dbPath = databasePath();
     QFileInfo dbFileInfo(dbPath);
     qint64 totalSize = 0;
