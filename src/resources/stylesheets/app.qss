@@ -102,6 +102,17 @@ QComboBox QAbstractItemView {
     padding: 0.2em;
 }
 
+/* 悬浮提示按主题配色：QTipLabel 是悬停控件的子窗口、QSS 沿祖先链解析，
+   配色默认跟随系统外观而非应用主题（深色主题下出现白底黑字，祖先样式表
+   污染时甚至深底黑字），显式按主题填值保证可读且全应用一致。
+   注意：规则只能含颜色/圆角——一旦加 padding 或 border，Qt 会把 tooltip
+   切到 styled 定位路径，弹窗掉到光标下方约 40px 处（实测 Qt 6.10 + macOS 26） */
+QToolTip {
+    color: @textColor;
+    background-color: @viewBg;
+    border-radius: 0.3em;
+}
+
 /* 复选框指示器跟随字体；边框/背景/对勾随主题适配。
    注：任何 QSS 都会让 QCheckBox 退出原生主题绘制，若只设尺寸则指示器
    由原生调色板绘制——深色模式下原生对勾不可见，故这里显式完整绘制：

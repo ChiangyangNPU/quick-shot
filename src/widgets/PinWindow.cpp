@@ -103,7 +103,7 @@ void PinWindow::refreshAllToolDefaults() {
 void PinWindow::refreshAllTheme() {
     for (PinWindow *w : std::as_const(s_instances)) {
         if (w->m_toolBar) {
-            w->m_toolBar->setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+            StyleManager::applyToolbarBackgroundStyle(w->m_toolBar);
             w->m_toolBar->updateBackgroundStyle();
             w->m_toolBar->updateButtonStyles();
         }

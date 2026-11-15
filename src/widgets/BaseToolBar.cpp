@@ -78,7 +78,7 @@ QHBoxLayout *BaseToolBar::initShell(Qt::WindowFlags flags) {
     // 圆角矩形需要透明背景，否则圆角外区域会被系统默认色填充成直角
     setAttribute(Qt::WA_TranslucentBackground, true);
     setAttribute(Qt::WA_StyledBackground, true);
-    setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+    StyleManager::applyToolbarBackgroundStyle(this);
     setCursor(Qt::ArrowCursor);
 
     m_mainLayout = new QVBoxLayout(this);
@@ -368,7 +368,7 @@ void BaseToolBar::buildSubVariant(SubToolVariant v) {
         data.window->setAttribute(Qt::WA_TranslucentBackground, false);
     }
     data.window->setAttribute(Qt::WA_StyledBackground, true);
-    data.window->setStyleSheet(StyleManager::getSubToolbarStyle());
+    StyleManager::applySubToolbarBackgroundStyle(data.window);
     data.window->setCursor(Qt::ArrowCursor);
     data.window->installEventFilter(this);
 
@@ -815,7 +815,7 @@ void BaseToolBar::updateBackgroundStyle() {
             continue;
         }
         if (data.window) {
-            data.window->setStyleSheet(StyleManager::getSubToolbarStyle());
+            StyleManager::applySubToolbarBackgroundStyle(data.window);
             data.window->update();
         }
         if (data.shapeCombo) {

@@ -306,7 +306,7 @@ void RecordingSession::refreshDefaultValues() {
  */
 void RecordingSession::refreshTheme() {
     if (m_toolbar) {
-        m_toolbar->setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+        StyleManager::applyToolbarBackgroundStyle(m_toolbar);
         m_toolbar->updateBackgroundStyle();
         m_toolbar->updateButtonStyles();
     }

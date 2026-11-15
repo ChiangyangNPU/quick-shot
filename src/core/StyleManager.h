@@ -220,20 +220,26 @@ public:
 
 
     /**
-     * @brief 获取工具栏背景样式
-     * @return 工具栏背景样式字符串
-     * @note 使用位置: BaseCaptureToolBar（截图/录屏工具栏背景）、RecordingControlWindow（录制控制窗口背景）
+     * @brief 应用工具栏背景样式（作用域到窗口 objectName）
+     * @param window 工具栏窗口
+     * @note 使用位置: BaseToolBar::initShell（截图/录屏/贴图工具栏背景）、
+     *       RecordingSession/SnipScreen/PinWindow 主题刷新兜底
+     * @note 必须生成 "#objectName { ... }" 作用域规则而非无选择器声明块：
+     *       QTipLabel（tooltip）是悬停控件的子窗口、QSS 沿祖先链解析，
+     *       祖先链上的无选择器声明块会污染解析，使全局 QToolTip 规则失效，
+     *       tooltip 底色被涂成 ToolbarBg 而文字色仍为系统色（深色主题下
+     *       深底黑字不可读），实测 Qt 6.10 + macOS 26
      * @author chiangyang
      */
-    static QString getToolbarBackgroundStyle();
+    static void applyToolbarBackgroundStyle(QWidget *window);
 
     /**
-     * @brief 获取子工具栏背景样式
-     * @return 子工具栏背景样式字符串
+     * @brief 应用子工具栏背景样式（作用域到窗口 objectName）
+     * @param window 子工具栏窗口
      * @note 使用位置: BaseToolBar（子工具栏，如形状选择、颜色选择等）
      * @author chiangyang
      */
-    static QString getSubToolbarStyle();
+    static void applySubToolbarBackgroundStyle(QWidget *window);
 
     /**
      * @brief 获取工具按钮样式（无状态）

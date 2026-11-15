@@ -936,14 +936,29 @@ bool StyleManager::reapplyGlobalStyleSheet() {
 
 // ============ 样式串构造与存取实现（自 StyleManager.h 内联体迁入，改样式只重编译本文件） ============
 
-QString StyleManager::getToolbarBackgroundStyle() {
-        return QString("background-color: %1; border-radius: 0.3em;")
-            .arg(qssColor(color(StyleColorId::ToolbarBg)));
+void StyleManager::applyToolbarBackgroundStyle(QWidget *window) {
+        if (!window) {
+            return;
+        }
+        if (window->objectName().isEmpty()) {
+            window->setObjectName(QStringLiteral("QuickShotToolbarWindow"));
+        }
+        // 作用域规则而非无选择器声明块，见头文件注释（QTipLabel 祖先链解析污染）
+        window->setStyleSheet(QString(
+            "QWidget#%1 { background-color: %2; border-radius: 0.3em; }")
+            .arg(window->objectName(), qssColor(color(StyleColorId::ToolbarBg))));
 }
 
-QString StyleManager::getSubToolbarStyle() {
-        return QString("background-color: %1; border-radius: 0.3em;")
-            .arg(qssColor(color(StyleColorId::SubToolbarBg)));
+void StyleManager::applySubToolbarBackgroundStyle(QWidget *window) {
+        if (!window) {
+            return;
+        }
+        if (window->objectName().isEmpty()) {
+            window->setObjectName(QStringLiteral("QuickShotSubToolbarWindow"));
+        }
+        window->setStyleSheet(QString(
+            "QWidget#%1 { background-color: %2; border-radius: 0.3em; }")
+            .arg(window->objectName(), qssColor(color(StyleColorId::SubToolbarBg))));
 }
 
 QString StyleManager::getToolButtonStyle() {

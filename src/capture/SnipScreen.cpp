@@ -2039,7 +2039,7 @@ void SnipScreen::refreshAnnotationToolDefaults() {
 void SnipScreen::refreshTheme() {
     LOG_INFO("Refreshing toolbar theme styles");
     if (m_toolbar) {
-        m_toolbar->setStyleSheet(StyleManager::getToolbarBackgroundStyle());
+        StyleManager::applyToolbarBackgroundStyle(m_toolbar);
         m_toolbar->updateBackgroundStyle();
         m_toolbar->updateButtonStyles();
     }
