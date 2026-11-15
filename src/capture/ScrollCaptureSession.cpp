@@ -603,6 +603,10 @@ void ScrollCaptureSession::createHintBar() {
     layout->addWidget(m_finishBtn, 0, Qt::AlignVCenter);
 
     m_cancelBtn = makeHintButton(QString());
+    // 取消按钮与一级工具栏 X 一致：专属红色样式（CloseButtonBg/CloseButtonHover）
+    if (auto *cancelPush = qobject_cast<QPushButton *>(m_cancelBtn)) {
+        StyleManager::applyCloseButtonStyle(cancelPush);
+    }
     connect(m_cancelBtn, &QAbstractButton::clicked, this, &ScrollCaptureSession::cancel);
     layout->addWidget(m_cancelBtn, 0, Qt::AlignVCenter);
 
