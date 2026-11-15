@@ -404,8 +404,6 @@ void StyleManager::applyDarkTitleBar(WId windowId) {
 // 纯 .cpp 下无 NSWindow/NSRect 等 Foundation 类型，用 id/CGRect 在 ABI 层等价替代
 namespace {
 
-constexpr unsigned long kNSWindowStyleMaskResizable = 1UL << 3;  // AppKit: 1<<3
-
 struct ZoomDelegateHook {
     Class cls;              ///< 已挂钩的 delegate 类（QNSWindowDelegate 等）
     IMP shouldZoomOrig;     ///< windowShouldZoom:toFrame: 原实现
@@ -424,28 +422,62 @@ const ZoomDelegateHook *zoomHookFor(id self) {
     return nullptr;
 }
 
-// 窗口是否仍带 Resizable 位：带位的窗口保持原生行为，本模块只拦截已禁用缩放的窗口
-BOOL zoomHookWindowResizable(id window) {
-    unsigned long mask = ((unsigned long (*)(id, SEL))objc_msgSend)(window, sel_registerName("styleMask"));
-    return (mask & kNSWindowStyleMaskResizable) ? YES : NO;
+// 已被 disableWindowMaximize 禁用缩放的 NSWindow 登记表。
+// Qt 在全进程共享同一个 delegate 实例/类（实测 QNSWindowDelegate 单实例服务
+// 所有窗口），hook 挂在类上无法按类区分目标窗口，只能按窗口指针登记。
+// （窗口销毁后指针可能被复用造成误匹配，仅做相等比较不解引用，风险可忽略；
+//   SettingsWindow 每次 show 都会补登记，窗口重建后新指针同样入库）
+id g_disabledZoomWindows[8];
+int g_disabledZoomWindowCount = 0;
+
+// 幂等登记目标窗口
+void registerDisabledZoomWindow(id window) {
+    if (!window) {
+        return;
+    }
+    for (int i = 0; i < g_disabledZoomWindowCount; ++i) {
+        if (g_disabledZoomWindows[i] == window) {
+            return;
+        }
+    }
+    if (g_disabledZoomWindowCount < 8) {
+        g_disabledZoomWindows[g_disabledZoomWindowCount++] = window;
+    }
 }
 
-// NSWindowDelegate windowShouldZoom:toFrame:：zoom:/填充路径缩放前都会询问
+bool isDisabledZoomWindow(id window) {
+    for (int i = 0; i < g_disabledZoomWindowCount; ++i) {
+        if (g_disabledZoomWindows[i] == window) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// NSWindowDelegate windowShouldZoom:toFrame:：zoom:/填充路径缩放前都会询问。
+// 注意判定条件是"登记过的目标窗口"而非"窗口不带 Resizable 位"：macOS 26 上
+// Qt 弹层窗口（combo 下拉容器等）在显示过程中 styleMask 会短暂带上 Resizable
+// 位（实测 6→0xe），且 AppKit 会以屏幕可视区为 defaultFrame 询问
+// windowWillUseStandardFrame——若按 Resizable 位判定，弹窗会被误判为目标
+// 窗口并拿到整屏帧，下拉弹窗直接放大成全屏（Qt 6.10 + macOS 26 实测复现）。
+// 故本模块只拦截登记过的窗口，其余窗口严格走原实现/原默认，行为与未挂钩一致。
 BOOL zoomHookShouldZoom(id self, SEL cmd, id window, CGRect frame) {
-    if (!zoomHookWindowResizable(window)) {
+    if (isDisabledZoomWindow(window)) {
         return NO;
     }
     const ZoomDelegateHook *h = zoomHookFor(self);
     if (h && h->shouldZoomOrig) {
         return ((BOOL (*)(id, SEL, id, CGRect))h->shouldZoomOrig)(self, cmd, window, frame);
     }
+    // 原类未实现该方法：按 AppKit 默认放行（等价于未挂钩）
     return YES;
 }
 
-// NSWindowDelegate windowWillUseStandardFrame:defaultFrame:：zoom 的目标帧询问，
-// 返回当前帧即"已是标准帧"，缩放/填充退化为 no-op（不移动窗口）
+// NSWindowDelegate windowWillUseStandardFrame:defaultFrame:：zoom 的目标帧询问。
+// 对目标窗口返回当前帧即"已是标准帧"，缩放/填充退化为 no-op（不移动窗口）；
+// 其余窗口走原实现/原默认（见 zoomHookShouldZoom 注释，弹窗依赖此路径还原）
 CGRect zoomHookStandardFrame(id self, SEL cmd, id window, CGRect defaultFrame) {
-    if (!zoomHookWindowResizable(window)) {
+    if (isDisabledZoomWindow(window)) {
         return ((CGRect (*)(id, SEL))objc_msgSend)(window, sel_registerName("frame"));
     }
     const ZoomDelegateHook *h = zoomHookFor(self);
@@ -478,8 +510,9 @@ void hookZoomDelegate(id delegate) {
         method_setImplementation(mShould, (IMP)zoomHookShouldZoom);
     } else {
         // -(BOOL)windowShouldZoom:(id)window toFrame:(CGRect)frame
+        // 类型编码：返回值 B + self @ + _cmd : + window @ + frame {CGRect=dddd}
         class_addMethod(cls, shouldSel, (IMP)zoomHookShouldZoom,
-                        "B@:@:{CGRect=dddd}");
+                        "B@:@{CGRect=dddd}");
     }
 
     const SEL frameSel = sel_registerName("windowWillUseStandardFrame:defaultFrame:");
@@ -489,8 +522,9 @@ void hookZoomDelegate(id delegate) {
         method_setImplementation(mFrame, (IMP)zoomHookStandardFrame);
     } else {
         // -(CGRect)windowWillUseStandardFrame:(id)window defaultFrame:(CGRect)frame
+        // 类型编码：返回值 {CGRect=dddd} + self @ + _cmd : + window @ + frame
         class_addMethod(cls, frameSel, (IMP)zoomHookStandardFrame,
-                        "{CGRect=dddd}@:@:{CGRect=dddd}");
+                        "{CGRect=dddd}@:@{CGRect=dddd}");
     }
 
     if (g_zoomDelegateHookCount < 4) {
@@ -530,7 +564,7 @@ void StyleManager::disableWindowMaximize(WId windowId) {
     // "填充"）：zoom:/填充对不可缩放窗口仍会把窗口原点挪到填充目标处（尺寸被
     // Qt 钳制、位置上跳），A/B 合成双击实测确认。故还需挂钩窗口 delegate 的
     // windowShouldZoom:toFrame: 与 windowWillUseStandardFrame:defaultFrame:
-    // （缩放/填充路径都会先询问），对无 Resizable 位的窗口直接拒绝，见 zoomHook*。
+    // （缩放/填充路径都会先询问），对本窗口直接拒绝，见 zoomHook*。
     // Qt 的程序化 resize（高度动画、DPI 适配）走 setFrame，不经 styleMask、
     // 不询问 delegate 标准帧，均不受影响。
     // 首次 show 时 NSWindow 才真正创建，此时窗口高度尚未固定，Qt 按可缩放
@@ -548,7 +582,12 @@ void StyleManager::disableWindowMaximize(WId windowId) {
     if (zoomButton) {
         ((void (*)(id, SEL, BOOL))objc_msgSend)(zoomButton, sel_registerName("setEnabled:"), NO);
     }
-    // 拦截双击标题栏触发的缩放/填充：按 delegate 类挂一次，其余窗口不受影响
+    // 登记目标窗口：hook 挂在全进程共享的 delegate 类上（QNSWindowDelegate
+    // 单实例服务所有窗口），判定只能按窗口指针——按"是否带 Resizable 位"判定
+    // 会误伤 macOS 26 的弹层窗口（显示中 styleMask 短暂带上 Resizable 位并被
+    // AppKit 以整屏 defaultFrame 询问标准帧），combo 下拉弹窗会放大成全屏
+    registerDisabledZoomWindow(nsWindow);
+    // 拦截双击标题栏触发的缩放/填充：按 delegate 类挂一次，未登记窗口走原实现
     id delegate = ((id (*)(id, SEL))objc_msgSend)(nsWindow, sel_registerName("delegate"));
     hookZoomDelegate(delegate);
 #else
