@@ -145,8 +145,10 @@ void SettingsHistoryTab::setupUi() {
     btnCleanHistory->setStyleSheet(StyleManager::getSettingsButtonStyle());
     btnClearHistory->setStyleSheet(StyleManager::getSettingsButtonStyle());
 
-    connect(btnCleanHistory, &QPushButton::clicked, this, []() {
+    connect(btnCleanHistory, &QPushButton::clicked, this, [this]() {
         HistoryManager::instance()->cleanupExpired();
+        // cleanupExpired 无信号通知（itemRemoved 为单条删除专用），此处手动刷新统计
+        updateHistoryStats();
     });
     connect(btnClearHistory, &QPushButton::clicked, this, [this]() {
         TranslationManager *tm = TranslationManager::instance();
@@ -155,7 +157,6 @@ void SettingsHistoryTab::setupUi() {
                 tm->get("history.dataManagement.confirmClearMsg",
                         "Are you sure you want to clear all history? This action cannot be undone."))) {
             HistoryManager::instance()->clearAll();
-            updateHistoryStats();
         }
     });
 
@@ -192,6 +193,13 @@ void SettingsHistoryTab::setupUi() {
     historyScrollArea->setAutoFillBackground(true);
 
     tabLayout->addWidget(historyScrollArea);
+
+    // 记录增删时同步统计信息（截图/贴图/剪贴板新增、单条删除、各类清空），
+    // 跨线程添加经 AutoConnection 排队到主线程执行
+    HistoryManager *manager = HistoryManager::instance();
+    connect(manager, &HistoryManager::itemAdded, this, &SettingsHistoryTab::updateHistoryStats);
+    connect(manager, &HistoryManager::itemRemoved, this, &SettingsHistoryTab::updateHistoryStats);
+    connect(manager, &HistoryManager::cleared, this, &SettingsHistoryTab::updateHistoryStats);
 
     updateHistoryStats();
 }
