@@ -42,6 +42,11 @@
     <file alias="spinner-down.svg">../icons/spinner-down.svg</file>
     <file alias="spinner-up-dark.svg">../icons/spinner-up-dark.svg</file>
     <file alias="spinner-down-dark.svg">../icons/spinner-down-dark.svg</file>
+    <file alias="arrow-up-down.svg">../icons/arrow-up-down.svg</file>
+    <file alias="arrow-left-right.svg">../icons/arrow-left-right.svg</file>
+    <file alias="sens-1.svg">../icons/sens-1.svg</file>
+    <file alias="sens-2.svg">../icons/sens-2.svg</file>
+    <file alias="sens-3.svg">../icons/sens-3.svg</file>
 </qresource>
 <qresource prefix="/stylesheets">
     <file alias="app.qss">resources/stylesheets/app.qss</file>

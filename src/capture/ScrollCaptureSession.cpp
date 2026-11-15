@@ -737,6 +737,23 @@ QString ScrollCaptureSession::hintButtonLabel(int role) const {
     }
 }
 
+QString ScrollCaptureSession::hintButtonIconPath(int role) const {
+    switch (role) {
+        case 0:  // 方向：图标随当前方向切换（双箭头向上/向左）
+            return m_stitcher.orientation() == ScrollStitcher::Orientation::Vertical
+                ? QStringLiteral(":/icons/arrow-up-down.svg")
+                : QStringLiteral(":/icons/arrow-left-right.svg");
+        case 1:  // 灵敏度：实心档位数（1/2/3 根柱）随档位切换
+            return QStringLiteral(":/icons/sens-%1.svg").arg(m_sensitivity + 1);
+        case 2:
+            return QStringLiteral(":/icons/check.svg");
+        case 3:
+            return QStringLiteral(":/icons/close.svg");
+        default:
+            return QString();
+    }
+}
+
 
 
 void ScrollCaptureSession::updateHintText() {
@@ -751,10 +768,23 @@ void ScrollCaptureSession::updateHintText() {
         titleLabel->setText(vertical ? scrollText("scroll.vertical", "Vertical Scroll Capture")
                                      : scrollText("scroll.horizontal", "Horizontal Scroll Capture"));
     }
-    // 四个按钮文案统一构建（纯翻译文字，快捷键由浮标在悬停时展示）
+    // 四个按钮按当前按钮样式（设置页"文字/图标"）统一构建：图标模式显示
+    // 图标（文案进 tooltip，档位/方向信息由图标本身表达），文字模式显示
+    // 翻译文字；快捷键均由浮标在悬停时展示
+    const bool iconMode = StyleManager::getToolbarButtonStyle() == QLatin1String("icon");
     QAbstractButton *btns[] = { m_orientationBtn, m_sensitivityBtn, m_finishBtn, m_cancelBtn };
     for (int role = 0; role < 4; ++role) {
-        if (btns[role]) {
+        if (!btns[role]) {
+            continue;
+        }
+        if (iconMode) {
+            btns[role]->setText(QString());
+            // 统一染 ToolbarText 色：与文字模式的文字色一致，且深浅主题自动适配
+            // （check.svg 白色描边、其余 currentColor，染色后不受原图颜色影响）
+            btns[role]->setIcon(StyleManager::loadSvgIcon(
+                hintButtonIconPath(role), StyleManager::color(StyleManager::StyleColorId::ToolbarText)));
+        } else {
+            btns[role]->setIcon(QIcon());
             btns[role]->setText(hintButtonLabel(role));
         }
     }

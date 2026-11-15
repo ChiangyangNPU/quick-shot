@@ -101,6 +101,15 @@ public:
     QString hintButtonLabel(int role) const;
 
     /**
+     * @brief 提示条按钮在图标模式下的图标资源路径
+     * @param role 0 方向 / 1 灵敏度 / 2 完成 / 3 取消
+     * @return ":/icons/..." 路径；方向/灵敏度随当前状态切换（图标模式下
+     *         档位信息由图标本身表达，悬停 tooltip 仍有文字说明）
+     * @author chiangyang
+     */
+    QString hintButtonIconPath(int role) const;
+
+    /**
      * @brief 设置对齐灵敏度并持久化（0 宽松 / 1 标准 / 2 严格）
      *
      * 灵敏度映射到拼接器的重叠行数要求与 NCC 判定阈值：宽松容忍更快的
