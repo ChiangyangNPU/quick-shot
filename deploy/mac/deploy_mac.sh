@@ -385,27 +385,57 @@ tell application "Finder"
         set position of item "QuickShot.app" of container window to {170, 240}
         set position of item "Applications" of container window to {490, 240}
         close
-        open
         update without registering applications
     end tell
 end tell
 OSA
-        sleep 2
-        hdiutil detach "$DMG_MOUNT" >/dev/null 2>&1 || hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
     fi
+    # 统一卸载 RW 卷（无论是否设置了布局，convert 都需要卷已卸载）。
+    # v0.1.8 CI 实测：AppleScript 旧版结尾重新 open 了 Finder 窗口（Finder
+    # 持续占用卷），detach 静默失败且未校验，hdiutil convert 读不到独占的
+    # 镜像文件，连续三次 "Resource temporarily unavailable" 直接退出。
+    # 故卸载后必须校验挂载点确实消失，未消失逐级强制卸载；转换另有重试兜底。
+    if [ -n "$DMG_MOUNT" ]; then
+        for ROUND in 1 2 3; do
+            hdiutil detach "$DMG_MOUNT" >/dev/null 2>&1 || hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
+            if [ ! -d "$DMG_MOUNT" ]; then
+                break
+            fi
+            echo "Warning: DMG 卷仍被占用（第 $ROUND 次卸载未生效），等待后强制重试"
+            sleep 2
+            diskutil unmount force "$DMG_MOUNT" >/dev/null 2>&1 || true
+            if [ ! -d "$DMG_MOUNT" ]; then
+                break
+            fi
+            sleep 3
+        done
+        if [ -d "$DMG_MOUNT" ]; then
+            echo "Warning: DMG 卷卸载失败，convert 可能因卷占用失败（已有重试兜底）"
+        fi
+    fi
+    # Finder/Spotlight 释放文件句柄需要时间，立即 convert 偶发 EAGAIN
+    sleep 2
     # 转只读压缩盘：格式用 ULMO（lzfse）而不是默认的 UDZO（zlib）——实测 v0.1.0
     # 98.0MB → 82.4MB（-16%；同机对比 UDBZ 只到 93.1MB），让 DMG 在 Gitee
-    # 单附件 100MB 上限内有充足余量，用户下载也更快。不支持 ULMO 时回退 UDZO
-    # （Finder 窗口可能仍占用卷：转换失败先强制卸载再重试）
+    # 单附件 100MB 上限内有充足余量，用户下载也更快。不支持 ULMO 时回退 UDZO。
+    # 每种格式重试 2 次（卷占用偶发：失败先强制卸载再转换）
     _convert_dmg() {
         rm -f "$DMG_FILE"
         hdiutil convert "$DMG_RW" -format "$1" -o "$DMG_FILE" >/dev/null
     }
-    if ! _convert_dmg ULMO; then
-        echo "Warning: ULMO 转换失败（卷被占用或格式不支持），强制卸载后重试"
-        hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
-        sleep 1
-        _convert_dmg ULMO || _convert_dmg UDZO
+    CONVERT_OK=false
+    for FORMAT in ULMO ULMO UDZO UDZO; do
+        if _convert_dmg "$FORMAT"; then
+            CONVERT_OK=true
+            break
+        fi
+        echo "Warning: hdiutil convert $FORMAT 失败（exit $?），强制卸载后重试"
+        [ -n "$DMG_MOUNT" ] && hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
+        sleep 3
+    done
+    if [ "$CONVERT_OK" != true ]; then
+        echo "Error: DMG 转换失败（ULMO/UDZO 各重试 2 次均失败）" >&2
+        exit 1
     fi
     rm -f "$DMG_RW"
     rm -rf "$DMG_STAGING" "$DMG_MOUNT"
