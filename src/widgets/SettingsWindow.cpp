@@ -639,12 +639,17 @@ void SettingsWindow::applyTabHeight(bool animated) {
     // 隐藏；装不下（快捷键/样式等内容真实超出窗口、滚动条真实需要）→ 动画期间
     // 就强制显示，否则 AsNeeded 要等视口被压到内容高度以下（动画末尾）才翻转，
     // 表现为"窗口高度快展开完滚动条才冒出来"。
-    // 视口高度随窗口高度线性变化，可用当前视口 + 高度增量推算目标视口；
+    // 目标视口直接按目标窗口高度推算，不能用"当前视口 + 高度增量"：切换选项卡
+    // 瞬间新页面的滚动区尚未按窗口尺寸激活（Windows 上视口仍可能是默认/旧值），
+    // 该值严重低估会把其实装得下的页面误判成溢出、强制显示滚动条，动画结束
+    // 恢复 AsNeeded 后又隐藏（表现为滚动条先显示、过一会儿消失）。
+    // 这里按窗口高度扣掉选项卡栏后的最大可用高度估算，结果只会偏大：宁可
+    // 少强制显示，也不误显。
     // 内容高度优先用 heightForWidth 的真实值（FlowLayout 页 minimumSizeHint
     // 只按单行估算，会低估），无则回退 minimumSizeHint。
     if (tabScrollArea && tabScrollArea->widget()) {
         const int viewportAtTarget =
-            tabScrollArea->viewport()->height() + (targetHeight - currentHeight);
+            targetHeight - tabBarExtra - 2 * tabScrollArea->frameWidth();
         const int contentNeeded = (contentHeight >= 0)
             ? contentHeight
             : tabScrollArea->widget()->minimumSizeHint().height();
