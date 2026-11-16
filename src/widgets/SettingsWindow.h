@@ -336,7 +336,7 @@ private:
 
     QPropertyAnimation *heightAnimation; ///< 高度动画
     int m_animatedHeight; ///< 动画高度属性
-    QScrollArea *m_suppressedScrollArea = nullptr; ///< 高度动画期间被抑制滚动条的选项卡滚动区
+    QScrollArea *m_suppressedScrollArea = nullptr; ///< 高度动画期间滚动条策略被临时覆盖的选项卡滚动区
     bool m_heightRecheckScheduled = false; ///< 高度复核是否已安排（防重复排队）
 
 private slots:
@@ -445,16 +445,28 @@ private:
     void scheduleHeightRecheck();
 
     /**
-     * @brief 抑制当前选项卡滚动区的垂直滚动条并记录；恢复上次抑制
+     * @brief 抑制当前选项卡滚动区的垂直滚动条并记录；恢复上次覆盖的策略
      *
      * 高度动画期间专用：动画中间态视口小于内容时，AsNeeded 会瞬时误报
      * （选项卡"滚动条先显示再消失"）。抑制对象为当前选项卡的滚动区
      * （历史/宠物等内容可装下的页面），且由调用方先判定"目标高度下内容
-     * 是否装得下"——装不下（快捷键/样式等真实滚动页）时不抑制。
+     * 是否装得下"——装不下（快捷键/样式等真实滚动页）时不抑制，改用
+     * forceShowTabScrollBar 让滚动条从切换第一帧起就显示。
      * @author chiangyang
      */
     void suppressTabScrollBar(QScrollArea *area);
     void restoreSuppressedScrollBar();
+
+    /**
+     * @brief 动画期间强制显示当前选项卡滚动区的垂直滚动条并记录
+     *
+     * 与 suppressTabScrollBar 对称：目标高度下内容装不下时，AsNeeded 只在
+     * 视口被压到内容高度以下的那一刻才显示（表现为高度动画末尾滚动条才
+     * 突然冒出）。这里在动画开始就置为 AlwaysOn，滚动条全程可见；结束后
+     * 恢复 AsNeeded 时内容仍超出，保持显示且不跳动。
+     * @author chiangyang
+     */
+    void forceShowTabScrollBar(QScrollArea *area);
 
     // ---- 颜色配置（数据驱动，元数据表归 StyleManager 所有） ----
     // 颜色配置元数据表（settingsKey/translationKey/defaultText/defaultColor）定义在

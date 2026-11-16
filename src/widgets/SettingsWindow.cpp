@@ -636,7 +636,9 @@ void SettingsWindow::applyTabHeight(bool animated) {
 
     // 动画中间态视口小于内容时，AsNeeded 会瞬时误报（滚动条"先显示再消失"）。
     // 是否抑制按"目标高度下内容是否装得下"判定：装得下（纯瞬态）→ 动画期间
-    // 隐藏；装不下（快捷键/样式等内容真实超出窗口、滚动条真实需要）→ 不抑制。
+    // 隐藏；装不下（快捷键/样式等内容真实超出窗口、滚动条真实需要）→ 动画期间
+    // 就强制显示，否则 AsNeeded 要等视口被压到内容高度以下（动画末尾）才翻转，
+    // 表现为"窗口高度快展开完滚动条才冒出来"。
     // 视口高度随窗口高度线性变化，可用当前视口 + 高度增量推算目标视口；
     // 内容高度优先用 heightForWidth 的真实值（FlowLayout 页 minimumSizeHint
     // 只按单行估算，会低估），无则回退 minimumSizeHint。
@@ -648,6 +650,8 @@ void SettingsWindow::applyTabHeight(bool animated) {
             : tabScrollArea->widget()->minimumSizeHint().height();
         if (contentNeeded <= viewportAtTarget) {
             suppressTabScrollBar(tabScrollArea);
+        } else {
+            forceShowTabScrollBar(tabScrollArea);
         }
     }
 
@@ -669,7 +673,21 @@ void SettingsWindow::suppressTabScrollBar(QScrollArea *area) {
 }
 
 /**
- * @brief 恢复上次抑制的滚动区为 AsNeeded
+ * @brief 强制显示指定滚动区的垂直滚动条并记录（供动画结束后恢复）
+ *
+ * 目标高度下内容装不下时，AsNeeded 要等高度动画把视口压到内容以下才显示
+ * 滚动条（动画末尾才冒出）；这里从动画第一帧就置为 AlwaysOn，结束后恢复
+ * AsNeeded 时内容仍超出，滚动条保持显示，不会出现延后或跳变。
+ * @author chiangyang
+ */
+void SettingsWindow::forceShowTabScrollBar(QScrollArea *area) {
+    if (!area) return;
+    m_suppressedScrollArea = area;
+    area->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOn);
+}
+
+/**
+ * @brief 恢复上次被临时覆盖策略的滚动区为 AsNeeded
  *
  * @author chiangyang
  */
