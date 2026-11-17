@@ -209,6 +209,15 @@ public:
     void chew();
 
     /**
+     * @brief 吐出网页的蓄力动作：身体下压回弹并张嘴
+     *
+     * 定时推送到点时调用。张嘴保持约 160ms，供网页卡片从嘴边飞出，
+     * 随后自动闭嘴；与投喂/咀嚼共用嘴部动画成员，互不覆写。
+     * @author chiangyang
+     */
+    void playSpitPose();
+
+    /**
      * @brief 宠物嘴部的全局屏幕坐标（飞行动画终点）
      * @return 嘴部中心全局坐标
      * @author chiangyang

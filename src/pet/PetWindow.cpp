@@ -1156,6 +1156,50 @@ void PetWindow::chew() {
 }
 
 /**
+ * @brief 吐出网页的蓄力动作：身体下压回弹并张嘴
+ * @author chiangyang
+ */
+void PetWindow::playSpitPose() {
+    // 与投喂/咀嚼共用嘴部动画成员：先停掉进行中的动画，避免属性互相覆写
+    if (m_mouthAnim) {
+        m_mouthAnim->stop(); // DeleteWhenStopped，stop 即销毁
+    }
+
+    // 身体挤压回弹：下压蓄力 → 反弹 → 复位，对应"用力吐出"的发力感
+    QPropertyAnimation *squish = new QPropertyAnimation(this, "chewScale");
+    squish->setDuration(460);
+    squish->setKeyValueAt(0.0, 1.0);
+    squish->setKeyValueAt(0.3, 0.86);
+    squish->setKeyValueAt(0.65, 1.06);
+    squish->setKeyValueAt(1.0, 1.0);
+
+    // 张嘴保持 160ms（网页卡片在此期间飞出），随后闭嘴，总时长与挤压一致
+    auto *mouthSeq = new QSequentialAnimationGroup;
+    QPropertyAnimation *open = new QPropertyAnimation(this, "mouthOpen");
+    open->setDuration(180);
+    open->setStartValue(m_mouthOpen);
+    open->setEndValue(1.0);
+    open->setEasingCurve(QEasingCurve::OutBack);
+    QPropertyAnimation *hold = new QPropertyAnimation(this, "mouthOpen");
+    hold->setDuration(160);
+    hold->setStartValue(1.0);
+    hold->setEndValue(1.0);
+    QPropertyAnimation *close = new QPropertyAnimation(this, "mouthOpen");
+    close->setDuration(120);
+    close->setStartValue(1.0);
+    close->setEndValue(0.0);
+    mouthSeq->addAnimation(open);
+    mouthSeq->addAnimation(hold);
+    mouthSeq->addAnimation(close);
+
+    auto *group = new QParallelAnimationGroup(this);
+    group->addAnimation(mouthSeq);
+    group->addAnimation(squish);
+    m_mouthAnim = group;
+    group->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+/**
  * @brief 左眼星星闪烁动画：星星从小到大旋转闪现再消失（约 800ms）
  * @author chiangyang
  */

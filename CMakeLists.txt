@@ -307,6 +307,8 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/ScheduledTaskStore.h
         src/pet/ScheduledPushRunner.cpp
         src/pet/ScheduledPushRunner.h
+        src/pet/WebFlyOutWidget.cpp
+        src/pet/WebFlyOutWidget.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp

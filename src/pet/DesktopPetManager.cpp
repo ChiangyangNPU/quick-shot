@@ -3,6 +3,7 @@
 #include "TodoWindow.h"
 #include "PetReminder.h"
 #include "ScheduledPushRunner.h"
+#include "WebFlyOutWidget.h"
 #include "PetBadgeWidget.h"
 #include "PomodoroCard.h"
 #include "PetStateMachine.h"
@@ -1183,10 +1184,39 @@ void DesktopPetManager::handleScheduledTaskDue(const ScheduledTask &task) {
     if (m_stateMachine) {
         m_stateMachine->noteInteraction();
     }
-    // 阶段一先以张嘴作为即时反馈；阶段三接入「吐出网页」动效后改为动效结束再打开
-    if (m_petWindow) {
-        m_petWindow->openMouth();
+
+    const QUrl parsed(url);
+    QString domain = parsed.host();
+    if (domain.isEmpty()) {
+        domain = url;
     }
-    LOG_INFO(QString("DesktopPetManager: scheduled task %1 opens %2").arg(task.id, url));
-    QDesktopServices::openUrl(QUrl(url));
+
+    if (!m_petWindow) {
+        // 开启状态下正常必有宠物窗口，兜底直接打开，避免任务静默丢失
+        QDesktopServices::openUrl(parsed);
+        return;
+    }
+
+    // 宠物先蓄力张嘴，随后网页卡片从嘴边飞出
+    m_petWindow->playSpitPose();
+    QScreen *screen = m_petWindow->screen();
+    if (!screen) {
+        screen = QGuiApplication::primaryScreen();
+    }
+    const QRect available = screen ? screen->availableGeometry() : QRect(0, 0, 1920, 1080);
+    QPointer<PetWindow> pet = m_petWindow;
+    // 等张嘴到位再起飞，形成"先张嘴、再吐出"的先后关系
+    QTimer::singleShot(320, this, [this, url, domain, available, pet]() {
+        if (!m_enabled || !pet) {
+            // 宠物在张嘴期间被关闭：按"宠物关闭不执行"放弃本次推送
+            return;
+        }
+        auto *fly = new WebFlyOutWidget(domain, pet->mouthCenterGlobal(), available);
+        // 卡片开始淡出时打开浏览器，避免动效结束后出现可见空档
+        connect(fly, &WebFlyOutWidget::opening, this, [url]() {
+            LOG_INFO(QString("DesktopPetManager: scheduled task opens %1").arg(url));
+            QDesktopServices::openUrl(QUrl(url));
+        });
+        fly->start();
+    });
 }
