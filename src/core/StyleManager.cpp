@@ -1063,12 +1063,13 @@ QString StyleManager::getComboBoxStyle() {
 
 QString StyleManager::getSettingsCheckBoxStyle() {
         const bool dark = (themeMode() == ThemeMode::Dark);
-        // spacing：复选框指示器与文字的间距。QSS 显式指定 indicator 尺寸后
-        // Qt 不再套用样式默认间距，文字会紧贴方框；统一给 0.5em（随字体/DPI
-        // 缩放）保证各语言下都留出呼吸感
+        // spacing：复选框指示器与文字的间距（0.8em，随字体/DPI 缩放）。
+        // 不再自定义 indicator 的 width/height：QSS 改尺寸后，部分平台
+        // （Windows 勾选态）的实际绘制范围会超出布局按 subElementRect
+        // 计算出的文字起点，指示器直接盖住文字；改用原生指示器尺寸，
+        // 保证绘制与布局一致，各平台都不会重叠
         return QString(
-            "QCheckBox { color: %1; spacing: 0.5em; }"
-            "QCheckBox::indicator { width: 1.1em; height: 1.1em; }"
+            "QCheckBox { color: %1; spacing: 0.8em; }"
         ).arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
 }
 

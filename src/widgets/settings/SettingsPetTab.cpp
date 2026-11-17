@@ -17,6 +17,9 @@
 #include <QLineEdit>
 #include <QFileDialog>
 #include <QDate>
+#include <QCheckBox>
+#include <QStylePainter>
+#include <QStyleOptionButton>
 #include <memory>
 
 namespace {
@@ -545,6 +548,66 @@ constexpr const char *kWeekdayKeys[] = {
 constexpr const char *kWeekdayFallbacks[] = {
     "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
 };
+
+/**
+ * @brief 星期复选框：方框沿用样式表绘制，文字改由控件自己排版
+ *
+ * 设置页位于 QScrollArea 子树，该环境下 QSS 对复选框"指示器 + 文字"的
+ * 布局计算不可靠：文字起点会落进方框内，macOS 表现为文字压住方块、
+ * Windows 表现为方块盖住文字，调 spacing 或前置空格都无法稳定解决。
+ * 这里绘制时清空 QCheckBox 的文字、只画方框，再按"方框右缘 + 固定间距"
+ * 自绘文字，保证各平台结构一致；点击整个控件区域仍由 QCheckBox 处理。
+ * @author chiangyang
+ */
+class WeekdayCheckBox : public QCheckBox {
+public:
+    explicit WeekdayCheckBox(const QString &label, QWidget *parent = nullptr)
+        : QCheckBox(parent), m_label(label) {
+        setText(QString());       // 文字不参与 QCheckBox 的布局
+        setAccessibleName(label); // 屏幕阅读器仍能读到星期名
+    }
+
+    QSize sizeHint() const override {
+        // 宽度 = 方框 + 左侧间距 + 文字 + 右侧间距：右侧间距由控件自身承担，
+        // 行布局 spacing 置 0，文字到左右两个方框的视觉距离才完全相等
+        const QRect box = indicatorRect();
+        return QSize(box.width() + gap() * 4 + fontMetrics().horizontalAdvance(m_label),
+                     qMax(box.height(), fontMetrics().height()));
+    }
+
+    QSize minimumSizeHint() const override { return sizeHint(); }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QStylePainter painter(this);
+        QStyleOptionButton opt;
+        initStyleOption(&opt);
+        opt.text.clear();
+        painter.drawControl(QStyle::CE_CheckBox, opt);
+
+        const QRect indicator = style()->subElementRect(QStyle::SE_CheckBoxIndicator, &opt, this);
+        QRect textRect = rect().adjusted(indicator.right() + 1 + gap(), 0, 0, 0);
+        if (textRect.width() > 0) {
+            painter.setPen(palette().color(QPalette::WindowText));
+            painter.drawText(textRect, Qt::AlignLeft | Qt::AlignVCenter, m_label);
+        }
+    }
+
+private:
+    /**
+     * @brief 指示器（方框）占据的矩形，sizeHint 与绘制共用同一来源
+     * @return 按当前样式计算的指示器矩形
+     * @author chiangyang
+     */
+    QRect indicatorRect() const {
+        QStyleOptionButton opt;
+        opt.initFrom(this);
+        return style()->subElementRect(QStyle::SE_CheckBoxIndicator, &opt, this);
+    }
+
+    static int gap() { return PetUi::scaled(4); }
+    QString m_label;
+};
 } // namespace
 
 /**
@@ -631,10 +694,10 @@ QWidget *SettingsPetTab::createScheduledTaskRow(const ScheduledTask &task) {
     // 第二行：星期多选，任一变化都按勾选状态重算掩码
     auto *daysRow = new QHBoxLayout();
     daysRow->setContentsMargins(0, 0, 0, 0);
-    daysRow->setSpacing(PetUi::scaled(8));
+    daysRow->setSpacing(0);
     auto dayChecks = std::make_shared<QVector<QCheckBox*>>();
     for (int day = 1; day <= 7; ++day) {
-        auto *dayCheck = new QCheckBox(tm->get(kWeekdayKeys[day - 1], kWeekdayFallbacks[day - 1]), row);
+        auto *dayCheck = new WeekdayCheckBox(tm->get(kWeekdayKeys[day - 1], kWeekdayFallbacks[day - 1]), row);
         dayCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
         dayCheck->setChecked(ScheduledTaskStore::matchesWeekday(task.days, day));
         dayChecks->append(dayCheck);
