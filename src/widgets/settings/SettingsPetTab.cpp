@@ -4,6 +4,7 @@
 #include "../../pet/DesktopPetManager.h"
 #include "../../pet/PetWindow.h"
 #include "../../pet/PetUiScale.h"
+#include "../../pet/ScheduledTaskStore.h"
 #include "../FlowLayout.h"
 #include "../MessageBox.h"
 
@@ -12,8 +13,11 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QSpinBox>
+#include <QTimeEdit>
+#include <QLineEdit>
 #include <QFileDialog>
 #include <QDate>
+#include <memory>
 
 namespace {
 // 自定义宠物按钮在互斥组中的 id 偏移（避免与 PetStyle 枚举值 0~15 冲突）
@@ -466,11 +470,41 @@ void SettingsPetTab::setupUi() {
     behaviorLayout->addWidget(m_btnResetPos);
     behaviorLayout->addWidget(m_descLabel);
 
-    // 四个分组纵向排列：基本 / 宠物样式 / 自定义宠物 / 行为
+    // ===== 定时推送组：按星期几的固定时刻，宠物吐出网页并交给默认浏览器 =====
+    m_scheduledGroup = new QGroupBox(tm->get("pet.scheduledPush", "Scheduled Push"), scrollContent);
+    m_scheduledGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    QVBoxLayout *scheduledLayout = new QVBoxLayout(m_scheduledGroup);
+
+    m_scheduledHint = new QLabel(tm->get("pet.scheduledPush.hint",
+        "At the scheduled time, the pet spits out a web card and opens the URL in your default browser. "
+        "Only runs while the pet is enabled."), m_scheduledGroup);
+    m_scheduledHint->setWordWrap(true);
+
+    m_scheduledListHost = new QWidget(m_scheduledGroup);
+    m_scheduledListLayout = new QVBoxLayout(m_scheduledListHost);
+    m_scheduledListLayout->setContentsMargins(0, 0, 0, 0);
+    m_scheduledListLayout->setSpacing(PetUi::scaled(10));
+
+    m_scheduledEmptyHint = new QLabel(tm->get("pet.scheduledPush.empty",
+        "No scheduled tasks yet. Add one and choose the weekdays and time."), m_scheduledGroup);
+    m_scheduledEmptyHint->setWordWrap(true);
+
+    m_btnAddScheduled = new QPushButton(tm->get("pet.scheduledPush.add", "Add Task"), m_scheduledGroup);
+    m_btnAddScheduled->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    m_btnAddScheduled->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    connect(m_btnAddScheduled, &QPushButton::clicked, this, &SettingsPetTab::addScheduledTask);
+
+    scheduledLayout->addWidget(m_scheduledHint);
+    scheduledLayout->addWidget(m_scheduledEmptyHint);
+    scheduledLayout->addWidget(m_scheduledListHost);
+    scheduledLayout->addWidget(m_btnAddScheduled);
+
+    // 五个分组纵向排列：基本 / 宠物样式 / 自定义宠物 / 行为 / 定时推送
     layout->addWidget(m_basicGroup);
     layout->addWidget(m_styleGroupBox);
     layout->addWidget(m_customGroup);
     layout->addWidget(m_behaviorGroup);
+    layout->addWidget(m_scheduledGroup);
     layout->addStretch();
 
     // 创建滚动区域
@@ -493,6 +527,168 @@ void SettingsPetTab::setupUi() {
 
     // 构建已导入的自定义宠物缩略图（空列表时只有添加按钮与提示）
     refreshCustomList();
+    // 构建已配置的定时推送任务行（空列表时只显示空状态提示）
+    rebuildScheduledRows();
+}
+
+// ============================================================
+// 定时推送
+// ============================================================
+
+namespace {
+// 星期复选框的 i18n 键与英文兜底文案（下标 0 对应周一）
+constexpr const char *kWeekdayKeys[] = {
+    "pet.weekday.mon", "pet.weekday.tue", "pet.weekday.wed",
+    "pet.weekday.thu", "pet.weekday.fri", "pet.weekday.sat",
+    "pet.weekday.sun"
+};
+constexpr const char *kWeekdayFallbacks[] = {
+    "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"
+};
+} // namespace
+
+/**
+ * @brief 按任务仓库重建定时推送任务行
+ * @author chiangyang
+ */
+void SettingsPetTab::rebuildScheduledRows() {
+    if (!m_scheduledListLayout) {
+        return;
+    }
+    // 仅在任务增删/语言切换时重建：行内编辑直接写回仓库，不触发本函数，
+    // 避免输入网址途中焦点与未提交内容丢失
+    for (QWidget *row : m_scheduledRows) {
+        m_scheduledListLayout->removeWidget(row);
+        delete row;
+    }
+    m_scheduledRows.clear();
+
+    const QVector<ScheduledTask> tasks = ScheduledTaskStore::instance()->list();
+    for (const ScheduledTask &task : tasks) {
+        QWidget *row = createScheduledTaskRow(task);
+        m_scheduledListLayout->addWidget(row);
+        m_scheduledRows.append(row);
+    }
+    if (m_scheduledEmptyHint) {
+        m_scheduledEmptyHint->setVisible(tasks.isEmpty());
+    }
+}
+
+/**
+ * @brief 构建单条定时推送任务行
+ * @author chiangyang
+ */
+QWidget *SettingsPetTab::createScheduledTaskRow(const ScheduledTask &task) {
+    TranslationManager *tm = TranslationManager::instance();
+    auto *row = new QWidget(m_scheduledListHost);
+    auto *rowLayout = new QVBoxLayout(row);
+    rowLayout->setContentsMargins(0, 0, 0, 0);
+    rowLayout->setSpacing(PetUi::scaled(6));
+
+    // 行内字段的当前值：任一控件变更后整体写回仓库（仓库负责规范化网址）
+    auto state = std::make_shared<ScheduledTask>(task);
+    auto commit = [state]() {
+        ScheduledTaskStore::instance()->update(*state);
+    };
+
+    // 第一行：启用开关 + 触发时间 + 删除
+    auto *topRow = new QHBoxLayout();
+    topRow->setContentsMargins(0, 0, 0, 0);
+    topRow->setSpacing(PetUi::scaled(8));
+
+    auto *enableCheck = new QCheckBox(tm->get("pet.scheduledPush.enable", "Enabled"), row);
+    enableCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    enableCheck->setChecked(task.enabled);
+    connect(enableCheck, &QCheckBox::toggled, row, [state, commit](bool checked) {
+        state->enabled = checked;
+        commit();
+    });
+
+    const QTime initialTime = QTime::fromString(task.time, QStringLiteral("HH:mm"));
+    auto *timeEdit = new QTimeEdit(initialTime.isValid() ? initialTime : QTime(9, 0), row);
+    timeEdit->setDisplayFormat(QStringLiteral("HH:mm"));
+    timeEdit->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    connect(timeEdit, &QTimeEdit::timeChanged, row, [state, commit](const QTime &time) {
+        state->time = time.toString(QStringLiteral("HH:mm"));
+        commit();
+    });
+
+    auto *removeButton = new QPushButton(QStringLiteral("\u00D7"), row);
+    removeButton->setToolTip(tm->get("pet.scheduledPush.delete", "Delete Task"));
+    removeButton->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    removeButton->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+    connect(removeButton, &QPushButton::clicked, this, [this, state]() {
+        ScheduledTaskStore::instance()->remove(state->id);
+        rebuildScheduledRows();
+    });
+
+    topRow->addWidget(enableCheck);
+    topRow->addWidget(timeEdit);
+    topRow->addStretch();
+    topRow->addWidget(removeButton);
+    rowLayout->addLayout(topRow);
+
+    // 第二行：星期多选，任一变化都按勾选状态重算掩码
+    auto *daysRow = new QHBoxLayout();
+    daysRow->setContentsMargins(0, 0, 0, 0);
+    daysRow->setSpacing(PetUi::scaled(8));
+    auto dayChecks = std::make_shared<QVector<QCheckBox*>>();
+    for (int day = 1; day <= 7; ++day) {
+        auto *dayCheck = new QCheckBox(tm->get(kWeekdayKeys[day - 1], kWeekdayFallbacks[day - 1]), row);
+        dayCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+        dayCheck->setChecked(ScheduledTaskStore::matchesWeekday(task.days, day));
+        dayChecks->append(dayCheck);
+        daysRow->addWidget(dayCheck);
+    }
+    daysRow->addStretch();
+    for (int day = 1; day <= 7; ++day) {
+        connect(dayChecks->at(day - 1), &QCheckBox::toggled, row, [state, commit, dayChecks]() {
+            int mask = 0;
+            for (int d = 1; d <= 7; ++d) {
+                if (dayChecks->at(d - 1)->isChecked()) {
+                    mask |= ScheduledTaskStore::weekdayMask(d);
+                }
+            }
+            state->days = mask;
+            commit();
+        });
+    }
+    rowLayout->addLayout(daysRow);
+
+    // 第三行：网址（失焦或回车时保存，避免每次按键写盘）
+    auto *urlRow = new QHBoxLayout();
+    urlRow->setContentsMargins(0, 0, 0, 0);
+    urlRow->setSpacing(PetUi::scaled(8));
+    auto *urlLabel = new QLabel(tm->get("pet.scheduledPush.url", "URL") + ":", row);
+    auto *urlEdit = new QLineEdit(task.url, row);
+    urlEdit->setPlaceholderText(tm->get("pet.scheduledPush.urlPlaceholder", "https://example.com"));
+    connect(urlEdit, &QLineEdit::editingFinished, row, [state, commit, urlEdit]() {
+        state->url = ScheduledTaskStore::normalizeUrl(urlEdit->text());
+        commit();
+        // 回填规范化结果（无协议自动补 https://），保持输入框与持久化值一致
+        if (urlEdit->text() != state->url) {
+            urlEdit->setText(state->url);
+        }
+    });
+    urlRow->addWidget(urlLabel);
+    urlRow->addWidget(urlEdit, 1);
+    rowLayout->addLayout(urlRow);
+
+    return row;
+}
+
+/**
+ * @brief 新增一条默认定时任务
+ * @author chiangyang
+ */
+void SettingsPetTab::addScheduledTask() {
+    ScheduledTask task;
+    task.enabled = true;
+    task.days = 0;  // 默认不选星期：用户选定星期并填写网址后才会触发
+    task.time = QStringLiteral("09:00");
+    task.url = QString();
+    ScheduledTaskStore::instance()->add(task);
+    rebuildScheduledRows();
 }
 
 /**
@@ -693,6 +889,15 @@ void SettingsPetTab::retranslateUi() {
                 "Transparent PNG or GIF works best; non-square images are scaled to fit."));
     if (m_descLabel) m_descLabel->setText(tm->get("pet.description",
         "When enabled, screenshots fly into the pet's mouth after copy, pin, or taking a snapshot while recording, \nand copied or cut text flies in as well. \nClick the pet or move the mouse to the top edge of the screen to open or close the clothesline and view recent screenshots and copied text."));
+    // 定时推送：固定文案直接更新，任务行内文案（启用/星期/删除提示）随重建刷新
+    if (m_scheduledGroup) m_scheduledGroup->setTitle(tm->get("pet.scheduledPush", "Scheduled Push"));
+    if (m_scheduledHint) m_scheduledHint->setText(tm->get("pet.scheduledPush.hint",
+        "At the scheduled time, the pet spits out a web card and opens the URL in your default browser. "
+        "Only runs while the pet is enabled."));
+    if (m_scheduledEmptyHint) m_scheduledEmptyHint->setText(tm->get("pet.scheduledPush.empty",
+        "No scheduled tasks yet. Add one and choose the weekdays and time."));
+    if (m_btnAddScheduled) m_btnAddScheduled->setText(tm->get("pet.scheduledPush.add", "Add Task"));
+    if (m_scheduledListHost) rebuildScheduledRows();
 }
 
 // ============================================================
@@ -725,6 +930,20 @@ void SettingsPetTab::refreshStyles() {
     if (m_customGroup) m_customGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
     if (m_btnAddCustom) m_btnAddCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
     if (m_btnRemoveCustom) m_btnRemoveCustom->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    if (m_scheduledGroup) m_scheduledGroup->setStyleSheet(StyleManager::getGroupBoxStyle());
+    if (m_btnAddScheduled) m_btnAddScheduled->setStyleSheet(StyleManager::getSettingsButtonStyle());
+    // 任务行内的控件随主题刷新样式（不重建，避免输入中的网址被丢弃）
+    for (QWidget *row : m_scheduledRows) {
+        for (QCheckBox *check : row->findChildren<QCheckBox*>()) {
+            check->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+        }
+        for (QTimeEdit *edit : row->findChildren<QTimeEdit*>()) {
+            edit->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+        }
+        for (QPushButton *button : row->findChildren<QPushButton*>()) {
+            button->setStyleSheet(StyleManager::getSettingsButtonStyle());
+        }
+    }
     for (QToolButton *btn : m_customButtons) {
         btn->setStyleSheet(StyleManager::getSettingsToolButtonStyle());
     }

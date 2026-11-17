@@ -15,6 +15,8 @@
 #include <QVector>
 
 class FlowLayout;
+struct ScheduledTask;
+class QVBoxLayout;
 
 /**
  * @brief 设置窗口「桌面宠物」选项卡
@@ -93,6 +95,29 @@ private:
      */
     void removeSelectedCustomPet();
 
+    /**
+     * @brief 按任务仓库重建定时推送任务行
+     *
+     * 仅在任务增删后调用；行内字段编辑直接写回仓库，不触发重建，
+     * 避免输入网址时焦点与未提交内容丢失。
+     * @author chiangyang
+     */
+    void rebuildScheduledRows();
+
+    /**
+     * @brief 构建单条定时推送任务行
+     * @param task 任务数据
+     * @return 任务行控件（父控件为任务列表容器）
+     * @author chiangyang
+     */
+    QWidget *createScheduledTaskRow(const ScheduledTask &task);
+
+    /**
+     * @brief 新增一条默认定时任务（当天不选星期，填写后才会生效）
+     * @author chiangyang
+     */
+    void addScheduledTask();
+
     QScrollArea *petScrollArea = nullptr;   ///< 滚动区域（16 种样式按钮较高）
     QWidget *m_petScrollContent = nullptr;  ///< 滚动内容容器（palette 背景）
     QGroupBox *m_basicGroup;            ///< 基本分组（宠物开关）
@@ -127,6 +152,14 @@ private:
     QComboBox *m_birthdayMonthCombo;    ///< 生日月份下拉（第 0 项为"不设置"）
     QSpinBox *m_birthdayDaySpin;        ///< 生日日期（上限随所选月份收敛）
     QLabel *m_descLabel;                ///< 功能说明标签
+
+    QGroupBox *m_scheduledGroup = nullptr;      ///< 定时推送分组
+    QLabel *m_scheduledHint = nullptr;          ///< 定时推送说明
+    QWidget *m_scheduledListHost = nullptr;     ///< 任务行容器
+    QVBoxLayout *m_scheduledListLayout = nullptr; ///< 任务行布局
+    QLabel *m_scheduledEmptyHint = nullptr;     ///< 无任务时的空状态提示
+    QPushButton *m_btnAddScheduled = nullptr;   ///< 添加任务按钮
+    QVector<QWidget*> m_scheduledRows;          ///< 当前任务行控件（增删后整体重建）
 
     QGroupBox *m_customGroup = nullptr;     ///< 自定义宠物分组
     FlowLayout *m_customFlow = nullptr;     ///< 自定义宠物缩略图流式布局（自动换行）
