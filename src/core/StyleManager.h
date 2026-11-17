@@ -495,6 +495,18 @@ public:
     static QString getSettingsComboBoxStyle();
 
     /**
+     * @brief 获取设置页单行输入框样式（QLineEdit）
+     * @return 输入框样式字符串
+     * @note 使用位置: SettingsWindow 各选项卡内的可编辑 QLineEdit
+     *       （如桌面宠物「定时推送」的网址输入框）。全局 QSS 的 QLineEdit
+     *       规则只定义边框与尺寸、不定义配色，深色主题下会沿用系统浅色调色板
+     *       变成白底；此处按主题显式给出背景/文字/边框色，配色与
+     *       getSettingsComboBoxStyle() 保持一致，保证同页输入控件视觉统一。
+     * @author chiangyang
+     */
+    static QString getSettingsLineEditStyle();
+
+    /**
      * @brief 获取消息框样式
      * @return 消息框样式字符串
      * @note 使用位置: 项目所有 QMessageBox（确认对话框、警告、信息提示、翻译隐私提示等）

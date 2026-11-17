@@ -1252,6 +1252,25 @@ QString StyleManager::getSettingsComboBoxStyle() {
          .arg(disabledText);
 }
 
+/**
+ * @brief 获取设置页单行输入框样式（QLineEdit）
+ * @return 输入框样式字符串
+ * @author chiangyang
+ */
+QString StyleManager::getSettingsLineEditStyle() {
+        const bool dark = (themeMode() == ThemeMode::Dark);
+        const QString bg = dark ? QStringLiteral("#2a2a2e") : QStringLiteral("#fff");
+        const QString text = dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000");
+        const QString border = dark ? QStringLiteral("rgba(255,255,255,80)") : QStringLiteral("#848484");
+        const QString placeholder = dark ? QStringLiteral("rgba(255,255,255,140)")
+                                         : QStringLiteral("#8a8a8a");
+        return QString(
+            "QLineEdit { background-color: %1; color: %2; border: 1px solid %3;"
+            " border-radius: 0.24em; padding: 0.14em 0.19em; placeholder-text-color: %4; }"
+            "QLineEdit:focus { border: 1px solid #1E90FF; }"
+        ).arg(bg).arg(text).arg(border).arg(placeholder);
+}
+
 QString StyleManager::getMessageBoxStyle() {
         const bool dark = (themeMode() == ThemeMode::Dark);
         return QString(

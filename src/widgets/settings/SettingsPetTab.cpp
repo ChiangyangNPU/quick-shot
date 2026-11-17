@@ -662,6 +662,7 @@ QWidget *SettingsPetTab::createScheduledTaskRow(const ScheduledTask &task) {
     auto *urlLabel = new QLabel(tm->get("pet.scheduledPush.url", "URL") + ":", row);
     auto *urlEdit = new QLineEdit(task.url, row);
     urlEdit->setPlaceholderText(tm->get("pet.scheduledPush.urlPlaceholder", "https://example.com"));
+    urlEdit->setStyleSheet(StyleManager::getSettingsLineEditStyle());
     connect(urlEdit, &QLineEdit::editingFinished, row, [state, commit, urlEdit]() {
         state->url = ScheduledTaskStore::normalizeUrl(urlEdit->text());
         commit();
@@ -939,6 +940,9 @@ void SettingsPetTab::refreshStyles() {
         }
         for (QTimeEdit *edit : row->findChildren<QTimeEdit*>()) {
             edit->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+        }
+        for (QLineEdit *edit : row->findChildren<QLineEdit*>()) {
+            edit->setStyleSheet(StyleManager::getSettingsLineEditStyle());
         }
         for (QPushButton *button : row->findChildren<QPushButton*>()) {
             button->setStyleSheet(StyleManager::getSettingsButtonStyle());
