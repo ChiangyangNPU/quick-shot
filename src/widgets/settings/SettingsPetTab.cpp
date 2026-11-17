@@ -605,7 +605,7 @@ private:
         return style()->subElementRect(QStyle::SE_CheckBoxIndicator, &opt, this);
     }
 
-    static int gap() { return PetUi::scaled(4); }
+    static int gap() { return PetUi::scaled(8); }
     QString m_label;
 };
 } // namespace
