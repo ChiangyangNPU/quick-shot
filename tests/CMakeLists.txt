@@ -143,3 +143,12 @@ target_include_directories(AboutTabHeightTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
 target_link_libraries(AboutTabHeightTest PRIVATE
     Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 add_test(NAME AboutTabHeightTest COMMAND AboutTabHeightTest)
+
+# ---- ScheduledPush：星期/时间匹配、网址规范化、任务仓库、调度去重 ----
+add_executable(ScheduledPushTest ScheduledPushTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/pet/ScheduledTaskStore.cpp
+    ${CMAKE_SOURCE_DIR}/src/pet/ScheduledPushRunner.cpp
+    ${CMAKE_SOURCE_DIR}/src/log/Logger.cpp)
+target_include_directories(ScheduledPushTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ScheduledPushTest PRIVATE Qt6::Test Qt6::Core)
+add_test(NAME ScheduledPushTest COMMAND ScheduledPushTest)

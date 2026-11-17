@@ -303,6 +303,10 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/pet/PetStateMachine.h
         src/pet/PetSystemMonitor.cpp
         src/pet/PetSystemMonitor.h
+        src/pet/ScheduledTaskStore.cpp
+        src/pet/ScheduledTaskStore.h
+        src/pet/ScheduledPushRunner.cpp
+        src/pet/ScheduledPushRunner.h
         src/widgets/MessageBox.cpp
         src/widgets/MessageBox.h
         src/recording/ScreenRecorder.cpp

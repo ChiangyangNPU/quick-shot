@@ -2,6 +2,7 @@
 #include "PetWindow.h"
 #include "TodoWindow.h"
 #include "PetReminder.h"
+#include "ScheduledPushRunner.h"
 #include "PetBadgeWidget.h"
 #include "PomodoroCard.h"
 #include "PetStateMachine.h"
@@ -19,9 +20,11 @@
 #include <QScreen>
 #include <QCursor>
 #include <QDateTime>
+#include <QDesktopServices>
 #include <QPainter>
 #include <QFontMetrics>
 #include <QTimer>
+#include <QUrl>
 
 namespace {
 // 主屏顶边热区：光标进入上边界以内该逻辑像素深度视为"移到屏幕上边界"
@@ -113,6 +116,10 @@ void DesktopPetManager::setEnabled(bool enabled) {
         // 提醒角标与轮询随宠物一起停止
         if (m_reminder) {
             m_reminder->stop();
+        }
+        // 定时推送随宠物一起停止（关闭期间不触发，与"宠物关闭不执行"一致）
+        if (m_pushRunner) {
+            m_pushRunner->stop();
         }
         if (m_todoBadge) {
             m_todoBadge->close();
@@ -256,6 +263,13 @@ void DesktopPetManager::createPetWindow() {
     if (pomodoroEnabled()) {
         m_reminder->startPomodoro();
     }
+    // 定时推送：到点播放吐出动效并打开网页（宠物关闭期间停止）
+    if (!m_pushRunner) {
+        m_pushRunner = new ScheduledPushRunner(this);
+        connect(m_pushRunner, &ScheduledPushRunner::taskDue,
+                this, &DesktopPetManager::handleScheduledTaskDue);
+    }
+    m_pushRunner->start();
 
     // 趣味陪伴：待机打盹状态机
     if (!m_stateMachine) {
@@ -1148,4 +1162,31 @@ void DesktopPetManager::positionPomodoroCard() {
     y = qBound(available.top() + margin, y, available.bottom() - size.height() - margin);
     m_pomodoroCard->setBubblePlacement(arrowBelow, petCenterX - x);
     m_pomodoroCard->move(x, y);
+}
+
+/**
+ * @brief 定时推送任务到点：播放吐出动效并打开网页
+ * @author chiangyang
+ */
+void DesktopPetManager::handleScheduledTaskDue(const ScheduledTask &task) {
+    if (!m_enabled) {
+        return;
+    }
+    const QString url = ScheduledTaskStore::normalizeUrl(task.url);
+    if (url.isEmpty()) {
+        LOG_WARNING(QString("DesktopPetManager: scheduled task %1 has invalid url: %2")
+                        .arg(task.id, task.url));
+        return;
+    }
+
+    // 到点也算一次互动：先唤醒打盹中的宠物，避免动效在睡眠姿态下播放
+    if (m_stateMachine) {
+        m_stateMachine->noteInteraction();
+    }
+    // 阶段一先以张嘴作为即时反馈；阶段三接入「吐出网页」动效后改为动效结束再打开
+    if (m_petWindow) {
+        m_petWindow->openMouth();
+    }
+    LOG_INFO(QString("DesktopPetManager: scheduled task %1 opens %2").arg(task.id, url));
+    QDesktopServices::openUrl(QUrl(url));
 }

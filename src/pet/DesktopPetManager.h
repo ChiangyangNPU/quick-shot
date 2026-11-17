@@ -8,6 +8,7 @@
 #include <QVector>
 #include "PetWindow.h"
 #include "CustomPetStore.h"
+#include "ScheduledTaskStore.h"
 
 class ClotheslineWindow;
 class TodoWindow;
@@ -16,6 +17,7 @@ class PetBadgeWidget;
 class PomodoroCard;
 class PetStateMachine;
 class PetSystemMonitor;
+class ScheduledPushRunner;
 class QTimer;
 
 /**
@@ -491,6 +493,13 @@ private:
      */
     void positionPomodoroCard();
 
+    /**
+     * @brief 定时推送任务到点：播放吐出动效并打开网页
+     * @param task 命中的任务
+     * @author chiangyang
+     */
+    void handleScheduledTaskDue(const ScheduledTask &task);
+
     static DesktopPetManager* s_instance;   ///< 单例实例
     bool m_enabled = false;                 ///< 是否开启
     QPointer<PetWindow> m_petWindow;        ///< 宠物窗口（未开启时为 nullptr）
@@ -498,6 +507,7 @@ private:
     QPointer<TodoWindow> m_todoWindow;      ///< 待办清单窗口（未打开时为 nullptr）
     QPointer<PetBadgeWidget> m_todoBadge;   ///< 待办提醒角标（无提醒或未开启时为 nullptr/隐藏）
     PetReminder *m_reminder = nullptr;      ///< 提醒源（待办轮询 + 番茄钟计时，宠物开启期间运行）
+    ScheduledPushRunner *m_pushRunner = nullptr; ///< 定时推送调度器（宠物开启期间运行）
     QPointer<PomodoroCard> m_pomodoroCard;  ///< 番茄钟提示卡（未弹出时为 nullptr）
     PetStateMachine *m_stateMachine = nullptr; ///< 状态机（待机打盹调度，宠物开启期间运行）
     PetSystemMonitor *m_sysMonitor = nullptr;  ///< 系统状态采集（过载/低电量提醒，开关开启且宠物开启期间运行）
