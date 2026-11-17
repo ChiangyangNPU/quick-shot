@@ -1063,8 +1063,11 @@ QString StyleManager::getComboBoxStyle() {
 
 QString StyleManager::getSettingsCheckBoxStyle() {
         const bool dark = (themeMode() == ThemeMode::Dark);
+        // spacing：复选框指示器与文字的间距。QSS 显式指定 indicator 尺寸后
+        // Qt 不再套用样式默认间距，文字会紧贴方框；统一给 0.5em（随字体/DPI
+        // 缩放）保证各语言下都留出呼吸感
         return QString(
-            "QCheckBox { color: %1; }"
+            "QCheckBox { color: %1; spacing: 0.5em; }"
             "QCheckBox::indicator { width: 1.1em; height: 1.1em; }"
         ).arg(dark ? QStringLiteral("#f2f2f2") : QStringLiteral("#000"));
 }
