@@ -6,6 +6,7 @@
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
 #include <QPainter>
+#include <QPainterPath>
 #include <QPaintEvent>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -62,6 +63,9 @@ TranslatePalette translatePalette() {
             QColor(95, 99, 104)};
 }
 
+/// 翻译窗口圆角半径（px），窗口本体与四角子控件共用，保证圆角边缘对齐
+constexpr int kWindowRadius = 12;
+
 /**
  * @brief 创建底部操作按钮（图标在上、文字在下）
  * @param iconPath 图标资源路径
@@ -102,11 +106,13 @@ public:
      * @brief 构造函数
      * @param pixmap 待显示的原图
      * @param bgColor 背景色
+     * @param cornerRadius 左下角圆角半径（控件贴着窗口左下角，需与窗口圆角一致）
      * @param parent 父控件
      * @author chiangyang
      */
-    TranslateImageView(const QPixmap &pixmap, const QColor &bgColor, QWidget *parent = nullptr)
-        : QWidget(parent), m_pixmap(pixmap), m_bgColor(bgColor) {
+    TranslateImageView(const QPixmap &pixmap, const QColor &bgColor, int cornerRadius,
+                       QWidget *parent = nullptr)
+        : QWidget(parent), m_pixmap(pixmap), m_bgColor(bgColor), m_cornerRadius(cornerRadius) {
         setMinimumSize(120, 120);
     }
 
@@ -119,6 +125,20 @@ protected:
     void paintEvent(QPaintEvent *event) override {
         Q_UNUSED(event);
         QPainter painter(this);
+        // 本控件占据窗口左下角：背景按左下圆角裁剪，其余三角由标题栏/操作栏负责
+        if (m_cornerRadius > 0) {
+            const qreal r = m_cornerRadius;
+            const qreal w = width();
+            const qreal h = height();
+            QPainterPath clip;
+            clip.moveTo(0, 0);
+            clip.lineTo(w, 0);
+            clip.lineTo(w, h);
+            clip.lineTo(r, h);
+            clip.arcTo(QRectF(0, h - 2 * r, 2 * r, 2 * r), 270, -90);
+            clip.closeSubpath();
+            painter.setClipPath(clip);
+        }
         painter.fillRect(rect(), m_bgColor);
         if (m_pixmap.isNull()) return;
 
@@ -137,6 +157,7 @@ protected:
 private:
     QPixmap m_pixmap;  ///< 原图
     QColor m_bgColor;  ///< 背景色
+    int m_cornerRadius = 0;  ///< 左下角圆角半径
 };
 
 /**
@@ -323,8 +344,9 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
     LOG_INFO(QString("TranslateOverlayWindow created, pixmap: %1x%2, segments: %3")
                  .arg(pixmap.width()).arg(pixmap.height()).arg(texts.size()));
 
-    // 窗口标志：无边框、置顶、工具窗口
+    // 窗口标志：无边框、置顶、工具窗口；透明背景让圆角外的四角透出桌面
     setWindowFlags(Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint | Qt::Tool);
+    setAttribute(Qt::WA_TranslucentBackground);
     setAttribute(Qt::WA_DeleteOnClose);
     setFocusPolicy(Qt::StrongFocus);
 
@@ -355,8 +377,9 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
     titleBar->setObjectName("translateTitleBar");
     titleBar->setFixedHeight(headerHeight);
     titleBar->setStyleSheet(QString(
-        "QWidget#translateTitleBar{background:%1;border-bottom:1px solid %2;}")
-        .arg(palette.headerBg.name(), palette.divider.name()));
+        "QWidget#translateTitleBar{background:%1;border-bottom:1px solid %2;"
+        "border-top-left-radius:%3px;border-top-right-radius:%3px;}")
+        .arg(palette.headerBg.name(), palette.divider.name()).arg(kWindowRadius));
 
     QHBoxLayout *titleLayout = new QHBoxLayout(titleBar);
     titleLayout->setContentsMargins(14, 0, 8, 0);
@@ -391,15 +414,15 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
                                 .arg(palette.divider.name()));
     rootLayout->addWidget(splitter, 1);
 
-    m_imageView = new TranslateImageView(pixmap, palette.imageBg, splitter);
+    m_imageView = new TranslateImageView(pixmap, palette.imageBg, kWindowRadius, splitter);
     m_imageView->setMinimumWidth(120);
     m_imageView->installEventFilter(this);
 
     QWidget *textPanel = new QWidget(splitter);
     textPanel->setObjectName("translateTextPanel");
     textPanel->setMinimumWidth(240);
-    textPanel->setStyleSheet(QString("QWidget#translateTextPanel{background:%1;}")
-                                 .arg(palette.windowBg.name()));
+    // 面板本身不铺底色：底色由文本区与底部操作栏分别绘制，避免方块盖住右下圆角
+    textPanel->setStyleSheet(QStringLiteral("QWidget#translateTextPanel{background:transparent;}"));
 
     QVBoxLayout *textLayout = new QVBoxLayout(textPanel);
     textLayout->setContentsMargins(0, 0, 0, 0);
@@ -422,7 +445,8 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
 
     // 底部操作栏：复制全文 / 另存为图片 / 右下角缩放抓手
     QWidget *actionBar = new QWidget(textPanel);
-    actionBar->setStyleSheet(QString("background:%1;").arg(palette.windowBg.name()));
+    actionBar->setStyleSheet(QString("background:%1;border-bottom-right-radius:%2px;")
+                                 .arg(palette.windowBg.name()).arg(kWindowRadius));
     QHBoxLayout *actionLayout = new QHBoxLayout(actionBar);
     actionLayout->setContentsMargins(12, 6, 6, 6);
     actionLayout->setSpacing(6);
@@ -531,10 +555,15 @@ void TranslateOverlayWindow::updateTextContent() {
 void TranslateOverlayWindow::paintEvent(QPaintEvent *event) {
     Q_UNUSED(event);
     QPainter painter(this);
-    painter.fillRect(rect(), m_windowBg);
+    painter.setRenderHint(QPainter::Antialiasing, true);
+
+    // 圆角矩形背景 + 描边：内缩 0.5px 让 1px 描边完整落在控件内
+    QPainterPath path;
+    path.addRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5), kWindowRadius, kWindowRadius);
+    painter.fillPath(path, m_windowBg);
     painter.setPen(QPen(m_borderColor, 1));
     painter.setBrush(Qt::NoBrush);
-    painter.drawRect(rect().adjusted(0, 0, -1, -1));
+    painter.drawPath(path);
 }
 
 /**
