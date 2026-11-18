@@ -1,8 +1,10 @@
 #include "TranslateOverlayWindow.h"
 #include "../translate/TranslateService.h"
 #include "../translate/TranslateEngine.h"
+#include "../translate/TranslateLanguages.h"
 #include "../core/StyleManager.h"
 #include "../core/TranslationManager.h"
+#include "../core/ConfigManager.h"
 #include "../utils/Utils.h"
 #include "../log/Logger.h"
 #include <QPainter>
@@ -13,6 +15,8 @@
 #include <QLabel>
 #include <QTextEdit>
 #include <QToolButton>
+#include <QComboBox>
+#include <QSettings>
 #include <QSplitter>
 #include <QSizeGrip>
 #include <QFrame>
@@ -391,6 +395,31 @@ TranslateOverlayWindow::TranslateOverlayWindow(const QPixmap &pixmap,
     titleLayout->addWidget(titleLabel);
     titleLayout->addStretch();
 
+    // 目标语言切换：与设置页共用 translate/targetLang，切换后立即按新语言重译
+    m_currentTargetLang = ConfigManager::instance()->getSettings()
+                              ->value("translate/targetLang", "en")
+                              .toString();
+    m_langCombo = new QComboBox(titleBar);
+    m_langCombo->setCursor(Qt::PointingHandCursor);
+    // 与设置页、历史页等处的下拉框保持一致：统一样式 + 仅高亮选中项
+    StyleManager::useHighlightOnlyPopup(m_langCombo);
+    m_langCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
+    for (const TranslateLanguageOption &lang : translateTargetLanguageOptions()) {
+        m_langCombo->addItem(QString::fromUtf8(lang.name), QString::fromLatin1(lang.code));
+    }
+    const int langIndex = m_langCombo->findData(m_currentTargetLang);
+    if (langIndex >= 0) {
+        m_langCombo->setCurrentIndex(langIndex);
+    }
+    connect(m_langCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+        const QString lang = m_langCombo->itemData(index).toString();
+        if (lang.isEmpty() || lang == m_currentTargetLang) return;
+        m_currentTargetLang = lang;
+        ConfigManager::instance()->getSettings()->setValue("translate/targetLang", lang);
+        retranslateTo(lang);
+    });
+    titleLayout->addWidget(m_langCombo, 0, Qt::AlignVCenter);
+
     QToolButton *closeButton = new QToolButton(titleBar);
     closeButton->setIcon(StyleManager::loadSvgIcon(":/icons/close.svg", QSize(14, 14), palette.subText));
     closeButton->setIconSize(QSize(14, 14));
@@ -690,4 +719,39 @@ void TranslateOverlayWindow::saveAsImage() {
         QStringLiteral("PNG(*.png);;JPEG(*.jpg *.jpeg);;BMP(*.bmp)"));
 
     LOG_INFO("TranslateOverlayWindow: save dialog opened");
+}
+
+/**
+ * @brief 按新的目标语言重新翻译当前原文
+ * @param langCode 目标语言代码
+ * @author chiangyang
+ */
+void TranslateOverlayWindow::retranslateTo(const QString &langCode) {
+    if (m_texts.isEmpty() || !m_textView) return;
+
+    TranslateService *service = TranslateService::instance();
+    // 丢弃上一次切换遗留的连接，避免多次切换后回调叠加
+    disconnect(service, nullptr, this, nullptr);
+    m_retranslating = true;
+    m_textView->setPlainText(
+        TranslationManager::instance()->get("translate.translating", "Translating..."));
+
+    connect(service, &TranslateService::batchFinished, this,
+            [this, service](const QStringList &translatedTexts) {
+        if (!m_retranslating) return;
+        m_retranslating = false;
+        disconnect(service, nullptr, this, nullptr);
+        m_translatedTexts = translatedTexts;
+        updateTextContent();
+    });
+    connect(service, &TranslateService::failed, this,
+            [this, service](TranslateEngine::TranslateError code, const QString &) {
+        if (!m_retranslating) return;
+        m_retranslating = false;
+        disconnect(service, nullptr, this, nullptr);
+        m_textView->setPlainText(TranslateService::errorMessage(code));
+    });
+
+    service->translateBatch(m_texts, QString(), langCode);
+    LOG_INFO(QString("TranslateOverlayWindow: retranslate to '%1' started").arg(langCode));
 }

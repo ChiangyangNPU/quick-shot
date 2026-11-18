@@ -12,6 +12,7 @@
 class QLabel;
 class QTextEdit;
 class QToolButton;
+class QComboBox;
 class TranslateImageView;
 
 /**
@@ -150,6 +151,16 @@ private:
      */
     void saveAsImage();
 
+    /**
+     * @brief 按新的目标语言重新翻译当前原文
+     *
+     * 切换标题栏语言下拉框时调用：立即把"翻译中"提示写入文本区，
+     * 结果返回后更新 m_translatedTexts 并按当前视图模式刷新。
+     * @param langCode 目标语言代码
+     * @author chiangyang
+     */
+    void retranslateTo(const QString &langCode);
+
     QPixmap m_pixmap;                   ///< 截图原图
     QStringList m_texts;                ///< 原文文本列表
     QStringList m_translatedTexts;      ///< 译文文本列表（与 m_texts 索引对应）
@@ -160,6 +171,9 @@ private:
 
     TranslateImageView *m_imageView = nullptr; ///< 左侧原图显示控件
     QTextEdit *m_textView = nullptr;           ///< 右侧结果文本编辑框
+    QComboBox *m_langCombo = nullptr;          ///< 标题栏目标语言切换器
+    QString m_currentTargetLang;               ///< 当前目标语言代码
+    bool m_retranslating = false;              ///< 是否正在按新语言重新翻译
 };
 
 #endif // TRANSLATEOVERLAYWINDOW_H

@@ -4,6 +4,7 @@
 #include "../../core/TranslationManager.h"
 #include "../../core/StyleManager.h"
 #include "../../translate/TranslateService.h"
+#include "../../translate/TranslateLanguages.h"
 #include "Logger.h"
 
 #include <QVBoxLayout>
@@ -176,16 +177,9 @@ void SettingsTranslateTab::setupUi() {
     StyleManager::useHighlightOnlyPopup(m_translateLangCombo);
     m_translateLangCombo->setStyleSheet(StyleManager::getSettingsComboBoxStyle());
     // 语言名称使用本地名称，无需额外翻译
-    m_translateLangCombo->addItem("English", "en");
-    m_translateLangCombo->addItem("中文", "zh-CN");
-    m_translateLangCombo->addItem("繁體中文", "zh-TW");
-    m_translateLangCombo->addItem("日本語", "ja");
-    m_translateLangCombo->addItem("한국어", "ko");
-    m_translateLangCombo->addItem("Français", "fr");
-    m_translateLangCombo->addItem("Deutsch", "de");
-    m_translateLangCombo->addItem("Español", "es");
-    m_translateLangCombo->addItem("Русский", "ru");
-    m_translateLangCombo->addItem("Português", "pt");
+    for (const TranslateLanguageOption &lang : translateTargetLanguageOptions()) {
+        m_translateLangCombo->addItem(QString::fromUtf8(lang.name), QString::fromLatin1(lang.code));
+    }
     langRow->addWidget(lblTranslateLang);
     langRow->addWidget(m_translateLangCombo);
     langRow->addStretch();
