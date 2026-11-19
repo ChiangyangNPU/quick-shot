@@ -2,9 +2,9 @@
 
 QuickShot is a lightweight, powerful screen capture and recording tool developed with **Qt 6**. It runs on **Windows** and **macOS** (Linux support is still incomplete — recording does not yet produce video files), designed to provide an efficient and smooth screenshot experience.
 
-Current version: **v0.1.5** — download the latest release from [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases).
+Current version: **v0.1.9** — download the latest release from [GitHub Releases](https://github.com/ChiangyangNPU/quick-shot/releases).
 
-![Version](https://img.shields.io/badge/version-v0.1.5-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
+![Version](https://img.shields.io/badge/version-v0.1.9-blue) ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%28GIF%20recording%20only%29-lightgrey) ![Qt](https://img.shields.io/badge/Qt-6.10.2-41CD52)
 
 ## 📚 Table of Contents
 
@@ -118,6 +118,7 @@ QuickShot provides two translation forms based on OCR results, translating recog
 * **Window controls**: drag by the title bar, double-click to close, resize from the bottom-right grip, `Esc` to close; follows the app's light/dark theme.
 * **Copy & save**: the bottom action bar offers "Copy All" and "Save as Image"; the right-click menu offers view modes, copy original, copy translation, save as image, and close.
 * **Batch Translation**: Translates segment by segment in order; single-segment failures fall back to original text without interrupting the overall flow.
+* **Instant target-language switch**: a language dropdown in the title bar re-translates the current content immediately; the selection shares one config item with Settings, staying in sync both ways.
 
 | Engine          | Type                      | Description                                                                        |
 | --------------- | ------------------------- | ---------------------------------------------------------------------------------- |
@@ -171,9 +172,9 @@ Right-click the system tray icon to access "Settings". **Seven tabs in order: Ge
 * **General**: UI language (Simplified Chinese / English / Japanese / Korean / Traditional Chinese HK & TW), auto-start on boot, screenshot and recording save directories, log and config file management, OCR recognition language, GPU acceleration.
 * **Shortcuts**: 9 customizable global hotkeys, with annotation tool, annotation operation and pin shortcuts grouped and displayed; changes take effect immediately.
 * **Style**: One-click light/dark theme switching (the dark theme is HUD-style and applies to the whole app UI); customize 20+ UI colors, button display mode (text/icon), and sub-toolbar/control-bar colors.
-* **Translate**: Select the translation engine, target language (English by default), fill in the engine's API Key / URL, and toggle the translation feature and first-use privacy prompt.
+* **Translate**: Select the translation engine, target language (English by default), fill in the engine's API Key / URL, and toggle the translation feature and first-use privacy prompt; the target language can also be switched directly from the translation result window's title bar.
 * **History**: Toggle screenshot/clipboard history, set retention (7/30/90/180/365 days) and max record count (500/1000/2000/5000), clean expired records, clear all history, view storage usage.
-* **Desktop Pet**: Enable the pet, built-in and custom looks, accessories, clothesline trigger, todo reminder, pomodoro and doze durations, system status monitoring, festival surprise and birthday, reset pet position.
+* **Desktop Pet**: Enable the pet, built-in and custom looks, accessories, clothesline trigger, todo reminder, scheduled web push, pomodoro and doze durations, system status monitoring, festival surprise and birthday, reset pet position.
 * **About**: Version information and the GitHub repository link.
 
 ### 10. 🐾 Desktop Pet
@@ -182,6 +183,7 @@ Right-click the system tray icon to access "Settings". **Seven tabs in order: Ge
 * **Interaction**: A frameless, transparent, always-on-top window resident on the desktop (draggable); blinks randomly while idle, opens its mouth and bounces while chewing, bounces when head-patted by double-click, dozes off after a long idle period and wakes on any interaction.
 * **Feeding Animation**: After screenshot copy/pin/snapshot, the screenshot flies from its original position into the pet's mouth; copied text flies in as a card from the cursor position.
 * **Todo List & Pomodoro**: Right-click the pet to expand the todo-list bubble (persisted locally); unfinished/overdue todos show a red-dot badge above its head; the pomodoro pops work/break reminder cards on schedule.
+* **Scheduled Web Push**: In Settings, add tasks with a weekday + time and a URL; at the scheduled moment the pet plays a "spitting out a web page" animation and opens the page in your default browser. Tasks can be enabled individually, persist locally, and only run while the pet is enabled.
 * **System Status**: Optionally monitors CPU/memory usage and battery level, and hints through the pet when something is off.
 * **Festival Surprise**: Automatically wears themed hats on Christmas/Halloween/New Year, and celebrates your configured birthday.
 * **Clothesline (Quick History Panel)**: Spans the full width of the primary screen and hangs the latest 12 history cards with swaying and staggered entrance animations, refreshing live. Hover for an enlarged preview (images support 0.2–10x wheel zoom), click to copy, right-click for Copy / Annotate / OCR / Translate; both the trigger (click the pet / top-edge hot zone / both) and the close methods are configurable.
