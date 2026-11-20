@@ -1294,11 +1294,17 @@ QString StyleManager::getMessageBoxStyle() {
 }
 
 QString StyleManager::getProgressBarStyle() {
+        // 百分比文字必须显式取主题文字色：QSS 未指定 color 时会退回系统调色板，
+        // 深色主题下会残留黑字，叠在深色轨道上几乎不可读。
+        // 填充块用半透明强调色，使文字在"轨道区"与"填充区"两侧都有足够对比度。
+        QColor chunkColor = color(StyleColorId::ToolbarButtonChecked);
+        chunkColor.setAlphaF(0.45);
         return QString(
-            "QProgressBar { border: none; background-color: %1; }"
-            "QProgressBar::chunk { background-color: %2; border-radius: 3px; }"
+            "QProgressBar { border: none; background-color: %1; color: %2; }"
+            "QProgressBar::chunk { background-color: %3; border-radius: 3px; }"
         ).arg(qssColor(color(StyleColorId::TabWidgetBg)))
-         .arg(qssColor(color(StyleColorId::ToolbarButtonHover)));
+         .arg(qssColor(color(StyleColorId::ToolbarText)))
+         .arg(qssColor(chunkColor));
 }
 
 QString StyleManager::getTabWidgetStyle() {
