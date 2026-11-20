@@ -391,52 +391,77 @@ end tell
 OSA
     fi
     # 统一卸载 RW 卷（无论是否设置了布局，convert 都需要卷已卸载）。
-    # v0.1.8 CI 实测：AppleScript 旧版结尾重新 open 了 Finder 窗口（Finder
-    # 持续占用卷），detach 静默失败且未校验，hdiutil convert 读不到独占的
-    # 镜像文件，连续三次 "Resource temporarily unavailable" 直接退出。
-    # 故卸载后必须校验挂载点确实消失，未消失逐级强制卸载；转换另有重试兜底。
-    if [ -n "$DMG_MOUNT" ]; then
-        for ROUND in 1 2 3; do
-            hdiutil detach "$DMG_MOUNT" >/dev/null 2>&1 || hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
-            if [ ! -d "$DMG_MOUNT" ]; then
-                break
+    # v0.1.9.1 CI 实测：按挂载点目录消失判定卸载成功是**假阴性**——挂载点
+    # 可能已消失但磁盘设备仍附着（或镜像文件仍被 mds/句柄占用），convert
+    # 连续 4 次 "Resource temporarily unavailable"。权威判定是 hdiutil info
+    # 不再列出该镜像，未列出前按 dev-entry（/dev/diskX）逐个强制弹出。
+    _force_detach_image() {
+        local IMG="$1" ROUND DEVS d
+        for ROUND in 1 2 3 4; do
+            if ! hdiutil info | grep -qF "$IMG"; then
+                return 0   # hdiutil 已不再引用该镜像（权威判定）
             fi
-            echo "Warning: DMG 卷仍被占用（第 $ROUND 次卸载未生效），等待后强制重试"
-            sleep 2
-            diskutil unmount force "$DMG_MOUNT" >/dev/null 2>&1 || true
-            if [ ! -d "$DMG_MOUNT" ]; then
-                break
-            fi
+            # hdiutil info 无 "dev-entry:" 字段：设备行形如
+            # "/dev/diskN<TAB>UUID<TAB>"，且一段镜像有多个设备（整盘 +
+            # APFS 容器 + 卷）。按 image-path 段落收集本镜像全部设备，
+            # 逐个强制弹出（弹整盘即全部弹出，分片弹出失败无碍）
+            DEVS=$(hdiutil info | awk -v img="$IMG" '
+                $1 == "image-path" { inimg = (index($0, img) > 0) ? 1 : 0; next }
+                inimg && $1 ~ /^\/dev\/disk/ { print $1 }')
+            echo "Warning: 镜像仍被附着（第 $ROUND 次，dev: ${DEVS//$'\n'/ }），强制弹出"
+            for d in $DEVS; do
+                hdiutil detach -force "$d" >/dev/null 2>&1 || true
+            done
             sleep 3
         done
-        if [ -d "$DMG_MOUNT" ]; then
-            echo "Warning: DMG 卷卸载失败，convert 可能因卷占用失败（已有重试兜底）"
-        fi
-    fi
+        hdiutil info | grep -qF "$IMG" && return 1 || return 0
+    }
+    _force_detach_image "$DMG_RW" \
+        || echo "Warning: 镜像设备弹出失败，将尝试副本转换兜底"
     # Finder/Spotlight 释放文件句柄需要时间，立即 convert 偶发 EAGAIN
     sleep 2
     # 转只读压缩盘：格式用 ULMO（lzfse）而不是默认的 UDZO（zlib）——实测 v0.1.0
     # 98.0MB → 82.4MB（-16%；同机对比 UDBZ 只到 93.1MB），让 DMG 在 Gitee
     # 单附件 100MB 上限内有充足余量，用户下载也更快。不支持 ULMO 时回退 UDZO。
-    # 每种格式重试 2 次（卷占用偶发：失败先强制卸载再转换）
+    # 每种格式重试 2 次，全部失败时复制镜像副本转换兜底——副本无任何设备
+    # 引用/文件锁，即使原镜像仍被占用也能转换（v0.1.9.1 CI 实测 4/4 失败后
+    # 用此路径恢复）
     _convert_dmg() {
         rm -f "$DMG_FILE"
-        hdiutil convert "$DMG_RW" -format "$1" -o "$DMG_FILE" >/dev/null
+        hdiutil convert "$1" -format "$2" -o "$DMG_FILE" >/dev/null
     }
     CONVERT_OK=false
     for FORMAT in ULMO ULMO UDZO UDZO; do
-        if _convert_dmg "$FORMAT"; then
+        if _convert_dmg "$DMG_RW" "$FORMAT"; then
             CONVERT_OK=true
             break
         fi
-        echo "Warning: hdiutil convert $FORMAT 失败（exit $?），强制卸载后重试"
-        [ -n "$DMG_MOUNT" ] && hdiutil detach -force "$DMG_MOUNT" >/dev/null 2>&1 || true
+        echo "Warning: hdiutil convert $FORMAT 失败，弹出镜像设备后重试"
+        _force_detach_image "$DMG_RW" || true
         sleep 3
     done
     if [ "$CONVERT_OK" != true ]; then
-        echo "Error: DMG 转换失败（ULMO/UDZO 各重试 2 次均失败）" >&2
+        echo "Warning: 原镜像持续被占用，复制副本后转换（副本无设备引用/文件锁）"
+        DMG_RW_COPY="$DMG_RW.copy"
+        if cp "$DMG_RW" "$DMG_RW_COPY"; then
+            for FORMAT in ULMO UDZO; do
+                if _convert_dmg "$DMG_RW_COPY" "$FORMAT"; then
+                    CONVERT_OK=true
+                    echo "convert $FORMAT（副本）成功"
+                    break
+                fi
+                sleep 3
+            done
+            rm -f "$DMG_RW_COPY"
+        else
+            echo "Warning: 镜像副本复制失败（cp 被 EAGAIN 拒绝）"
+        fi
+    fi
+    if [ "$CONVERT_OK" != true ]; then
+        echo "Error: DMG 转换失败（ULMO/UDZO 各重试 2 次 + 副本兜底均失败）" >&2
         exit 1
     fi
+    _force_detach_image "$DMG_RW" || true
     rm -f "$DMG_RW"
     rm -rf "$DMG_STAGING" "$DMG_MOUNT"
 
