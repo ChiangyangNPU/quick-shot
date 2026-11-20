@@ -22,7 +22,7 @@ if (-not (Test-Path $CmakeListsPath)) {
     exit 1
 }
 $CmakeContent = Get-Content $CmakeListsPath -Raw
-if ($CmakeContent -match 'project\(\s*' + [regex]::Escape($ProjectName) + '\s+VERSION\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+if ($CmakeContent -match 'project\(\s*' + [regex]::Escape($ProjectName) + '\s+VERSION\s+([0-9]+(\.[0-9]+)+)') {
     $Version = $Matches[1]
     Write-Host "Version read from CMakeLists.txt: $Version" -ForegroundColor Green
 } else {

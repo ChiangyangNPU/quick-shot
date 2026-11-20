@@ -42,9 +42,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 项目根目录
 PROJECT_ROOT="$SCRIPT_DIR/../.."
 
-# 从 CMakeLists.txt 自动读取版本号 (project(QuickShot VERSION x.y.z))
+# 从 CMakeLists.txt 自动读取版本号 (project(QuickShot VERSION x.y.z)，支持 x.y.z.n 形式)
 CMAKE_LISTS="$PROJECT_ROOT/CMakeLists.txt"
-VERSION=$(sed -nE 's/^project\([[:space:]]*QuickShot[[:space:]]+VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*\)/\1/p' "$CMAKE_LISTS")
+VERSION=$(sed -nE 's/^project\([[:space:]]*QuickShot[[:space:]]+VERSION[[:space:]]+([0-9]+(\.[0-9]+)+).*\)/\1/p' "$CMAKE_LISTS")
 if [ -z "$VERSION" ]; then
     echo "Error: Failed to parse version from CMakeLists.txt"
     exit 1
