@@ -413,10 +413,8 @@ void SnipScreen::startScrollCapture(int orientation) {
     const auto direction = orientation == 1 ? ScrollStitcher::Orientation::Horizontal
                                             : ScrollStitcher::Orientation::Vertical;
 
-    // macOS：辅助窗口已随会话开始压到普通窗口之下（见 startCapture），
-    // 滚动页面的真实窗口层级高于它们，不会被挡住。此处不再 hide()——
-    // 它们在未被其他应用遮挡的区域可见，此时隐藏会让可见部分瞬间消失
-    //（用户感知为"闪烁"）。
+    // macOS：辅助窗口已随截图开始隐藏（冻结截图与吸附枚举均已取得其画面
+    // 与几何），长截图会话期间不会被抬出、也不会挡住滚动页面。
 
     if (!m_scrollSession->start(direction)) {
         LOG_WARNING("[SnipScreen] startScrollCapture failed: invalid selection");
@@ -432,12 +430,6 @@ void SnipScreen::startScrollCapture(int orientation) {
 void SnipScreen::startCapture(bool recording) {
     if (isVisible())
         return;
-
-    // macOS：把设置/历史窗口的合成层级压到普通窗口之下（选区吸附枚举不按
-    // 层级过滤，吸附不受影响）。激活应用时 AppKit 会把所有窗口抬到前一应用
-    // 之上，层级压制让整个会话期间（遮罩、提示条、结果弹窗、隐私弹框降级
-    // 遮罩等）它们都无法被抬出，任何时机都不会闪现。
-    setAuxiliaryWindowsBelowOtherApps(true);
 
     // 设置模式
     m_recordingSession->setMode(recording);
@@ -506,6 +498,17 @@ void SnipScreen::startCapture(bool recording) {
     m_selector->start();
     m_selector->show();
 
+#ifdef Q_OS_MACOS
+    // macOS：冻结截图（grabVirtualDesktop）与吸附枚举（selector->start 内
+    // Hunter::ready → DisplayInfo::refresh）都已取得设置/历史窗口的画面与
+    // 几何，此刻隐藏它们。之后的 show + activateWindow 激活应用时 AppKit
+    // 会把本应用所有窗口抬到前一应用之上——辅助窗口已隐藏，无可抬出，
+    // OCR/翻译结果、长截图提示条等任何激活都不会让它们连带闪现；
+    // 冻结截图里保留了它们的画面，框选吸附照常工作（见 7fd938c）。
+    // 不自动恢复是有意行为（需要时从托盘再打开）。
+    hideAuxiliaryWindowsForCapture();
+#endif
+
     // 显示全屏遮罩
     show();
     raise();
@@ -523,10 +526,11 @@ void SnipScreen::startCapture(bool recording) {
  * @brief 隐藏设置窗口与历史窗口（仅 macOS，不自动恢复）
  *
  * 截图会话需要激活应用（选区交互/快捷键焦点），macOS 激活时会把应用所有
- * 窗口连同被其他应用盖住的设置/历史窗口整体抬到其他应用之上。隐藏时机
- * 在遮罩关闭（exit）与长截图会话开始：选区阶段窗口保持可见——它们是
- * 框选吸附的目标（见 7fd938c）；吸附结束后隐藏，后续的结果弹窗/提示条
- * 激活就抬无可抬。Windows 上激活不影响其他窗口层级，无需处理。
+ * 窗口连同被其他应用盖住的设置/历史窗口整体抬到其他应用之上。隐藏时机在
+ * startCapture 中：冻结截图与吸附枚举取得它们之后、遮罩 show/activateWindow
+ * 之前——激活时无可抬出，OCR/翻译结果、长截图提示条、复制/保存/贴图/Esc
+ * 取消等所有路径都不会让它们连带闪现。Windows 上激活不影响其他窗口层级，
+ * 无需处理。
  * @author chiangyang
  */
 void SnipScreen::hideAuxiliaryWindowsForCapture() {
@@ -538,31 +542,6 @@ void SnipScreen::hideAuxiliaryWindowsForCapture() {
     if (m_historyWindow && m_historyWindow->isVisible()) {
         m_historyWindow->hide();
         LOG_INFO("[SnipScreen] history window hidden for capture");
-    }
-#endif
-}
-
-/**
- * @brief 把设置/历史窗口的合成层级压到普通窗口之下 / 恢复（仅 macOS）
- *
- * 截图会话激活应用时，AppKit 会把本应用所有窗口抬到前一应用之上——设置/
- * 历史窗口即使被其他应用盖住也会被连带抬出（"弹到上层"）。把它们的合成
- * 层级降到普通窗口之下（负值层级）后，WindowServer 按层级合成，任何激活
- * （遮罩出现、提示条/翻译浮层激活、OCR 结果弹窗、隐私弹框临时降遮罩等）
- * 都无法把它们抬到其他应用的普通窗口之上。框选吸附枚举的是
- * kCGWindowListOptionOnScreenOnly（不按层级过滤），吸附不受影响。
- * 恢复时机在窗口已隐藏之后（exit 内），层级重排不会产生可见闪烁。
- * @param below true = 会话开始压下；false = 会话结束恢复普通层级
- * @author chiangyang
- */
-void SnipScreen::setAuxiliaryWindowsBelowOtherApps(bool below) {
-#ifdef Q_OS_MACOS
-    const long level = below ? -1 : 0;
-    if (m_settingsWindow) {
-        Utils::setWindowLevel(m_settingsWindow.data(), level);
-    }
-    if (m_historyWindow) {
-        Utils::setWindowLevel(m_historyWindow.data(), level);
     }
 #endif
 }
@@ -581,12 +560,9 @@ void SnipScreen::exit() {
         m_scrollSession->shutdown();
     }
 
-    // macOS：遮罩关闭前隐藏设置/历史窗口（复制/保存/贴图/OCR/翻译/Esc 取消
-    // 等所有退出路径共用），不自动恢复（需要时从托盘再打开）。
+    // macOS：辅助窗口已随截图开始隐藏，此处兜底（长截图会话中途从托盘
+    // 打开窗口等边缘情况下，退出时再次确保隐藏，避免遮罩关闭后露出）。
     hideAuxiliaryWindowsForCapture();
-    // 恢复会话期间压低的合成层级：先隐藏再恢复，层级重排发生在不可见窗口
-    // 上，不会产生可见闪烁
-    setAuxiliaryWindowsBelowOtherApps(false);
 
 #ifdef Q_OS_MACOS
     // 停止跨屏检测定时器

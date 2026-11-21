@@ -208,14 +208,11 @@ void DisplayInfo::refresh() {
             //          Qt::Tool + WindowStaysOnTopHint 窗口(待办/贴图/桌宠) = 8，
             //          Dock = 20，菜单栏 = 24，控制中心 = 25，
             //          桌面小组件(通知中心) = 负数。
-            //        因此保留 [-1, 19]，即可覆盖全部应用窗口并排除系统 UI。
-            //        -1：截图会话期间设置/历史窗口被 SnipScreen 压到普通层级
-            //        之下（防连带弹出），吸附仍需枚举到它们（见 SnipScreen
-            //        ::setAuxiliaryWindowsBelowOtherApps）。
+            //        因此保留 [0, 19]，即可覆盖全部应用窗口并排除系统 UI。
             int layer = 0;
             auto layerRef = static_cast<CFNumberRef>(CFDictionaryGetValue(dict, kCGWindowLayer));
             if (layerRef) CFNumberGetValue(layerRef, kCFNumberIntType, &layer);
-            if (layer < -1 || layer >= 20) continue;
+            if (layer < 0 || layer >= 20) continue;
 
             // 注：不过滤自身进程窗口，以便框选 QuickShot 自己的设置/历史/待办等窗口。
             // 截屏覆盖层（SnipScreen）在 refresh() 之后才 show()，不在枚举结果中，

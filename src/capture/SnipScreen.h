@@ -360,7 +360,6 @@ private:
     // ========== 构造阶段（由构造函数按序调用）==========
     void initWindowFlags();                    // 平台相关的窗口标志与透明属性
     void hideAuxiliaryWindowsForCapture();     // macOS：隐藏设置/历史窗口（不自动恢复）
-    void setAuxiliaryWindowsBelowOtherApps(bool below); // macOS：层级压到普通窗口之下
     void createComponents();                   // 创建选区 / 截图工具栏 / 录屏编排会话等核心组件
     void setupAnnotationHost();                // 装配 AnnotationInteractionHandler 的 Host 回调
     void initScreenWatchTimer();               // macOS 副屏监视定时器（其他平台空实现）
@@ -624,7 +623,7 @@ private:
     QPoint m_lastPinPos;                     ///< 上一个翻页贴图的左上角位置（用于位置继承）
     QPointer<PinWindow> m_lastPinHistoryWindow; ///< 跟踪最后一个翻页贴图（关闭后自动置 null）
 
-    QPointer<QWidget> m_settingsWindow;      ///< 设置窗口（遮罩关闭/长截图开始时临时隐藏，不自动恢复）
+    QPointer<QWidget> m_settingsWindow;      ///< 设置窗口（截图开始时临时隐藏，不自动恢复）
     QPointer<QWidget> m_historyWindow;       ///< 历史记录窗口（同上）
 
     // ---------- macOS 跨屏切换 ----------
