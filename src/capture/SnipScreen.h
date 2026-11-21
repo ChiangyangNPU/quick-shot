@@ -79,7 +79,8 @@ public:
      * @brief 注入历史记录窗口指针（main 创建后调用）
      *
      * 触发截屏/录屏会激活应用，macOS 会把被其他应用盖住的历史窗口也抬到
-     * 前台，故会话开始前与设置窗口一并隐藏（仅 macOS，不自动恢复）。
+     * 前台，故遮罩关闭（exit）与长截图开始时和设置窗口一并隐藏
+     * （仅 macOS，不自动恢复）。
      * @author chiangyang
      */
     void setHistoryWindow(QWidget *window) { m_historyWindow = window; }
@@ -358,6 +359,8 @@ protected:
 private:
     // ========== 构造阶段（由构造函数按序调用）==========
     void initWindowFlags();                    // 平台相关的窗口标志与透明属性
+    void hideAuxiliaryWindowsForCapture();     // macOS：隐藏设置/历史窗口（不自动恢复）
+    void setAuxiliaryWindowsBelowOtherApps(bool below); // macOS：层级压到普通窗口之下
     void createComponents();                   // 创建选区 / 截图工具栏 / 录屏编排会话等核心组件
     void setupAnnotationHost();                // 装配 AnnotationInteractionHandler 的 Host 回调
     void initScreenWatchTimer();               // macOS 副屏监视定时器（其他平台空实现）
@@ -621,7 +624,7 @@ private:
     QPoint m_lastPinPos;                     ///< 上一个翻页贴图的左上角位置（用于位置继承）
     QPointer<PinWindow> m_lastPinHistoryWindow; ///< 跟踪最后一个翻页贴图（关闭后自动置 null）
 
-    QPointer<QWidget> m_settingsWindow;      ///< 设置窗口（截图/录屏/滚动截图开始时临时隐藏，不自动恢复）
+    QPointer<QWidget> m_settingsWindow;      ///< 设置窗口（遮罩关闭/长截图开始时临时隐藏，不自动恢复）
     QPointer<QWidget> m_historyWindow;       ///< 历史记录窗口（同上）
 
     // ---------- macOS 跨屏切换 ----------

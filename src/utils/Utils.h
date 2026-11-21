@@ -116,6 +116,19 @@ public:
     static void endModalOverOverlay(QWidget *parent);
 
     /**
+     * @brief 直接设置窗口的 macOS 合成层级（不重建原生窗口）
+     *
+     * 与 setLevel 系列不同，本方法接受任意层级值：截图会话期间把设置/历史
+     * 等辅助窗口降到普通窗口之下（负值层级），WindowServer 按层级合成，
+     * 应用激活/弹窗都无法把它们抬到其他应用的普通窗口之上（连带弹出）。
+     * macOS 之外无层级概念，空实现。
+     * @param win 目标顶层窗口
+     * @param level NSWindow 层级（0 = NSNormalWindowLevel，负值在其下）
+     * @author chiangyang
+     */
+    static void setWindowLevel(QWidget *win, long level);
+
+    /**
      * @brief 将 Qt::Tool 窗口设为非激活面板：点击它不把应用拉到前台（仅 macOS）
      *
      * 设置 NSWindowStyleMaskNonactivatingPanel：点击该窗口不会激活应用，

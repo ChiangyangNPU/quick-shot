@@ -237,6 +237,24 @@ void Utils::setWindowNormalLevel(QWidget *win) {
 }
 
 /**
+ * @brief 直接设置窗口的 macOS 合成层级（不重建原生窗口，仅 macOS）
+ *
+ * WindowServer 按层级合成：低层级窗口永远在其他应用普通窗口（层级 0）
+ * 之下，应用激活/弹窗的"整体抬到前台"无法跨越层级边界。
+ * 其他平台为空实现。
+ * @author chiangyang
+ */
+void Utils::setWindowLevel(QWidget *win, long level) {
+#ifdef Q_OS_MACOS
+    if (!win) return;
+    setNSWindowLevel(win->winId(), level);
+#else
+    Q_UNUSED(win);
+    Q_UNUSED(level);
+#endif
+}
+
+/**
  * @brief 仅在应用已处于激活状态时激活窗口（其他平台无条件激活）
  *
  * ClotheslineWindow 验证过的模式：应用未激活时 activateWindow() 会把
