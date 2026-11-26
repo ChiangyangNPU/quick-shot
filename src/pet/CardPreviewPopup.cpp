@@ -23,6 +23,7 @@
 #include <QScreen>
 #include <QMessageBox>
 #include <QFontMetrics>
+#include <QCursor>
 
 namespace {
 // 预览内容最大宽高（物理像素上限，实际再夹取到所在屏幕可用区域）
@@ -111,7 +112,10 @@ void CardPreviewPopup::wheelEvent(QWheelEvent *event) {
  * @author chiangyang
  */
 void CardPreviewPopup::leaveEvent(QEvent *event) {
-    if (!m_menuOpen) {
+    // 修复 Mac 闪烁：macOS 上 Tool 窗 show/raise 后会收到"假 leave"——光标实际仍在
+    // 预览几何内、窗口也可见，却被派发 leaveEvent。与 ClotheslineWindow::leaveEvent
+    // 一致，用几何包含判断挡住误隐藏：仅当光标真正离开预览窗口矩形时才 hide。
+    if (!m_menuOpen && !geometry().contains(QCursor::pos())) {
         hide();
     }
     QWidget::leaveEvent(event);
