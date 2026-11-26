@@ -319,7 +319,15 @@ void CardPreviewPopup::place(const QPoint &centerGlobal, const QSize &windowSize
     }
     move(pos);
     show();
+#ifdef Q_OS_MACOS
+    // macOS 上 raise() 会激活整个应用（QCocoaWindow::raise → activateIgnoringOtherApps）。
+    // 失活时悬停预览不应把应用抢到前台；应用已激活时才抬升层级，保证预览盖在卡片之上。
+    if (QGuiApplication::applicationState() == Qt::ApplicationActive) {
+        raise();
+    }
+#else
     raise();
+#endif
 }
 
 /**

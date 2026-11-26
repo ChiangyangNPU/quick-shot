@@ -284,6 +284,21 @@ void ClotheslineWindow::onTick() {
     }
 
     update();
+
+    // macOS 上应用失活（点击其他软件）后，晾衣绳 NSPanel 收不到 mouseMove / leaveEvent，
+    // 导致移回卡片不弹预览、移出也不收预览。借动画定时器轮询光标位置补齐这一缺口：
+    // 仅在非激活态轮询，激活态仍由 mouseMove 驱动，与现有行为保持一致。
+    if (QGuiApplication::applicationState() != Qt::ApplicationActive) {
+        const QPoint global = QCursor::pos();
+        if (geometry().contains(global)) {
+            updateHoverPreview(mapFromGlobal(global)); // 幂等：悬停卡片未变直接返回
+        } else if (m_preview && m_preview->isVisible()) {
+            // 失活时 leaveEvent 收不到，需自行判断光标是否仍在预览几何内
+            if (!m_preview->geometry().contains(global)) {
+                hidePreview();
+            }
+        }
+    }
 }
 
 /**
