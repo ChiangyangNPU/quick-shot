@@ -140,17 +140,17 @@ void ScreenshotToolBar::createActionButtons() {
     // 添加分隔符
     addSeparator(m_primaryLayout);
 
-    m_copyBtn = makeActionButton({&m_copyBtn, "copy", ":/icons/copy.svg"}, [this]() {
-        LOG_INFO("ScreenshotToolBar: Copy requested");
-        emit copyRequested();
-    });
-    m_primaryLayout->addWidget(m_copyBtn);
-
     m_saveBtn = makeActionButton({&m_saveBtn, "save", ":/icons/save.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Save requested");
         emit saveRequested();
     });
     m_primaryLayout->addWidget(m_saveBtn);
+
+    m_copyBtn = makeActionButton({&m_copyBtn, "copy", ":/icons/copy.svg"}, [this]() {
+        LOG_INFO("ScreenshotToolBar: Copy requested");
+        emit copyRequested();
+    });
+    m_primaryLayout->addWidget(m_copyBtn);
 
     m_pinBtn = makeActionButton({&m_pinBtn, "pin", ":/icons/pin.svg"}, [this]() {
         LOG_INFO("ScreenshotToolBar: Pin requested");
