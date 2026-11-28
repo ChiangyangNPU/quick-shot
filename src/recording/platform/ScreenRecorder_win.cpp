@@ -65,8 +65,6 @@ struct PlatformImpl {
     std::thread audioThread;
     std::atomic<bool> audioRunning{false};
 
-    // 麦克风软件增益倍数（录制开始前由 setMicrophoneGain 设置）
-    float micGain = 3.0f;
 };
 
 /**
@@ -448,11 +446,11 @@ static void audioCaptureMixedThread(ScreenRecorder::Impl *impl, PlatformImpl *pI
                     }
                     // 麦克风软件增益：原始麦克风信号明显小于满幅的系统声音，
                     // 混音后显得极小。对本源新插入的样本原地缩放并防削顶。
-                    if (s.buf == &micBuf && pImpl->micGain > 1.0f) {
+                    if (s.buf == &micBuf && impl->micGain > 1.0f) {
                         const size_t start = s.buf->size() - samples;
                         for (size_t k = start; k < s.buf->size(); ++k) {
                             const int32_t v =
-                                static_cast<int32_t>(lrintf((*s.buf)[k] * pImpl->micGain));
+                                static_cast<int32_t>(lrintf((*s.buf)[k] * impl->micGain));
                             (*s.buf)[k] = static_cast<int16_t>(
                                 v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
                         }

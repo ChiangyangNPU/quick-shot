@@ -44,6 +44,7 @@ public:
 
         bool systemAudioEnabled = false;     ///< 是否启用系统音频
         bool microphoneEnabled = false;      ///< 是否启用麦克风
+        float micGain = 3.0f;                ///< 麦克风软件增益倍数（1.0 = 原始信号）
 
         bool gifMode = false;                         ///< 是否输出 GIF（而非视频）
         std::unique_ptr<GifEncoder> gifEncoder;       ///< GIF 编码器（仅 GIF 模式使用）
