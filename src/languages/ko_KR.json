@@ -59,6 +59,11 @@
   "tray.recordpause": "녹화 일시정지/재개",
   "tray.recordstop": "녹화 중지",
   "tray.togglepins": "모든 핀 표시/숨기기",
+  "tray.colorpicker": "색상 추출",
+  "colorPicker.magnifier": "캡처 선택 중 색상 루프 표시",
+  "colorPicker.hint.picker": "휠: 형식 전환 · 클릭: 복사 · Esc: 종료",
+  "colorPicker.hint.selection": "Shift+휠: 형식 전환 · C: 복사",
+  "colorPicker.copied": "%1 복사됨",
   "traySettings": "설정",
   "trayQuit": "종료",
   "runningInBackground": "백그라운드에서 실행 중\n%1을(를) 눌러 스크린샷\n%2을(를) 눌러 녹화\n%3을(를) 눌러 기록 보기",
@@ -291,6 +296,7 @@
   "shortcut.recordpause.label": "녹화 일시정지/재개",
   "shortcut.recordstop.label": "녹화 중지",
   "shortcut.togglepins.label": "모든 고정 토글",
+  "shortcut.colorpicker.label": "화면 색상 추출",
   "shortcut.section.global": "전역 단축키 (설정 가능)",
   "shortcut.section.tools": "주석 도구 (고정)",
   "shortcut.section.annotation": "주석 조작 (고정)",
@@ -486,5 +492,7 @@
   "scroll.hinttip.orientation": "스크롤 방향 전환（V 세로 / H 가로）",
   "scroll.hinttip.sensitivity": "민감도 전환（S）",
   "scroll.hinttip.finish": "합치기 완료（Enter）",
-  "scroll.hinttip.cancel": "취소（Esc）"
+  "scroll.hinttip.cancel": "취소（Esc）",
+  "colorPicker.hint.esc.picker": "Esc: 종료",
+  "colorPicker.hint.esc.selection": "Esc: 취소"
 }

@@ -59,6 +59,11 @@
   "tray.recordpause": "録画一時停止/再開",
   "tray.recordstop": "録画停止",
   "tray.togglepins": "すべてのピンを表示/非表示",
+  "tray.colorpicker": "カラーピッカー",
+  "colorPicker.magnifier": "範囲選択中にカラールーペを表示",
+  "colorPicker.hint.picker": "ホイール:切替 · クリック:コピー",
+  "colorPicker.hint.selection": "Shift+ホイール:フォーマット切替 · C:コピー",
+  "colorPicker.copied": "%1 をコピーしました",
   "traySettings": "設定",
   "trayQuit": "終了",
   "runningInBackground": "バックグラウンドで実行中\n%1 を押してスクリーンショット\n%2 を押して録画\n%3 を押して履歴表示",
@@ -291,6 +296,7 @@
   "shortcut.recordpause.label": "録画一時停止/再開",
   "shortcut.recordstop.label": "録画停止",
   "shortcut.togglepins.label": "全ピンの表示切替",
+  "shortcut.colorpicker.label": "スクリーンカラーピッカー",
   "shortcut.section.global": "グローバルホットキー（設定可能）",
   "shortcut.section.tools": "注釈ツール（固定）",
   "shortcut.section.annotation": "注釈操作（固定）",
@@ -486,5 +492,7 @@
   "scroll.hinttip.orientation": "スクロール方向を切り替え（V 縦 / H 横）",
   "scroll.hinttip.sensitivity": "感度を切り替え（S）",
   "scroll.hinttip.finish": "合成を完了（Enter）",
-  "scroll.hinttip.cancel": "キャンセル（Esc）"
+  "scroll.hinttip.cancel": "キャンセル（Esc）",
+  "colorPicker.hint.esc.picker": "Esc: 終了",
+  "colorPicker.hint.esc.selection": "Esc: キャンセル"
 }

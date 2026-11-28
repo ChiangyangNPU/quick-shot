@@ -1,6 +1,10 @@
 #include "Selector.h"
+#include "ColorLoupe.h"
+#include "../core/TranslationManager.h"
 #include "../log/Logger.h"
 #include <QApplication>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QMouseEvent>
 #include <QShortcut>
 
@@ -30,6 +34,9 @@ Selector::Selector(IPreyDetector *detector, QWidget *parent)
     m_timerLabel->setAlignment(Qt::AlignCenter);
     m_timerLabel->setStyleSheet(StyleManager::getRecordTimerLabelStyle());
     m_timerLabel->setVisible(false);
+
+    // 取色放大镜：选区阶段跟随鼠标显示光标下像素颜色（对鼠标事件透明）
+    m_colorLoupe = new ColorLoupe(this);
 
     connect(this, &Selector::moved, [this]() { update(); });
     connect(this, &Selector::resized, [this]() { update(); });
@@ -78,6 +85,8 @@ void Selector::setStatus(SelectorStatus status) {
     }
 
     emit statusChanged(m_status);
+
+    syncColorLoupeVisibility();
 }
 
 // ============================================================
@@ -167,6 +176,9 @@ void Selector::start() {
     m_infoLabel->show();
 
     setStatus(SelectorStatus::PreySelecting);
+
+    // 初始定位取色放大镜（光标可能尚未移动，mouseMoveEvent 不会触发）
+    m_colorLoupe->setCursorGlobal(QCursor::pos());
 }
 
 // ============================================================
@@ -242,6 +254,12 @@ void Selector::mousePressEvent(QMouseEvent *event) {
  */
 void Selector::mouseMoveEvent(QMouseEvent *event) {
     auto mousePos = event->globalPosition().toPoint();
+
+    // 选区阶段：取色放大镜跟随鼠标
+    if (m_status == SelectorStatus::PreySelecting ||
+        m_status == SelectorStatus::FreeSelecting) {
+        m_colorLoupe->setCursorGlobal(mousePos);
+    }
 
     switch (m_status) {
     case SelectorStatus::PreySelecting:
@@ -355,6 +373,12 @@ void Selector::mouseReleaseEvent(QMouseEvent *event) {
  * @author chiangyang
  */
 void Selector::wheelEvent(QWheelEvent *event) {
+    // Shift+滚轮：循环切换取色格式（放大镜显示时；滚轮本身留给吸附层级切换）
+    if ((event->modifiers() & Qt::ShiftModifier) && m_colorLoupe->isVisible()) {
+        m_colorLoupe->cycleFormat();
+        return;
+    }
+
     if (m_status == SelectorStatus::PreySelecting && m_detector) {
         if (event->angleDelta().y() > 0)
             select(m_detector->contains(m_prey));   // 向上：更大
@@ -502,6 +526,32 @@ void Selector::switchScreen(const QRect &screenGeometry) {
         select(m_detector->hunt(QCursor::pos()));
     }
     updateInfoLabel();
+    // 取色源已由 SnipScreen 同步为新屏背景，重新定位放大镜
+    m_colorLoupe->setCursorGlobal(QCursor::pos());
+}
+
+/**
+ * @brief 设置选区取色放大镜的取色源（空 pixmap 表示禁用）
+ * @author chiangyang
+ */
+void Selector::setColorSource(const QPixmap &pixmap, const QRect &globalGeometry) {
+    m_colorLoupe->setColorSource(pixmap, globalGeometry);
+    // 信息条第二/三行的操作提示（截图选区内的交互；每次截图开始时
+    // 重新读取，语言切换后无需重启即生效）
+    TranslationManager *tm = TranslationManager::instance();
+    m_colorLoupe->setHintText(tm->get("colorPicker.hint.selection", "Shift+Wheel: format · C: copy"));
+    m_colorLoupe->setEscHint(tm->get("colorPicker.hint.esc.selection", "Esc: cancel"));
+    syncColorLoupeVisibility();
+}
+
+/**
+ * @brief 按状态同步取色放大镜可见性（仅选区阶段显示）
+ * @author chiangyang
+ */
+void Selector::syncColorLoupeVisibility() {
+    const bool selecting = (m_status == SelectorStatus::PreySelecting ||
+                            m_status == SelectorStatus::FreeSelecting);
+    m_colorLoupe->setVisible(selecting && m_colorLoupe->hasSource());
 }
 
 /**
@@ -707,5 +757,19 @@ void Selector::registerShortcuts() {
             select(desktop);
             setStatus(SelectorStatus::Captured);
         }
+    });
+
+    // C：复制取色放大镜当前颜色（仅选区阶段有效；捕获/标注后为 no-op，
+    // 文本编辑时状态为 Locked 同样不会触发）
+    connect(new QShortcut(Qt::Key_C, this), &QShortcut::activated, this, [this]() {
+        if (m_status != SelectorStatus::PreySelecting &&
+            m_status != SelectorStatus::FreeSelecting)
+            return;
+        if (!m_colorLoupe->hasValidColor())
+            return;
+
+        const QString colorText = m_colorLoupe->colorString();
+        QGuiApplication::clipboard()->setText(colorText);
+        emit colorCopied(colorText);
     });
 }

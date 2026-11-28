@@ -18,6 +18,7 @@ class PinWindow;
 class SettingsWindow;
 class AnnotationShortcutController;
 class ScrollCaptureSession;
+class ColorPickerOverlay;
 
 /**
  * @brief 截图主界面
@@ -114,6 +115,16 @@ public slots:
      * @author chiangyang
      */
     void startScrollCapture(int orientation);
+
+    /**
+     * @brief 启动独立屏幕取色器（全局热键/托盘触发，默认 Alt+C）
+     *
+     * 抓取屏幕冻结快照后显示取色覆盖窗口（ColorPickerOverlay），
+     * 不进入截图流程。再次触发时关闭已打开的取色器（开关行为）；
+     * 截图/录屏会话进行中时忽略。
+     * @author chiangyang
+     */
+    void startColorPicker();
 
     /**
      * @brief 退出截图
@@ -467,6 +478,16 @@ private:
     void startCapture(bool recording);
 
     /**
+     * @brief 向 Selector 提供选区取色放大镜的取色源
+     *
+     * 受 colorPicker/enabled 配置控制：开启时传入冻结背景与虚拟桌面几何，
+     * 关闭时传空源（放大镜不显示）。抓取背景后（startCapture 与 macOS
+     * checkScreenSwitch）各调用一次。
+     * @author chiangyang
+     */
+    void updateSelectorColorSource();
+
+    /**
      * @brief 切换到录屏模式
      * @author chiangyang
      */
@@ -625,6 +646,8 @@ private:
 
     QPointer<QWidget> m_settingsWindow;      ///< 设置窗口（截图开始时临时隐藏，不自动恢复）
     QPointer<QWidget> m_historyWindow;       ///< 历史记录窗口（同上）
+
+    QPointer<ColorPickerOverlay> m_colorPicker; ///< 独立取色覆盖窗口（WA_DeleteOnClose，关闭后自动置空）
 
     // ---------- macOS 跨屏切换 ----------
     QTimer *m_screenWatchTimer = nullptr;    ///< 轮询鼠标所在屏的定时器（macOS 单屏窗口模式）

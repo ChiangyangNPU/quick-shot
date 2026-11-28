@@ -213,6 +213,10 @@ add_executable(QuickShot ${WIN32_OPTION}
         src/capture/Selector.h
         src/capture/SnipScreen.cpp
         src/capture/SnipScreen.h
+        src/capture/ColorLoupe.cpp
+        src/capture/ColorLoupe.h
+        src/capture/ColorPickerOverlay.cpp
+        src/capture/ColorPickerOverlay.h
         src/capture/RecordingSession.cpp
         src/capture/RecordingSession.h
         src/capture/ScrollStitcher.cpp

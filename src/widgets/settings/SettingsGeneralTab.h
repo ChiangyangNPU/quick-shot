@@ -67,6 +67,7 @@ private slots:
     void onLanguageChanged(int index);
     void onAutoStartChanged(Qt::CheckState state);
     void onLogPrintChanged(Qt::CheckState state);
+    void onColorLoupeChanged(Qt::CheckState state);
     void onOcrLanguageChanged(int index);
     void onGpuAccelChanged(Qt::CheckState state);
     void onOpenLogFile();
@@ -88,6 +89,7 @@ private:
     QComboBox *langCombo;           ///< 语言下拉框
     QCheckBox *autoStartCheck;      ///< 自动启动复选框
     QCheckBox *logPrintCheck;       ///< 日志打印复选框
+    QCheckBox *colorLoupeCheck;     ///< 截图选区取色放大镜复选框
     QLabel *lblLanguage;            ///< 语言标签
     QPushButton *btnOpenLogFile;    ///< 打开日志文件按钮
     QPushButton *btnClearLogFile;   ///< 清除日志文件按钮

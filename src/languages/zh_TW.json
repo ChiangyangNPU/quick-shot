@@ -59,6 +59,11 @@
   "tray.recordpause": "錄影暫停/恢復",
   "tray.recordstop": "停止錄影",
   "tray.togglepins": "隱藏/顯示所有貼圖",
+  "tray.colorpicker": "取色",
+  "colorPicker.magnifier": "截圖選區時顯示取色放大鏡",
+  "colorPicker.hint.picker": "滾輪 切換格式 · 單擊 複製",
+  "colorPicker.hint.selection": "Shift+滾輪 切換格式 · C 複製",
+  "colorPicker.copied": "已複製 %1",
   "traySettings": "設定",
   "trayQuit": "結束",
   "runningInBackground": "正在背景執行，\n按 %1 開始螢幕截圖，\n按 %2 開始螢幕錄製，\n按 %3 查看歷史記錄。",
@@ -291,6 +296,7 @@
   "shortcut.recordpause.label": "錄影暫停/繼續",
   "shortcut.recordstop.label": "錄影停止",
   "shortcut.togglepins.label": "隱藏/顯示所有貼圖",
+  "shortcut.colorpicker.label": "螢幕取色",
   "shortcut.section.global": "全域熱鍵（可設定）",
   "shortcut.section.tools": "標註工具（固定）",
   "shortcut.section.annotation": "標註操作（固定）",
@@ -486,5 +492,7 @@
   "scroll.hinttip.orientation": "切換滾動方向（V 垂直 / H 水平）",
   "scroll.hinttip.sensitivity": "切換對齊靈敏度（S）",
   "scroll.hinttip.finish": "完成拼接（Enter）",
-  "scroll.hinttip.cancel": "取消截圖（Esc）"
+  "scroll.hinttip.cancel": "取消截圖（Esc）",
+  "colorPicker.hint.esc.picker": "Esc 退出",
+  "colorPicker.hint.esc.selection": "Esc 取消截圖"
 }

@@ -27,7 +27,8 @@ enum class ShortcutType {
     ActiveWindow,   ///< 活动窗口截图
     RecordPause,    ///< 录屏暂停/恢复
     RecordStop,     ///< 录屏停止
-    TogglePins      ///< 隐藏/显示所有贴图
+    TogglePins,     ///< 隐藏/显示所有贴图
+    ColorPicker     ///< 屏幕取色
 };
 
 /**
@@ -50,7 +51,7 @@ struct ShortcutConfigItem {
 /**
  * @brief 全局快捷键配置数据表（数据驱动设计）
  *
- * 9 种全局快捷键的静态元信息集中定义，
+ * 10 种全局快捷键的静态元信息集中定义，
  * 新增/删除快捷键只需修改此表即可，其它代码自动生效。
  * @author chiangyang
  */
@@ -64,6 +65,7 @@ static const ShortcutConfigItem kShortcutConfigs[] = {
     { ShortcutType::RecordPause,  "shortcut_recordpause",  "Alt+Shift+S",  "tray.recordpause", "Record Pause/Resume",    "shortcut.recordpause.label",  "Record Pause/Resume" },
     { ShortcutType::RecordStop,   "shortcut_recordstop",   "Alt+Shift+Q",  "tray.recordstop",  "Record Stop",            "shortcut.recordstop.label",   "Record Stop" },
     { ShortcutType::TogglePins,   "shortcut_togglepins",   "Alt+Shift+P",  "tray.togglepins",  "Toggle All Pins",        "shortcut.togglepins.label",   "Toggle All Pins" },
+    { ShortcutType::ColorPicker,  "shortcut_colorpicker",  "Alt+C",        "tray.colorpicker", "Color Picker",           "shortcut.colorpicker.label",  "Color Picker" },
 };
 
 /**
@@ -90,6 +92,7 @@ inline QString shortcutTypeToString(ShortcutType type) {
         { ShortcutType::RecordPause,  "recordpause" },
         { ShortcutType::RecordStop,   "recordstop" },
         { ShortcutType::TogglePins,   "togglepins" },
+        { ShortcutType::ColorPicker,  "colorpicker" },
     };
     return mapping.value(type, QString());
 }
@@ -111,6 +114,7 @@ inline std::optional<ShortcutType> shortcutTypeFromString(const QString& typeStr
         { "recordpause",  ShortcutType::RecordPause },
         { "recordstop",   ShortcutType::RecordStop },
         { "togglepins",   ShortcutType::TogglePins },
+        { "colorpicker",  ShortcutType::ColorPicker },
     };
     auto it = mapping.find(typeStr);
     if (it == mapping.end()) return std::nullopt;

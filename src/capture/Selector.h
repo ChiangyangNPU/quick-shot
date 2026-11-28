@@ -11,6 +11,8 @@
 #include <QRegion>
 #include <QWidget>
 
+class ColorLoupe;
+
 /**
  * @brief 选区状态枚举
  *
@@ -196,6 +198,17 @@ public:
     void switchScreen(const QRect &screenGeometry);
 
     /**
+     * @brief 设置选区取色放大镜的取色源（SnipScreen 抓取背景后调用）
+     *
+     * 传空 QPixmap 表示禁用（放大镜不显示）。几何与坐标约定见
+     * ColorLoupe::setColorSource。
+     * @param pixmap 冻结截图
+     * @param globalGeometry 截图覆盖的全局几何
+     * @author chiangyang
+     */
+    void setColorSource(const QPixmap &pixmap, const QRect &globalGeometry);
+
+    /**
      * @brief 显示录制时间标签
      * @author chiangyang
      */
@@ -264,6 +277,13 @@ signals:
      */
     void statusChanged(SelectorStatus status);
 
+    /**
+     * @brief 选区内按 C 复制了放大镜当前颜色
+     * @param colorText 复制的颜色字符串（如 #FF5733）
+     * @author chiangyang
+     */
+    void colorCopied(const QString &colorText);
+
 public slots:
     /**
      * @brief 开始选区
@@ -292,6 +312,12 @@ private:
      * @author chiangyang
      */
     void registerShortcuts();
+
+    /**
+     * @brief 按状态同步取色放大镜可见性（仅 PreySelecting/FreeSelecting 显示）
+     * @author chiangyang
+     */
+    void syncColorLoupeVisibility();
 
     /**
      * @brief 更新录制时间标签位置
@@ -342,6 +368,7 @@ private:
     QLabel *m_infoLabel = nullptr;  ///< 尺寸信息标签
     QLabel *m_timerLabel = nullptr; ///< 录制时间标签
     QSize m_minSize{2, 2};          ///< 最小有效尺寸
+    ColorLoupe *m_colorLoupe = nullptr; ///< 取色放大镜（选区阶段跟随鼠标显示像素颜色）
 };
 
 #endif // SELECTOR_H

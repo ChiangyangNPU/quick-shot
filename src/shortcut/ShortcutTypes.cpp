@@ -46,5 +46,8 @@ void dispatchShortcutAction(ShortcutType type,
     case ShortcutType::TogglePins:
         PinWindow::toggleAll();
         break;
+    case ShortcutType::ColorPicker:
+        if (snipScreen) snipScreen->startColorPicker();
+        break;
     }
 }

@@ -144,6 +144,15 @@ target_link_libraries(AboutTabHeightTest PRIVATE
     Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
 add_test(NAME AboutTabHeightTest COMMAND AboutTabHeightTest)
 
+# ---- ColorLoupe：取色放大镜渲染回归（边框不得覆盖放大内容像素，offscreen 可跑）----
+add_executable(ColorLoupeRenderTest ColorLoupeRenderTest.cpp
+    ${CMAKE_SOURCE_DIR}/src/capture/ColorLoupe.cpp
+    ${QS_TEST_CORE_SOURCES})
+target_include_directories(ColorLoupeRenderTest PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_link_libraries(ColorLoupeRenderTest PRIVATE
+    Qt6::Test Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Svg ${QS_TEST_PLATFORM_LIBS})
+add_test(NAME ColorLoupeRenderTest COMMAND ColorLoupeRenderTest)
+
 # ---- ScheduledPush：星期/时间匹配、网址规范化、任务仓库、调度去重 ----
 add_executable(ScheduledPushTest ScheduledPushTest.cpp
     ${CMAKE_SOURCE_DIR}/src/pet/ScheduledTaskStore.cpp

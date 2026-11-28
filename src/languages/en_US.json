@@ -59,6 +59,11 @@
   "tray.recordpause": "Record Pause/Resume",
   "tray.recordstop": "Record Stop",
   "tray.togglepins": "Toggle All Pins",
+  "tray.colorpicker": "Color Picker",
+  "colorPicker.magnifier": "Show color magnifier during selection",
+  "colorPicker.hint.picker": "Wheel: format · Click: copy",
+  "colorPicker.hint.selection": "Shift+Wheel: format · C: copy",
+  "colorPicker.copied": "Copied %1",
   "traySettings": "Settings",
   "trayQuit": "Quit",
   "runningInBackground": "Running in background,\nPress %1 to capture,\nPress %2 to record,\nPress %3 to view history.",
@@ -291,6 +296,7 @@
   "shortcut.recordpause.label": "Record Pause/Resume",
   "shortcut.recordstop.label": "Record Stop",
   "shortcut.togglepins.label": "Toggle All Pins",
+  "shortcut.colorpicker.label": "Color Picker",
   "shortcut.section.global": "Global Hotkeys (Configurable)",
   "shortcut.section.tools": "Annotation Tools (Fixed)",
   "shortcut.section.annotation": "Annotation Operations (Fixed)",
@@ -486,5 +492,7 @@
   "scroll.hinttip.orientation": "Switch orientation (V vertical / H horizontal)",
   "scroll.hinttip.sensitivity": "Switch sensitivity (S)",
   "scroll.hinttip.finish": "Finish stitching (Enter)",
-  "scroll.hinttip.cancel": "Cancel (Esc)"
+  "scroll.hinttip.cancel": "Cancel (Esc)",
+  "colorPicker.hint.esc.picker": "Esc: exit",
+  "colorPicker.hint.esc.selection": "Esc: cancel"
 }

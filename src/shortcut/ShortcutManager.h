@@ -80,7 +80,7 @@ public:
 
     /**
      * @brief 按数据表顺序批量注册所有全局热键（模板方法固定骨架）
-     * @return 注册成功数量（应等于 kShortcutConfigCount=9）
+     * @return 注册成功数量（应等于 kShortcutConfigCount=10）
      *
      * 固定顺序（严格按照数据表用户认知顺序）：
      * 截图→录屏→历史→贴图→全屏→活动窗口→录屏暂停→录屏停止→TogglePins

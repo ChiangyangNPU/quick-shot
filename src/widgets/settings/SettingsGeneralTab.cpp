@@ -82,6 +82,15 @@ void SettingsGeneralTab::setupUi() {
     logPrintLayout->addWidget(btnClearLogFile);
     logPrintLayout->addStretch();
 
+    // Color Picker（截图选区取色放大镜开关）
+    colorLoupeCheck = new QCheckBox(TranslationManager::instance()->get("colorPicker.magnifier", "Show color magnifier during selection"), this);
+    colorLoupeCheck->setStyleSheet(StyleManager::getSettingsCheckBoxStyle());
+    connect(colorLoupeCheck, &QCheckBox::checkStateChanged, this, &SettingsGeneralTab::onColorLoupeChanged);
+
+    QHBoxLayout *colorLoupeLayout = new QHBoxLayout();
+    colorLoupeLayout->addWidget(colorLoupeCheck);
+    colorLoupeLayout->addStretch();
+
     // 开机自动启动与其他行一致用 HBox 包裹：macOS 上直接放进 VBox 的
     // QCheckBox 会被布局微移 -2px，与 HBox 行并排时指示器错位
     QHBoxLayout *autoStartLayout = new QHBoxLayout();
@@ -91,6 +100,7 @@ void SettingsGeneralTab::setupUi() {
     layout->addLayout(langLayout);
     layout->addLayout(autoStartLayout);
     layout->addLayout(logPrintLayout);
+    layout->addLayout(colorLoupeLayout);
 
     // OCR Language
     QHBoxLayout *ocrLayout = new QHBoxLayout();
@@ -282,6 +292,12 @@ void SettingsGeneralTab::loadSettings() {
     logPrintCheck->blockSignals(false);
     Logger::instance()->setLogEnabled(isLogPrintEnabled);
 
+    // Color Picker 放大镜开关
+    bool isColorLoupeEnabled = settings->value("colorPicker/enabled", true).toBool();
+    colorLoupeCheck->blockSignals(true);
+    colorLoupeCheck->setChecked(isColorLoupeEnabled);
+    colorLoupeCheck->blockSignals(false);
+
     // OCR Language
     QString ocrLang = settings->value("ocr/language", "ch_en").toString();
     int ocrIndex = cmbOcrLanguage->findData(ocrLang);
@@ -345,6 +361,7 @@ void SettingsGeneralTab::retranslateUi() {
     if (logPrintCheck) logPrintCheck->setText(tm->get("logPrint.checkbox", "Enable Log Printing"));
     if (btnOpenLogFile) btnOpenLogFile->setText(tm->get("logPrint.openLogFile", "Open Log File"));
     if (btnClearLogFile) btnClearLogFile->setText(tm->get("logPrint.clearLogFile", "Clear Logs"));
+    if (colorLoupeCheck) colorLoupeCheck->setText(tm->get("colorPicker.magnifier", "Show color magnifier during selection"));
 
     // OCR Language
     if (lblOcrLanguage) lblOcrLanguage->setText(tm->get("ocr.language", "Text Recognition Language:"));
@@ -396,6 +413,7 @@ void SettingsGeneralTab::refreshStyles() {
     const QString checkStyle = StyleManager::getSettingsCheckBoxStyle();
     if (autoStartCheck) autoStartCheck->setStyleSheet(checkStyle);
     if (logPrintCheck) logPrintCheck->setStyleSheet(checkStyle);
+    if (colorLoupeCheck) colorLoupeCheck->setStyleSheet(checkStyle);
     if (gpuAccelCheck) gpuAccelCheck->setStyleSheet(checkStyle);
     const QString editStyle = StyleManager::getPathEditStyle();
     if (editCaptureSaveDir) editCaptureSaveDir->setStyleSheet(editStyle);
@@ -580,6 +598,13 @@ void SettingsGeneralTab::onLogPrintChanged(Qt::CheckState state) {
     settings->setValue("logPrintEnabled", enabled);
     settings->sync();
     Logger::instance()->setLogEnabled(enabled);
+}
+void SettingsGeneralTab::onColorLoupeChanged(Qt::CheckState state) {
+    QSettings *settings = ConfigManager::instance()->getSettings();
+    bool enabled = (state == Qt::Checked);
+    settings->setValue("colorPicker/enabled", enabled);
+    settings->sync();
+    LOG_INFO(QString("SettingsGeneralTab: color picker magnifier %1").arg(enabled ? "enabled" : "disabled"));
 }
 void SettingsGeneralTab::onOcrLanguageChanged(int index) {
     if (index < 0) return;

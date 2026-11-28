@@ -187,6 +187,11 @@ QList<QPair<QString, QVariant>> ConfigManager::scalarDefaults() {
         { "style/dashedPen", false },
         { "style/dashedLine", false },
 
+        // Color Picker（屏幕取色）
+        // enabled：截图选区时是否显示取色放大镜；format：复制格式 hex|rgb|hsl
+        { "colorPicker/enabled", true },
+        { "colorPicker/format", "hex" },
+
         // Translate
         { "translate/enabled", true },
         { "translate/engine", "mymemory" },

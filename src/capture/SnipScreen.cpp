@@ -4,6 +4,7 @@
 #include "RecordingToolBar.h"
 #include "RecordingControlWindow.h"
 #include "CaptureSession.h"
+#include "ColorPickerOverlay.h"
 #include "PinWindow.h"
 #include "AnnotationInteractionHandler.h"
 #include "CaptureComposer.h"
@@ -231,6 +232,13 @@ void SnipScreen::connectSelectorSignals()
 
     // 用户右键取消选区 → 退出截图
     connect(m_selector, &Selector::stopped, this, &SnipScreen::exit);
+
+    // 选区内按 C 复制放大镜颜色 → 光标处显示"已复制"提示
+    connect(m_selector, &Selector::colorCopied, this, [](const QString &colorText) {
+        TranslationManager *tm = TranslationManager::instance();
+        ColorPickerOverlay::showCopiedToast(
+            tm->get("colorPicker.copied", "Copied %1").arg(colorText), QCursor::pos());
+    });
 }
 
 // ============================================================
@@ -431,6 +439,10 @@ void SnipScreen::startCapture(bool recording) {
     if (isVisible())
         return;
 
+    // 独立取色器开着时先关闭，避免两个覆盖窗口叠加
+    if (m_colorPicker)
+        m_colorPicker->close();
+
     // 设置模式
     m_recordingSession->setMode(recording);
 
@@ -485,6 +497,9 @@ void SnipScreen::startCapture(bool recording) {
 
     // 设置选区坐标系：选区使用物理像素坐标
     m_selector->setCoordinate(m_virtualGeometry);
+
+    // 提供选区取色放大镜的取色源（colorPicker/enabled 关闭时为空源）
+    updateSelectorColorSource();
 
     // 根据模式设置边框颜色
     updateBorderColor();
@@ -933,6 +948,48 @@ void SnipScreen::grabActiveWindow() {
 }
 
 /**
+ * @brief 启动独立屏幕取色器（全局热键/托盘入口，默认 Alt+C）
+ *
+ * 再次触发时关闭已打开的取色器（开关行为）。
+ * 截图/录屏会话进行中时忽略（选区内已有取色放大镜）。
+ * @author chiangyang
+ */
+void SnipScreen::startColorPicker() {
+    if (isVisible())
+        return;
+
+    if (m_colorPicker && m_colorPicker->isVisible()) {
+        m_colorPicker->close();
+        LOG_INFO("[SnipScreen] color picker toggled off");
+        return;
+    }
+
+    // 与截图会话一致：激活应用前隐藏设置/历史窗口（仅 macOS 生效），
+    // 避免 macOS 激活取色窗口时把它们整体抬到前台
+    hideAuxiliaryWindowsForCapture();
+
+    m_colorPicker = ColorPickerOverlay::launch();
+    if (m_colorPicker) {
+        LOG_INFO("[SnipScreen] color picker launched");
+    }
+}
+
+/**
+ * @brief 向 Selector 提供选区取色放大镜的取色源
+ *
+ * 受 colorPicker/enabled 配置控制：关闭时传空源（放大镜不显示）。
+ * @author chiangyang
+ */
+void SnipScreen::updateSelectorColorSource() {
+    const bool enabled = ConfigManager::instance()->value("colorPicker/enabled", true).toBool();
+    if (enabled) {
+        m_selector->setColorSource(m_background, m_virtualGeometry);
+    } else {
+        m_selector->setColorSource(QPixmap(), QRect());
+    }
+}
+
+/**
  * @brief 切换录屏暂停/恢复（全局热键入口）
  *
  * 仅在录制中生效，非录制状态为 no-op。
@@ -1181,6 +1238,9 @@ void SnipScreen::checkScreenSwitch() {
 
     // 重新抓取新屏背景（grabVirtualDesktop 内部用 QCursor::pos 取屏）
     grabVirtualDesktop();
+
+    // 同步取色放大镜的取色源到新屏背景
+    updateSelectorColorSource();
 
     // 移动窗口到新屏
     move(m_virtualGeometry.topLeft());
