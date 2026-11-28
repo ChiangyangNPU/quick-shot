@@ -8,13 +8,17 @@
 
 namespace {
 
-// 取色器布局：上方为正方形放大区（放大内容铺满），底部信息条紧贴在
-// 正方形下边界之下（无缝相连、不遮挡放大内容），四行：颜色值 + 坐标 +
-// 操作提示 + Esc 提示。整体为一张圆角卡片，白色外圈勾边。
-constexpr int kSrcPixels = 15;                    ///< 每边显示的源像素数
+// 取色器布局：上方为矩形放大区（放大内容铺满，宽 180 × 高 120），
+// 下方信息条与放大区为两个独立的圆角矩形（中间留小间隙），四行：
+// 颜色值 + 坐标 + 操作提示 + Esc 提示。各元素带白色外圈勾边。
+constexpr int kSrcCols = 15;                      ///< 每行显示的源像素数
+constexpr int kSrcRows = 10;                      ///< 每列显示的源像素数
 constexpr int kZoom = 12;                         ///< 每个源像素的放大边长
-constexpr int kLoupeSize = kSrcPixels * kZoom;    ///< 正方形放大区边长（180）
-constexpr int kSideMargin = 1;                    ///< 卡片外的白色外圈宽度
+constexpr int kLoupeW = kSrcCols * kZoom;         ///< 放大区宽度（180）
+constexpr int kLoupeH = kSrcRows * kZoom;         ///< 放大区高度（120，约 2/3 宽）
+constexpr int kRadius = 8;                        ///< 放大区/信息条圆角半径
+constexpr int kGap = 6;                           ///< 放大区与信息条的间隙
+constexpr int kSideMargin = 1;                    ///< 元素外的白色外圈宽度
 constexpr int kBarLine1H = 26;                    ///< 信息条第一行（色块 + 颜色值）
 constexpr int kBarPosH = 20;                      ///< 信息条第二行（光标坐标）
 constexpr int kBarLine2H = 20;                    ///< 信息条第三行（操作提示）
@@ -50,9 +54,9 @@ ColorLoupe::ColorLoupe(QWidget *parent)
 {
     // 对鼠标事件透明：mousemove/点击继续送达宿主（Selector / 取色覆盖窗口）
     setAttribute(Qt::WA_TransparentForMouseEvents);
-    // 宽高：正方形放大区 + 信息条，四周各 1px 白色外圈
-    resize(kLoupeSize + 2 * kSideMargin,
-           kLoupeSize + kBarHeight + 2 * kSideMargin);
+    // 宽高：矩形放大区 + 间隙 + 信息条，四周各 1px 白色外圈
+    resize(kLoupeW + 2 * kSideMargin,
+           kLoupeH + kGap + kBarHeight + 2 * kSideMargin);
     setVisible(false);
 
     // 恢复上次使用的取色格式（独立取色器与截图选区共用一份配置）
@@ -103,11 +107,11 @@ void ColorLoupe::setEscHint(const QString &text) {
 }
 
 /**
- * @brief 正方形放大区矩形（控件内坐标，信息条在其下方）
+ * @brief 矩形放大区矩形（控件内坐标，信息条在其下方）
  * @author chiangyang
  */
 QRect ColorLoupe::loupeContentRect() const {
-    return QRect(kSideMargin, kSideMargin, kLoupeSize, kLoupeSize);
+    return QRect(kSideMargin, kSideMargin, kLoupeW, kLoupeH);
 }
 
 /**
@@ -186,47 +190,49 @@ void ColorLoupe::reposition() {
 }
 
 /**
- * @brief 绘制取色器：白色外圈 + 圆角卡片（正方形放大区 + 底部四行信息条）
+ * @brief 绘制取色器：矩形放大区 + 底部信息条，两个独立圆角矩形
  *
- * 信息条紧贴在正方形下边界之下，不遮挡放大内容；放大内容裁剪到
- * 卡片圆角内，任何描边都不覆盖可见的放大像素。
+ * 两者四角均为圆角（半径 kRadius），中间留 kGap 间隙；放大内容
+ * 裁剪到放大区圆角内，任何描边都不覆盖可见的放大像素。
  * @author chiangyang
  */
 void ColorLoupe::paintEvent(QPaintEvent *) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::SmoothPixmapTransform, false);
 
-    // 正方形放大区与整张卡片（放大区 + 信息条）
+    // 矩形放大区与信息条（两个独立圆角矩形）
     const QRect content = loupeContentRect();
-    const QRect card(kSideMargin, kSideMargin,
-                     kLoupeSize, kLoupeSize + kBarHeight);
-    const QRect barRect(kSideMargin, content.bottom() + 1, kLoupeSize, kBarHeight);
+    const QRect barRect(kSideMargin, content.bottom() + 1 + kGap, kLoupeW, kBarHeight);
 
-    // ---------- 白色外圈（卡片外 1px 的圆角描边，不覆盖卡片像素） ----------
-    QPainterPath ringPath;
-    ringPath.addRoundedRect(QRectF(card.adjusted(-1, -1, 1, 1)), 5, 5);
+    // ---------- 白色外圈（各元素外 1px 圆角描边，不覆盖元素像素） ----------
     painter.setRenderHint(QPainter::Antialiasing, true);
     painter.setBrush(Qt::NoBrush);
-    painter.strokePath(ringPath, QPen(QColor(255, 255, 255, 190), 1));
+    const QPen ringPen(QColor(255, 255, 255, 190), 1);
+    painter.strokePath(roundedRectPath(content.adjusted(-1, -1, 1, 1), kRadius + 1), ringPen);
+    painter.strokePath(roundedRectPath(barRect.adjusted(-1, -1, 1, 1), kRadius + 1), ringPen);
 
-    // ---------- 卡片底（放大区 + 信息条连成一张圆角卡） ----------
+    // ---------- 深色底（放大区与信息条各自圆角） ----------
     painter.setPen(Qt::NoPen);
     painter.setBrush(QColor(20, 20, 20, 215));
-    painter.drawPath(roundedRectPath(card, 4));
+    painter.drawPath(roundedRectPath(content, kRadius));
+    painter.setBrush(QColor(20, 20, 20, 220));
+    painter.drawPath(roundedRectPath(barRect, kRadius));
 
-    // ---------- 放大内容：铺满正方形放大区（裁剪到卡片圆角内） ----------
-    // 源矩形：以取色像素为中心的 kSrcPixels × kSrcPixels 物理像素块。
+    // ---------- 放大内容：铺满矩形放大区（裁剪到圆角内） ----------
+    // 源矩形：以取色像素为中心的 kSrcCols × kSrcRows 物理像素块。
+    // （kSrcRows 为偶数，取色像素位于几何中心偏下半格，以中心高亮框
+    // 为准；kSrcCols 为奇数，水平方向居中。）
     // 光标贴近屏幕边缘时源矩形会越界：Qt 会把裁剪后的源拉伸到整个目标区，
     // 故此处按比例映射到目标子矩形，越界区域保持卡片底色。
     const QPointF rel = QPointF(m_cursor - m_sourceGeometry.topLeft()) * m_dpr;
     const QPoint center(qFloor(rel.x()), qFloor(rel.y()));
-    const QRect srcRect(center.x() - kSrcPixels / 2, center.y() - kSrcPixels / 2,
-                        kSrcPixels, kSrcPixels);
+    const QRect srcRect(center.x() - kSrcCols / 2, center.y() - kSrcRows / 2,
+                        kSrcCols, kSrcRows);
     const QRect srcClipped = srcRect.intersected(m_source.rect());
 
     painter.setRenderHint(QPainter::Antialiasing, false);
     painter.save();
-    painter.setClipPath(roundedRectPath(card, 4));
+    painter.setClipPath(roundedRectPath(content, kRadius));
     if (!srcClipped.isEmpty()) {
         const qreal scaleX = qreal(content.width()) / srcRect.width();
         const qreal scaleY = qreal(content.height()) / srcRect.height();
@@ -239,16 +245,18 @@ void ColorLoupe::paintEvent(QPaintEvent *) {
 
     // 像素网格（淡白色细分线，便于辨认像素块）
     painter.setPen(QPen(QColor(255, 255, 255, 36), 1));
-    for (int i = 1; i < kSrcPixels; ++i) {
+    for (int i = 1; i < kSrcCols; ++i) {
         const qreal x = content.left() + i * kZoom + 0.5;
-        const qreal y = content.top() + i * kZoom + 0.5;
-        painter.drawLine(QPointF(x, content.top()), QPointF(x, content.top() + kLoupeSize));
-        painter.drawLine(QPointF(content.left(), y), QPointF(content.left() + kLoupeSize, y));
+        painter.drawLine(QPointF(x, content.top()), QPointF(x, content.top() + kLoupeH));
+    }
+    for (int j = 1; j < kSrcRows; ++j) {
+        const qreal y = content.top() + j * kZoom + 0.5;
+        painter.drawLine(QPointF(content.left(), y), QPointF(content.left() + kLoupeW, y));
     }
 
     // 中心取色像素高亮框（白外框 + 深色内框，深浅色内容都可见）
-    const QRect centerCell(content.left() + (kSrcPixels / 2) * kZoom,
-                           content.top() + (kSrcPixels / 2) * kZoom, kZoom, kZoom);
+    const QRect centerCell(content.left() + (kSrcCols / 2) * kZoom,
+                           content.top() + (kSrcRows / 2) * kZoom, kZoom, kZoom);
     painter.setPen(QPen(Qt::white, 2));
     painter.drawRect(centerCell.adjusted(1, 1, -1, -1));
     painter.setPen(QPen(QColor(0, 0, 0, 180), 1));
@@ -279,7 +287,7 @@ void ColorLoupe::paintEvent(QPaintEvent *) {
     posFont.setPixelSize(kHintFontPx);
     painter.setFont(posFont);
     const QRect posRect(barRect.left() + kBarPadL, barRect.top() + kBarLine1H,
-                        kLoupeSize - kBarPadL - kBarPadR, kBarPosH);
+                        kLoupeW - kBarPadL - kBarPadR, kBarPosH);
     painter.setPen(QColor(255, 255, 255, 200));
     painter.drawText(posRect, Qt::AlignVCenter | Qt::AlignLeft,
                      QStringLiteral("x:%1  y:%2").arg(m_cursor.x()).arg(m_cursor.y()));
@@ -291,7 +299,7 @@ void ColorLoupe::paintEvent(QPaintEvent *) {
         painter.setFont(hintFont);
         const QRect hintRect(barRect.left() + kBarPadL,
                              barRect.top() + kBarLine1H + kBarPosH,
-                             kLoupeSize - kBarPadL - kBarPadR, kBarLine2H);
+                             kLoupeW - kBarPadL - kBarPadR, kBarLine2H);
         const QString elidedHint = painter.fontMetrics().elidedText(
             m_hint, Qt::ElideRight, hintRect.width());
         painter.setPen(QColor(255, 255, 255, 150));
@@ -305,7 +313,7 @@ void ColorLoupe::paintEvent(QPaintEvent *) {
         painter.setFont(hintFont);
         const QRect escRect(barRect.left() + kBarPadL,
                             barRect.top() + kBarLine1H + kBarPosH + kBarLine2H,
-                            kLoupeSize - kBarPadL - kBarPadR, kBarLine3H);
+                            kLoupeW - kBarPadL - kBarPadR, kBarLine3H);
         const QString elidedEsc = painter.fontMetrics().elidedText(
             m_escHint, Qt::ElideRight, escRect.width());
         painter.setPen(QColor(255, 255, 255, 150));

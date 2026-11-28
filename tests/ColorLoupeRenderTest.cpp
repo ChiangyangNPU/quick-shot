@@ -13,10 +13,11 @@
  * 错色）。本测试用纯白源图渲染放大镜，断言可见的放大像素不被
  * 任何边框/卡片元素覆盖。
  *
- * 布局：上方正方形放大区（内容区 = loupeContentRect()，即
- * QRect(1,1,180,180)），放大内容铺满正方形；底部信息条（四行：
- * 颜色值 + 坐标 + 操作提示 + Esc 提示，共 kBarHeight 像素）紧贴在
- * 正方形下边界之下，不遮挡放大内容；白色外圈在卡片外 1px。
+ * 布局：上方矩形放大区（内容区 = loupeContentRect()，即
+ * QRect(1,1,180,120)，宽 180 × 高 120），放大内容铺满矩形；下方
+ * 信息条（四行：颜色值 + 坐标 + 操作提示 + Esc 提示，共 kBarHeight
+ * 像素）与放大区为两个独立圆角矩形（圆角半径 8，中间 kGap 间隙）；
+ * 白色外圈在各元素外 1px。
  * @author chiangyang
  */
 class ColorLoupeRenderTest : public QObject {
@@ -39,6 +40,8 @@ namespace {
 constexpr int kBarHeight = 84;
 /// 每个源像素的放大边长（与 ColorLoupe.cpp 的 kZoom 一致）
 constexpr int kZoom = 12;
+/// 放大区与信息条的间隙（与 ColorLoupe.cpp 的 kGap 一致）
+constexpr int kGap = 6;
 
 /// 离屏渲染放大镜并转为非预乘 ARGB，便于按颜色断言
 /// （预乘格式下半透明白圈的红分量 ≈ alpha×255，断言易误判）
@@ -65,7 +68,7 @@ ColorLoupe *ColorLoupeRenderTest::makeLoupe() {
 
 /**
  * 纯白源图 + 光标居中：放大像素（含四边最外圈）应为白色，
- * 正方形下方的信息条区域应为深色。旧实现中边框描边压进内容边缘
+ * 放大区下方的信息条区域应为深色。旧实现中边框描边压进内容边缘
  * （左/右/下），左/右/下边缘断言会失败。
  */
 void ColorLoupeRenderTest::contentEdgesNotCoveredByBorder() {
@@ -76,15 +79,15 @@ void ColorLoupeRenderTest::contentEdgesNotCoveredByBorder() {
     QVERIFY(canvas.size() == loupe->size());
 
     const QRect content = loupe->loupeContentRect();
-    QVERIFY(content.width() == 180 && content.height() == 180);
+    QVERIFY(content.width() == 180 && content.height() == 120);
 
     // 取样点：放大区四边最外圈、避开网格线（content.left()+i*12+0.5）
-    // 与中心高亮框；信息条在正方形下方，放大区四边完整可见
+    // 与中心高亮框；信息条在放大区下方（隔 kGap 间隙），四边完整可见
     const QPoint samples[] = {
         QPoint(content.left(),  content.top() + 30),      // 左边缘
         QPoint(content.right(), content.top() + 30),      // 右边缘
         QPoint(content.left() + 30, content.top()),       // 上边缘
-        QPoint(content.left() + 30, content.bottom()),    // 下边缘（信息条上方）
+        QPoint(content.left() + 30, content.bottom()),    // 下边缘
         QPoint(content.left() + 4,  content.bottom() - 2),// 左下角内侧
         QPoint(content.right() - 4, content.bottom() - 2),// 右下角内侧
     };
@@ -95,12 +98,13 @@ void ColorLoupeRenderTest::contentEdgesNotCoveredByBorder() {
                      .arg(p.x()).arg(p.y()).arg(qRed(px)).arg(qGreen(px)).arg(qBlue(px))));
     }
 
-    // 信息条区域（正方形下方 4px 处）应保持深色
-    const QRgb bar = canvas.pixel(QPoint(content.left() + 4, content.bottom() + 4));
+    // 信息条区域（放大区下方，隔间隙后 4px 处）应保持深色
+    const QRgb bar = canvas.pixel(QPoint(content.left() + 4,
+                                         content.bottom() + 1 + kGap + 4));
     QVERIFY2(qAlpha(bar) > 0 && qRed(bar) < 80 && qGreen(bar) < 80 && qBlue(bar) < 80,
              "info bar area should stay dark");
 
-    // 白色外圈在卡片外 1px（x=0，四边均在控件内不被裁掉）
+    // 白色外圈在元素外 1px（x=0，四边均在控件内不被裁掉）
     const QRgb ring = canvas.pixel(QPoint(content.left() - 1, content.top() + 30));
     QVERIFY2(qRed(ring) >= 200 && qGreen(ring) >= 200 && qBlue(ring) >= 200,
              qPrintable(QStringLiteral("white ring pixel rgb(%1,%2,%3) alpha %4")
@@ -108,9 +112,10 @@ void ColorLoupeRenderTest::contentEdgesNotCoveredByBorder() {
 }
 
 /**
- * 光标贴近源图左上角（srcRect 越界）：放大区中心单元格 = 取色像素
- * (2,2)，有效源区 (0..9)² 映射到内容区第 5~14 列/行（右下子区域），
- * 左上 5 格越界区保持卡片底色，不做白色兜底填充。
+ * 光标贴近源图左上角（srcRect 越界）：取色像素 (2,2) 对应源区
+ * 列 -5..9、行 -3..6，有效部分（列 0..9、行 0..6）映射到放大区
+ * 第 5~14 列、第 3~9 行（右下子区域），左上越界区保持卡片底色，
+ * 不做白色兜底填充。
  */
 void ColorLoupeRenderTest::sourceEdgeClipping() {
     std::unique_ptr<ColorLoupe> loupe(makeLoupe());
@@ -119,15 +124,15 @@ void ColorLoupeRenderTest::sourceEdgeClipping() {
     const QImage canvas = renderLoupe(loupe.get());
     const QRect content = loupe->loupeContentRect();
 
-    // 有效映射区内（内容区第 10 格中部，位于信息条上方）= 白色
-    const QPoint inside(content.left() + 10 * kZoom + 6, content.top() + 10 * kZoom + 6);
+    // 有效映射区内（第 8 列/行格中部）= 白色
+    const QPoint inside(content.left() + 8 * kZoom + 6, content.top() + 8 * kZoom + 6);
     const QRgb pxIn = canvas.pixel(inside);
     QVERIFY2(qRed(pxIn) >= 240 && qGreen(pxIn) >= 240 && qBlue(pxIn) >= 240,
              qPrintable(QStringLiteral("mapped area pixel (%1,%2) rgb(%3,%4,%5)")
                  .arg(inside.x()).arg(inside.y())
                  .arg(qRed(pxIn)).arg(qGreen(pxIn)).arg(qBlue(pxIn))));
 
-    // 越界区（内容区第 2 格中部）= 深色卡片底
+    // 越界区（第 2 列/行格中部）= 深色卡片底
     const QPoint outside(content.left() + 2 * kZoom + 6, content.top() + 2 * kZoom + 6);
     const QRgb pxOut = canvas.pixel(outside);
     QVERIFY2(qRed(pxOut) < 80 && qGreen(pxOut) < 80 && qBlue(pxOut) < 80,
