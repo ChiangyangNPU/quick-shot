@@ -22,6 +22,7 @@
 #include <atomic>
 #include <vector>
 #include <mmreg.h>
+#include <cmath>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "mfuuid.lib")
