@@ -310,9 +310,9 @@ int main(int argc, char *argv[]) {
     auto updateStaticText = [trayIcon, settingsAction, quitAction, tm]() {
         settingsAction->setText(tm->get("traySettings"));
         quitAction->setText(tm->get("trayQuit"));
-        QString sKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString();
-        QString rKey = ShortcutManager::instance()->getSequence(ShortcutType::Record).toString();
-        QString hKey = ShortcutManager::instance()->getSequence(ShortcutType::History).toString();
+        QString sKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString(QKeySequence::NativeText);
+        QString rKey = ShortcutManager::instance()->getSequence(ShortcutType::Record).toString(QKeySequence::NativeText);
+        QString hKey = ShortcutManager::instance()->getSequence(ShortcutType::History).toString(QKeySequence::NativeText);
         trayIcon->setToolTip(tm->get("runningInBackground", {sKey, rKey, hKey}));
     };
     updateStaticText();
@@ -352,9 +352,9 @@ int main(int argc, char *argv[]) {
     // Windows / macOS：显示启动通知（两平台行为一致，统一处理）
     if (QSystemTrayIcon::isSystemTrayAvailable()) {
         QString title = tm->get("quickShot", "QuickShot");
-        QString snipKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString();
-        QString recordKey = ShortcutManager::instance()->getSequence(ShortcutType::Record).toString();
-        QString historyKey = ShortcutManager::instance()->getSequence(ShortcutType::History).toString();
+        QString snipKey = ShortcutManager::instance()->getSequence(ShortcutType::Snip).toString(QKeySequence::NativeText);
+        QString recordKey = ShortcutManager::instance()->getSequence(ShortcutType::Record).toString(QKeySequence::NativeText);
+        QString historyKey = ShortcutManager::instance()->getSequence(ShortcutType::History).toString(QKeySequence::NativeText);
         QString message = tm->get("runningInBackground", {snipKey, recordKey, historyKey});
         trayIcon->showMessage(title, message, QSystemTrayIcon::Information, 5000);
         LOG_INFO("Startup notification shown");

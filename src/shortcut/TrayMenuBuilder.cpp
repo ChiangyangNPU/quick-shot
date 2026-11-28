@@ -42,9 +42,11 @@ TrayMenuBuilder::~TrayMenuBuilder() {
  * @param cfg 快捷键配置项
  * @return "翻译后的菜单项文本 + 空格 + 括号内的当前快捷键"
  *
- * 示例：返回 "Capture (Alt+Q)"、"Pin Clipboard (Alt+P)" 等格式。
+ * 示例：Windows 返回 "Capture (Alt+Q)"，macOS 返回 "截屏 (⌥Q)" 等格式。
  * 翻译文本优先取 tm->get(trayTextKey, trayFallback)，
- * 快捷键值取配置文件中的当前值或默认值。
+ * 快捷键值取配置文件中的当前值或默认值，并以平台原生格式显示
+ * （QKeySequence::NativeText：macOS 为 ⌥/⇧/⌃ 符号，Windows 为 Alt+ 等），
+ * 与设置页快捷键编辑器的显示保持一致。
  * @note 被 build() 和 refresh() 两个公开方法共用，是数据驱动的核心格式化函数
  * @author chiangyang
  */
@@ -52,7 +54,7 @@ QString TrayMenuBuilder::buildActionText(const ShortcutConfigItem& cfg) const {
     TranslationManager* tm = TranslationManager::instance();
     QString text = tm->get(cfg.trayTextKey, cfg.trayFallback);
     QKeySequence seq = getShortcutSequence(cfg);
-    return QString("%1 (%2)").arg(text).arg(seq.toString());
+    return QString("%1 (%2)").arg(text).arg(seq.toString(QKeySequence::NativeText));
 }
 
 /**
