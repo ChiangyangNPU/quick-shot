@@ -82,6 +82,11 @@ void screenRecorderSetAudioEnabled(bool enabled);
  */
 void screenRecorderSetMicrophoneEnabled(bool enabled);
 
+/** @brief 设置麦克风软件增益倍数（1.0 = 原始信号不处理，3.0 ≈ +9.5dB）
+ *  @author chiangyang
+ */
+void screenRecorderSetMicrophoneGain(float gain);
+
 /** @brief 获取可用音频设备列表 */
 int screenRecorderGetAvailableAudioDevices(char*** deviceNames);
 

@@ -14,6 +14,7 @@ static bool g_isRecording = false;
 static bool g_isPaused = false;
 static bool g_audioEnabled = false;
 static bool g_microphoneEnabled = false;
+static float g_micGain = 3.0f;   // 麦克风软件增益倍数
 
 // ScreenCaptureKit
 static SCStream* g_stream = nil;
@@ -124,6 +125,25 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
     if (CMTIME_IS_INVALID(g_startTime)) {
         return; // 视频 session 尚未启动
     }
+
+    // 麦克风软件增益：原始麦克风信号明显小于满幅的系统声音，混音后显得
+    // 极小。对 PCM 样本原地乘增益并防削顶（输出固定为 SInt16 交错格式）。
+    if (g_micGain > 1.0f) {
+        CMBlockBufferRef blockBuf = CMSampleBufferGetDataBuffer(sampleBuffer);
+        if (blockBuf) {
+            size_t lengthAtOffset = 0, totalLength = 0;
+            char *dataPtr = nullptr;
+            if (noErr == CMBlockBufferGetDataPointer(blockBuf, 0, &lengthAtOffset,
+                                                     &totalLength, &dataPtr) && dataPtr) {
+                int16_t *samples = reinterpret_cast<int16_t *>(dataPtr);
+                const size_t count = totalLength / sizeof(int16_t);
+                for (size_t i = 0; i < count; ++i) {
+                    const int32_t v = (int32_t) lrintf(samples[i] * g_micGain);
+                    samples[i] = (int16_t)(v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
+                }
+            }
+        }
+    }
     [g_micAudioInput appendSampleBuffer:sampleBuffer];
 }
 
@@ -135,6 +155,10 @@ didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
 @end
 
 static ScreenRecorderDelegate* g_delegate = nil;
+
+void screenRecorderSetMicrophoneGain(float gain) {
+    g_micGain = gain > 0 ? gain : 1.0f;
+}
 
 // ===== 麦克风采集管理 =====
 
@@ -163,6 +187,15 @@ static bool initMicrophoneCapture() {
     [g_micSession addInput:g_micDeviceInput];
 
     g_micOutput = [[AVCaptureAudioDataOutput alloc] init];
+    // 固定 SInt16 交错格式：麦克风增益需要确定的样本编码（16 位整数、单块
+    // 连续内存，可原地缩放）；采样率与声道数跟随输入设备
+    g_micOutput.audioSettings = @{
+        AVFormatIDKey: @(kAudioFormatLinearPCM),
+        AVLinearPCMBitDepthKey: @(16),
+        AVLinearPCMIsFloatKey: @NO,
+        AVLinearPCMIsBigEndianKey: @NO,
+        AVLinearPCMIsNonInterleaved: @NO
+    };
     g_micQueue = dispatch_queue_create("com.quickshot.miccapture", DISPATCH_QUEUE_SERIAL);
     [g_micOutput setSampleBufferDelegate:g_delegate queue:g_micQueue];
 

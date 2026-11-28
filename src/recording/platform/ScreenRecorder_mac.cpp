@@ -373,4 +373,13 @@ void ScreenRecorder::setMicrophoneEnabled(bool enabled) {
     screenRecorderSetMicrophoneEnabled(enabled);
 }
 
+/**
+ * @brief 设置麦克风软件增益（透传给采集 helper）
+ * @param gain 增益倍数
+ * @author chiangyang
+ */
+void ScreenRecorder::setMicrophoneGain(float gain) {
+    screenRecorderSetMicrophoneGain(gain);
+}
+
 #endif

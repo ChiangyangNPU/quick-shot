@@ -63,6 +63,9 @@ struct PlatformImpl {
     // Single audio thread that handles both system audio and microphone
     std::thread audioThread;
     std::atomic<bool> audioRunning{false};
+
+    // 麦克风软件增益倍数（录制开始前由 setMicrophoneGain 设置）
+    float micGain = 3.0f;
 };
 
 /**
@@ -441,6 +444,17 @@ static void audioCaptureMixedThread(ScreenRecorder::Impl *impl, PlatformImpl *pI
                     } else {
                         const int16_t *src = reinterpret_cast<const int16_t *>(data);
                         s.buf->insert(s.buf->end(), src, src + samples);
+                    }
+                    // 麦克风软件增益：原始麦克风信号明显小于满幅的系统声音，
+                    // 混音后显得极小。对本源新插入的样本原地缩放并防削顶。
+                    if (s.buf == &micBuf && pImpl->micGain > 1.0f) {
+                        const size_t start = s.buf->size() - samples;
+                        for (size_t k = start; k < s.buf->size(); ++k) {
+                            const int32_t v =
+                                static_cast<int32_t>(lrintf((*s.buf)[k] * pImpl->micGain));
+                            (*s.buf)[k] = static_cast<int16_t>(
+                                v > 32767 ? 32767 : (v < -32768 ? -32768 : v));
+                        }
                     }
                 }
                 s.capture->ReleaseBuffer(frames);
@@ -1091,6 +1105,15 @@ void ScreenRecorder::setAudioEnabled(bool enabled) {
 void ScreenRecorder::setMicrophoneEnabled(bool enabled) {
     m_impl->microphoneEnabled = enabled;
     LOG_INFO(QString("Microphone recording %1").arg(enabled ? "enabled" : "disabled"));
+}
+
+/**
+ * @brief 设置麦克风软件增益（混音线程对麦克风样本缩放时使用）
+ * @param gain 增益倍数
+ * @author chiangyang
+ */
+void ScreenRecorder::setMicrophoneGain(float gain) {
+    m_impl->micGain = gain > 0 ? gain : 1.0f;
 }
 
 #endif // Q_OS_WIN

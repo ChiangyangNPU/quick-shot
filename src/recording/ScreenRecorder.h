@@ -221,6 +221,17 @@ public:
     void setMicrophoneEnabled(bool enabled);
 
     /**
+     * @brief 设置麦克风软件增益（录制开始前设置）
+     *
+     * 原始麦克风信号明显小于满幅的系统声音，录制混音后显得极小。增益以
+     * 倍数表示（1.0 = 原始信号不处理，3.0 ≈ +9.5dB），应用时带防削顶。
+     * 数值存配置 recording/micGain（RecordingSession 读取并传入）。
+     * @param gain 增益倍数（<=0 视为 1.0 不处理）
+     * @author chiangyang
+     */
+    void setMicrophoneGain(float gain);
+
+    /**
      * @brief 获取当前录制模式
      * @return 当前录制模式
      * @author chiangyang

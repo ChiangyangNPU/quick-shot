@@ -8,6 +8,7 @@
 #include "ScreenRecorder.h"
 #include "CaptureSession.h"
 #include "../core/StyleManager.h"
+#include "../core/ConfigManager.h"
 #include "../log/Logger.h"
 #include "../pet/DesktopPetManager.h"
 
@@ -76,6 +77,17 @@ void RecordingSession::connectSignals() {
             m_recorder->setAudioEnabled(false);
             m_recorder->setMicrophoneEnabled(false);
         }
+
+        // 麦克风软件增益：原始麦克风信号明显小于满幅的系统声音，录制混音
+        // 后显得极小。增益倍数存配置（recording/micGain，默认 3.0 ≈ +9.5dB），
+        // 首次使用写入默认值便于在配置文件中找到该项手动调整
+        ConfigManager *cfg = ConfigManager::instance();
+        float micGain = cfg->value("recording/micGain", 3.0).toFloat();
+        if (micGain <= 0) micGain = 3.0f;
+        if (!cfg->value("recording/micGain").isValid()) {
+            cfg->setValue("recording/micGain", micGain);
+        }
+        m_recorder->setMicrophoneGain(micGain);
 
         bool ok = m_recorder->start(captureRect, resolution, defaultPath, recordFps,
                                     gifFormat ? ScreenRecorder::OutputFormat::Gif

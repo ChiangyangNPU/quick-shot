@@ -235,4 +235,13 @@ void ScreenRecorder::setMicrophoneEnabled(bool enabled) {
     m_impl->microphoneEnabled = enabled;
 }
 
+/**
+ * @brief 设置麦克风软件增益（Linux 无音频采集，空实现维持接口统一）
+ * @param gain 增益倍数
+ * @author chiangyang
+ */
+void ScreenRecorder::setMicrophoneGain(float gain) {
+    Q_UNUSED(gain);
+}
+
 #endif // Q_OS_LINUX
